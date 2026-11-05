@@ -1,5 +1,15 @@
 # Verification
 
+## 0.1.0-test.11 recovery-focus fix
+
+The CI recovery failure was reproduced as a real event-ordering bug: ArrowDown
+focused a suggestion, then a queued textarea `select` event refreshed the list
+and removed that focused button. A deterministic test forces this ordering and
+fails on test.10. The handler now processes selection updates only while the
+textarea is focused; validation, genuine input updates and blur cleanup remain
+unchanged. The regression passes, along with 20 real ArrowDown/Enter selections
+and checks for cleanup after focus leaves the field or the app backgrounds.
+
 ## 0.1.0-test.10 timing update
 
 Foreground polling and changed-balance stabilization both use 4 seconds. Tests

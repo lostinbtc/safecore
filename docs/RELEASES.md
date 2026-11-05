@@ -5,10 +5,16 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
-The current prerelease is SafeCore 0.1.0-test.10, Android 8.0+ (API 26), with
+The current prerelease is SafeCore 0.1.0-test.11, Android 8.0+ (API 26), with
 `safeCoreDebugTools=false`. USB/WebView debugging and screenshots are disabled.
 It starts without saved wallets on a fresh installation. It contains no desktop
 database, recovery material, RPC credentials or signing private key.
+
+Version 0.1.0-test.11 fixes recovery-word keyboard focus: a delayed caret-selection
+event no longer removes the suggestion selected with ArrowDown. Tests force that
+event order and exercise repeated ArrowDown/Enter selections. The 4-second polling
+and stability settings from test.10 are unchanged, as are wallet storage,
+derivation, phrase validation and the debug setting.
 
 Version 0.1.0-test.10 reduces foreground polling from 20 to 4 seconds and the
 changed-balance stability wait from 25 to 4 seconds, retaining a fresh matching

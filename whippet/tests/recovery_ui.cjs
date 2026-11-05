@@ -41,8 +41,28 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await p.evaluate(()=>document.getElementById('setup-form').dispatchEvent(new Event('submit',{cancelable:true,bubbles:true})));
   assert.equal(await p.evaluate(()=>localStorage.getItem('whippet.dev.encrypted.v1')),null);
   assert.equal(await p.locator('#submit-setup').isDisabled(),true);
-  await input.fill('ab');await input.press('ArrowDown');assert.equal(await p.evaluate(()=>document.activeElement.classList.contains('recovery-choice')),true);
+  // Force the browser's delayed select event AFTER ArrowDown moved focus.
+  // It must not remove the suggestion button that is now receiving Enter.
+  await input.fill('ab');
+  const deferredSelection=await input.evaluate(el=>{
+   el.focus();el.setSelectionRange(2,2);el.dispatchEvent(new Event('input',{bubbles:true}));
+   const first=document.querySelector('.recovery-choice');
+   el.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));
+   const entered=document.activeElement===first;
+   el.dispatchEvent(new Event('select'));
+   return {entered,retained:document.activeElement===first&&first.isConnected,visible:!document.getElementById('phrase-suggestions').hidden};
+  });
+  assert.deepEqual(deferredSelection,{entered:true,retained:true,visible:true});
   await p.keyboard.press('Enter');assert.equal(await input.inputValue(),'abandon ');
+  // Keep the real-keyboard check too, across repeated natural event orderings.
+  for(let i=0;i<20;i++){
+   await input.fill('ab');await input.press('ArrowDown');assert.equal(await p.evaluate(()=>document.activeElement.classList.contains('recovery-choice')),true);
+   await p.keyboard.press('Enter');assert.equal(await input.inputValue(),'abandon ');
+  }
+  await input.fill('ab');await p.locator('#wallet-name').focus();
+  await p.locator('#phrase-suggestions').waitFor({state:'hidden'});
+  await input.evaluate(el=>el.dispatchEvent(new Event('select')));
+  assert.equal(await p.locator('.recovery-choice').count(),0);
   await input.fill('aban');await input.press('Escape');assert.equal(await p.locator('#phrase-suggestions').isVisible(),false);
   await input.evaluate(el=>el.dispatchEvent(new Event('select')));
   assert.equal(await p.locator('#phrase-suggestions').isVisible(),false);
@@ -62,6 +82,6 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await p.locator('.wallets-shortcut').click();await p.locator('#add-wallet').click();await p.locator('[data-setup="import"]').click();await p.locator('#phrase').fill('aban');
   await p.evaluate(()=>{Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));});
   assert.equal(await p.locator('.recovery-choice').count(),0);
-  assert.deepEqual(errors,[]);console.log('PASS: local-only suggestions, tap/keyboard selection, middle-word editing, invalid/checksum rejection including submit bypass and bad backup, valid restore addresses, background clearing and phone layout.');
+  assert.deepEqual(errors,[]);console.log('PASS: deferred select events preserve suggestion focus; 20 ArrowDown/Enter selections; local-only suggestions, middle-word editing, invalid/checksum rejection, valid restore, field/background cleanup and phone layout.');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

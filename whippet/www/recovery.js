@@ -83,7 +83,9 @@
     const resume=()=>{dismissed=false;refresh();};
     input.addEventListener('input',resume);
     for(const event of ['click','focus'])input.addEventListener(event,resume);
-    input.addEventListener('select',refresh);
+    // A caret select event can arrive after ArrowDown has focused a choice.
+    // Do not rebuild/remove that focused button; blur handles leaving the field.
+    input.addEventListener('select',()=>{if(document.activeElement===input)refresh();});
     input.addEventListener('keyup',event=>{if(!['Escape','ArrowDown'].includes(event.key))refresh();});
     input.addEventListener('compositionstart',()=>{composing=true;refresh();});
     input.addEventListener('compositionupdate',()=>queueMicrotask(refresh));
