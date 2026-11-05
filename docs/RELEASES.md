@@ -5,10 +5,17 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
-The current prerelease is SafeCore 0.1.0-test.11, Android 8.0+ (API 26), with
+The current prerelease is SafeCore 0.1.0-test.12, Android 8.0+ (API 26), with
 `safeCoreDebugTools=false`. USB/WebView debugging and screenshots are disabled.
 It starts without saved wallets on a fresh installation. It contains no desktop
 database, recovery material, RPC credentials or signing private key.
+
+Version 0.1.0-test.12 includes Chromatic's polling optimization and Android URL
+guards from PR #1. Each scan checks Electrum address status and reuses unchanged
+live rows; restored disk-cache rows still require live fetches. Previous
+transactions needed for spending are fetched concurrently. Polling and balance
+stabilization remain 4 seconds. Wallet storage, derivation and debugging settings
+are unchanged.
 
 Version 0.1.0-test.11 fixes recovery-word keyboard focus: a delayed caret-selection
 event no longer removes the suggestion selected with ArrowDown. Tests force that
@@ -38,8 +45,9 @@ Your own build generally has a different signing key. Back up first.
    source history. Record the immutable artifact commit and hash in
    `release/manifest.json`. That transport branch contains only the deliberately
    public APK. It is not wallet storage and is not used to run code.
-4. Commit source plus manifest on `main`, then tag that source commit. The release
-   workflow fetches the pinned artifact commit, verifies hash and exact bundled
+4. Submit source plus manifest through a pull request targeting protected `main`.
+   After required checks pass and the PR is merged, tag the merged source commit.
+   The release workflow fetches the pinned artifact commit, verifies hash and exact bundled
    source, and attaches APK/checksum to a GitHub prerelease using its short-lived
    repository token. It never receives the signing key.
 5. Verify the published download hash independently. Source archives correspond

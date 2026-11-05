@@ -1,8 +1,8 @@
 {
-  "tag": "v0.1.0-test.11",
-  "filename": "SafeCore-0.1.0-test.11.apk",
-  "artifact_commit": "c5c9c55cef9ee6e0d81ce92933f268e3eabde331",
-  "sha256": "bd11e2f27645b1d567171b468a5672f9a30a0b59e2d9a4140bafd7b0dffa126b",
+  "tag": "v0.1.0-test.12",
+  "filename": "SafeCore-0.1.0-test.12.apk",
+  "artifact_commit": "f7894fe8d6b6aada93602292a2df64149249d3d4",
+  "sha256": "b5fffe4af840964bfd2b282b7d99aa93f550fbbba5f8617495900f4b66b12af1",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false
 }
