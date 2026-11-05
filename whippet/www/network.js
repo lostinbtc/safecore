@@ -44,6 +44,11 @@
   }
   const clients={};const client=coin=>clients[coin]||(clients[coin]=new Client(coin));
   const validHash=x=>typeof x==='string'&&/^[0-9a-f]{64}$/i.test(x);
+  // Electrum status is null for no history, else a 64-char hex fingerprint of it.
+  const validStatus=x=>x===null||validHash(x);
+  // Row object -> the status it was fetched under. Keyed by row identity, so a
+  // stale row can never be paired with a newer status (e.g. an older snapshot).
+  const statusOf=new WeakMap();
   function safeInteger(n){if(!Number.isSafeInteger(n))throw Error('Balance exceeds this test client’s safe numeric range.');return BigInt(n);}
   // Cache is public display/discovery metadata, never authority to spend.
   function encode(snapshot){
@@ -88,13 +93,24 @@
     let frontier=0;while(used.has(frontier))frontier++;
     const wanted=reusable?[...new Set([...used,...(frontier<accounts.length?[frontier]:[])])]:accounts.map(a=>a.index);
     const rows=reusable?previous.rows.slice():Array(accounts.length);
-    const queried=new Set();
-    async function refresh(index){const row=await query(accounts[index]);rows[index]=row;queried.add(index);if(row.history.length||row.confirmed||row.unconfirmed||row.utxos.length)used.add(index);}
+    const queried=new Set(),checked=new Set();
+    // Subscribing is idempotent and re-sent every scan (no reliance on pushes).
+    // A live row is reused only if its fetched status still matches.
+    async function refresh(index){
+      const account=accounts[index],status=await c.call('blockchain.scripthash.subscribe',[T.scriptHash(coin,account.address)]);
+      if(!validStatus(status))throw Error('Unexpected address status format.');
+      const prior=reusable&&!previous.cached?previous.rows[index]:null;
+      let row;
+      if(prior&&statusOf.get(prior)===status)row=prior;
+      else{row=await query(account);statusOf.set(row,status);queried.add(index);}
+      rows[index]=row;checked.add(index);
+      if(row.history.length||row.confirmed||row.unconfirmed||row.utxos.length)used.add(index);
+    }
     await Promise.all(wanted.map(refresh));
     // A deposit can unlock another address during this scan. Check it now,
     // rather than displaying an address whose history has not been refreshed.
     frontier=0;while(used.has(frontier))frontier++;
-    while(frontier<accounts.length&&!queried.has(frontier)){await refresh(frontier);if(!used.has(frontier))break;while(used.has(frontier))frontier++;}
+    while(frontier<accounts.length&&!checked.has(frontier)){await refresh(frontier);if(!used.has(frontier))break;while(used.has(frontier))frontier++;}
     const relay=await c.call('blockchain.relayfee');
     if(!Number.isFinite(relay)||relay<0)throw Error('Could not verify the network relay fee.');
     // Both supported coins use the flat fee; retain the live relay floor.
@@ -106,7 +122,7 @@
     const c=client(snapshot.coin),T=root.WalletTransactions;
     const candidates=snapshot.rows.flatMap(r=>r.utxos).filter(u=>u.height>0);
     if(candidates.length>40)throw Error('Too many outputs for this small-value development test.');
-    const raws=new Map();for(const txid of new Set(candidates.map(u=>u.txid)))raws.set(txid,await c.call('blockchain.transaction.get',[txid,false]));
+    const txids=[...new Set(candidates.map(u=>u.txid))];const fetched=await Promise.all(txids.map(txid=>c.call('blockchain.transaction.get',[txid,false])));const raws=new Map(txids.map((txid,i)=>[txid,fetched[i]]));
     return candidates.flatMap(u=>{const raw=raws.get(u.txid),parsed=T.parse(raw);if(parsed.coinbase&&snapshot.tip-u.height+1<240)return [];return [T.verifyUTXO(snapshot.coin,{...u,raw},snapshot.tip)];});
   }
   async function checkInputs(coin,inputs){

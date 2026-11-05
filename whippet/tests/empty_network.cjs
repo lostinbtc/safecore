@@ -8,7 +8,7 @@ module.exports=async context=>context.addInitScript(()=>{
     send(raw){
       const m=JSON.parse(raw),coin=this.url.includes(':50005')?'wht':'pep';
       if(m.method==='blockchain.transaction.broadcast')throw Error('Broadcast forbidden in UI fixture');
-      const result=m.method==='server.version'?['fixture','1.4']:m.method==='server.features'?{genesis_hash:WalletNetwork.CONFIG[coin].genesis}:m.method==='blockchain.headers.subscribe'?{height:500}:m.method.endsWith('get_balance')?{confirmed:0,unconfirmed:0}:m.method.endsWith('get_history')||m.method.endsWith('listunspent')?[]:0.01;
+      const result=m.method==='server.version'?['fixture','1.4']:m.method==='server.features'?{genesis_hash:WalletNetwork.CONFIG[coin].genesis}:m.method==='blockchain.headers.subscribe'?{height:500}:m.method==='blockchain.scripthash.subscribe'?null:m.method.endsWith('get_balance')?{confirmed:0,unconfirmed:0}:m.method.endsWith('get_history')||m.method.endsWith('listunspent')?[]:0.01;
       setTimeout(()=>this.onmessage?.({data:JSON.stringify({id:m.id,result})}),0);
     }
   };

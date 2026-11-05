@@ -136,7 +136,7 @@ public final class MainActivity extends Activity {
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if(request.isForMainFrame() && request.hasGesture() && foreground && localPage(Uri.parse(view.getUrl())) && transactionPage(request.getUrl())) {
+                if(request.isForMainFrame() && request.hasGesture() && foreground && view.getUrl() != null && localPage(Uri.parse(view.getUrl())) && transactionPage(request.getUrl())) {
                     try { startActivity(new Intent(Intent.ACTION_VIEW,request.getUrl()).addCategory(Intent.CATEGORY_BROWSABLE)); }
                     catch(Exception e) { Toast.makeText(MainActivity.this,"No browser available to open this transaction.",Toast.LENGTH_SHORT).show(); }
                     return true;
@@ -155,7 +155,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!localPage(Uri.parse(url))) return;
+                if (url == null || !localPage(Uri.parse(url))) return;
                 view.evaluateJavascript("Boolean(window.isSecureContext && window.crypto?.subtle && navigator.locks && typeof BigInt === 'function')", value -> {
                     if (!"true".equals(value)) showUnsupported();
                 });
@@ -189,7 +189,7 @@ public final class MainActivity extends Activity {
                 if(cameraRequest==request){cameraRequest=null;cameraPrompt=false;cameraResultReady=false;endCameraPrompt();}
             }
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
-                if (!foreground || !localPage(Uri.parse(view.getUrl()))) return false;
+                if (!foreground || view.getUrl() == null || !localPage(Uri.parse(view.getUrl()))) return false;
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
                 try {
@@ -202,7 +202,7 @@ public final class MainActivity extends Activity {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) { showUnsupported(); return; }
         WebViewCompat.addWebMessageListener(web, "SafeCoreNative", Collections.singleton(ORIGIN),
             (view, message, origin, mainFrame, reply) -> {
-                if (!mainFrame || !ORIGIN.equals(origin.toString()) || !foreground || !localPage(Uri.parse(view.getUrl()))) return;
+                if (!mainFrame || !ORIGIN.equals(origin.toString()) || !foreground || view.getUrl() == null || !localPage(Uri.parse(view.getUrl()))) return;
                 long id = 0;
                 try {
                     String raw = message.getData();

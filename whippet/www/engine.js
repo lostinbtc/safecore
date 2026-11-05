@@ -1,4 +1,4 @@
-/* Local-only development wallet. No transaction signing or broadcast yet. */
+/* Handles BIP39 validation, recovery recipes, address derivation and vault encryption; no networking or transaction signing. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
