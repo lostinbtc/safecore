@@ -1,5 +1,20 @@
 # Verification
 
+## 0.1.0-test.12 polling optimization
+
+Includes Chromatic's reviewed PR #1, merged into main at `8356cfe`. Network
+fixtures verify that unchanged live address-status fingerprints reuse rows,
+changed statuses trigger fresh balance/history/UTXO requests, decoded disk caches
+cannot authorize reuse, and inconsistent totals remain rejected. Four-second
+polling and changed-balance stabilization remain unchanged.
+
+The core wallet and isolated browser suites pass, including send review, input
+rechecks, recovery focus, cache isolation and reporting timing. Android liveTest
+build and lint pass (zero errors, six existing warnings). The exact asset audit,
+APK signature and non-debuggable manifest are verified with the existing signing
+certificate. Tests use fixtures and do not broadcast mainnet transactions; no
+wallet database, recovery material or signing private key is packaged.
+
 ## 0.1.0-test.11 recovery-focus fix
 
 The CI recovery failure was reproduced as a real event-ordering bug: ArrowDown
