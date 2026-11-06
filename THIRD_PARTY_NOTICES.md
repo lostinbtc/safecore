@@ -7,7 +7,7 @@ relicensing of them.
 | --- | --- |
 | ElectrumX fork | MIT; [full license](services/electrumx/LICENCE), Neil Booth / Electrum developers |
 | Pepecoin Blockbook fork | GNU AGPL-3.0; [full license](services/blockbook/COPYING), original notices retained in source |
-| ethers.js 5.7.2 | MIT; [full license](whippet/www/assets/ethers.LICENSE) |
+| ethers.js 5.7.2 | MIT; [wallet license](whippet/www/assets/ethers.LICENSE), [offline recovery license](recovery/assets/ethers.LICENSE); both bundles are identical |
 | QRCode.js | MIT; [full license](whippet/www/assets/qrcode.LICENSE) |
 | jsQR 1.4.0 | Apache-2.0; [full license](whippet/www/assets/jsQR.LICENSE) |
 | Android/Gradle dependencies | Their upstream notices/licenses; resolved by the checked-in build configuration |

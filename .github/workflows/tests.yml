@@ -20,6 +20,10 @@ jobs:
           git checkout --detach FETCH_HEAD
       - run: npm ci --ignore-scripts
       - run: npm test
+      - name: Check offline recovery and wallet backup compatibility
+        run: |
+          node recovery/tests.cjs
+          python3 recovery/package.py /tmp/whippet-recovery.zip
       - run: npx playwright install --with-deps --only-shell chromium
       - run: npm run test:browser
       - run: python3 scripts/check-public-tree.py
