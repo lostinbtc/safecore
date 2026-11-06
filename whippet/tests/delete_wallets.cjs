@@ -9,7 +9,7 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
   const ids=await p.evaluate(()=>{
    const recipe=WalletEngine.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'),lib=WalletLibrary.create(localStorage),ids=[];
    for(const name of ['First fixture','Second fixture','Active fixture']){const v=WalletEngine.unprotected(crypto,recipe);lib.save(v,name);ids.push(WalletLibrary.id(v));}
-   for(const id of ids){localStorage.setItem('corevault.receive.'+id,'{}');localStorage.setItem('corevault.send-attempts.'+id,'[]');}
+   for(const id of ids){localStorage.setItem('corevault.receive.'+id,'{}');localStorage.setItem('corevault.send-attempts.'+id,'[]');localStorage.setItem('corevault.komodo-recovery.'+id,'true');}
    localStorage.setItem('unrelated','preserve');return ids;
   });
   await p.goto('http://localhost:8787/#wallets');
@@ -24,6 +24,8 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
   assert.equal(await p.evaluate(()=>localStorage.getItem('whippet.dev.encrypted.v1')),initial);
   assert.equal(await p.evaluate(id=>localStorage.getItem('corevault.receive.'+id),ids[0]),null);
   assert.equal(await p.evaluate(id=>localStorage.getItem('corevault.receive.'+id),ids[1]),'{}');
+  assert.equal(await p.evaluate(id=>localStorage.getItem('corevault.komodo-recovery.'+id),ids[0]),null);
+  assert.equal(await p.evaluate(id=>localStorage.getItem('corevault.komodo-recovery.'+id),ids[1]),'true');
   await p.locator(`[data-delete-wallet="${ids[1]}"]`).click();await p.locator('#cancel-remove').click();
   await p.locator('.saved-wallet').first().waitFor();
   assert.equal(await p.locator('.saved-wallet').count(),2);

@@ -10,12 +10,24 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await c.route('https://pepecoinservice.org/**',r=>r.fulfill({status:200,body:'Isolated explorer fixture'}));
   const p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.clock.install();await p.goto('http://localhost:8787/#activity');
   assert.equal(await p.locator('.page-head').innerText(),'Activity');assert.equal(await p.locator('.activity-asset[open]').count(),0);
-  await p.evaluate(()=>{
+  const installHistory=()=>{
    const original=WalletNetwork.scan;WalletNetwork.scan=async(...args)=>{const s=await original(...args);s.rows[0].history=Array.from({length:40},(_,i)=>({tx_hash:(s.coin==='pep'?'a':'b').repeat(62)+i.toString(16).padStart(2,'0'),height:500-i}));return s;};
    const v=JSON.parse(localStorage.getItem('whippet.dev.encrypted.v1'));
-   localStorage.setItem('corevault.send-attempts.'+WalletLibrary.id(v),JSON.stringify([{coin:'pep',txid:'c'.repeat(64),outpoints:['d'.repeat(64)+':0'],at:Date.now(),status:'unknown'}]));
-  });
-  await p.clock.runFor(4001);await p.waitForFunction(()=>document.querySelectorAll('.live-tx').length===61);
+   const key='corevault.send-attempts.'+WalletLibrary.id(v);
+   if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify([
+    {coin:'pep',txid:'c'.repeat(64),outpoints:['d'.repeat(64)+':0'],at:Date.now(),status:'unknown'},
+    {coin:'pep',txid:'a'.repeat(62)+'27',outpoints:['d'.repeat(64)+':1'],at:Date.now(),status:'submitted'},
+    {coin:'wht',txid:'b'.repeat(62)+'27',outpoints:['d'.repeat(64)+':2'],at:Date.now(),status:'submitted'},
+    {coin:'wht',txid:'b'.repeat(62)+'26',outpoints:['d'.repeat(64)+':3'],at:Date.now(),status:'unknown'},
+    {coin:'wht',txid:'e'.repeat(64),outpoints:['d'.repeat(64)+':4'],at:Date.now(),status:'submitted'}
+   ]));
+  };
+  await p.evaluate(installHistory);
+  await p.clock.runFor(4001);await p.waitForFunction(()=>[...document.querySelectorAll('.live-tx code')].some(el=>el.textContent==='a'.repeat(62)+'00'));
+  assert.equal(await p.locator('.live-tx').count(),62);
+  for(const txid of ['a'.repeat(62)+'27','b'.repeat(62)+'27','b'.repeat(62)+'26'])assert.equal(await p.getByText(txid,{exact:true}).count(),0,'Confirmed sends outside the newest 30 must not appear as outstanding.');
+  assert.equal(await p.getByText('Submission uncertain — do not resend until checked.',{exact:true}).count(),1);
+  assert.equal(await p.getByText('Submitted — awaiting appearance in server history.',{exact:true}).count(),1);
   const pep=p.locator('[data-activity-coin=pep]'),wht=p.locator('[data-activity-coin=wht]');
   await pep.locator('summary').click();assert.equal(await pep.locator('.activity-list').isVisible(),true);assert.equal(await wht.locator('.activity-list').isVisible(),false);
   assert.equal(await wht.locator('a').count(),0);assert.equal(await pep.locator('a').count(),31);
@@ -29,6 +41,11 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await p.evaluate(()=>location.hash),'#activity');
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
   await p.screenshot({path:'whippet/test-results/activity-assets.png',fullPage:true});
-  assert.deepEqual(errors,[]);console.log('PASS: simple Activity header; collapsed asset groups; bounded scroll; refresh preserves open/scroll; PEP-only explorer links; uncertain-send warning retained; external fixture browser.');
+  await p.reload();await p.locator('.page-head').waitFor();await p.evaluate(installHistory);
+  await p.clock.runFor(4001);await p.waitForFunction(()=>[...document.querySelectorAll('.live-tx code')].some(el=>el.textContent==='a'.repeat(62)+'00'));
+  assert.equal(await p.locator('.live-tx').count(),62);
+  for(const txid of ['a'.repeat(62)+'27','b'.repeat(62)+'27','b'.repeat(62)+'26'])assert.equal(await p.getByText(txid,{exact:true}).count(),0,'Reload must not revive confirmed sends as outstanding.');
+  assert.equal(await p.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('corevault.send-attempts.'))[1]).length),5,'Public send records must remain intact.');
+  assert.deepEqual(errors,[]);console.log('PASS: Activity checks full server history before limiting display to 30; old confirmed sends stay resolved after reload; unseen submitted/uncertain warnings and send records retained; refresh preserves open/scroll; mobile layouts and PEP-only explorer links.');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

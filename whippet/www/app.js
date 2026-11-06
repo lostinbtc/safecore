@@ -49,6 +49,15 @@
   let receiveBooks = null, addingWallet = false, revealed = false;
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
   let rescanning=false,sweepState=null;
+  let komodoGate=null;
+  const komodoPreference=()=>envelope?'corevault.komodo-recovery.'+WalletLibrary.id(envelope):null;
+  const komodoEnabled=()=>{try{return Boolean(envelope)&&localStorage.getItem(komodoPreference())==='true';}catch(_){return false;}};
+  const komodoVerified=()=>komodoEnabled()&&komodoGate?.source===envelope&&komodoGate.epoch===networkEpoch&&Date.now()<komodoGate.expires;
+  function clearKomodo(){
+    if(komodoGate)clearTimeout(komodoGate.timer);komodoGate=null;
+    for(const id of ['komodo-phrase','verify-wallet-phrase','verify-wallet-passphrase','verify-wallet-password'])if($(id))$(id).value='';
+    for(const id of ['komodo-suggestions','verify-wallet-suggestions'])$(id)?.replaceChildren();
+  }
   const scanVersions={},fullScanCompletions={};
   let sendRefreshRun=null;
   let sweepReceipt=null,sweepReceiptTimer=null;
@@ -83,7 +92,7 @@
   function prepareAddresses(candidate, vault) {
     sendCoin = null; receiveCoin = null;
     clearReports();
-    clearSweep();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
+    clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
     const pools = E.receivePool(ethers, candidate,200);
     N.close(); networkEpoch++; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null; receivePools = pools;
     initialDiscovery = new Set(Object.keys(pools));
@@ -120,12 +129,12 @@
   function clearError() { $('error').hidden = true; $('error').textContent = ''; }
   function resetIdle() {
     clearTimeout(idleTimer);
-    if ((mode === 'unlocked' && protectedWallet(envelope)) || pending || revealed || document.querySelector('#phrase, #passphrase, #unlock-password, #seed-password')) {
+    if ((mode === 'unlocked' && protectedWallet(envelope)) || pending || revealed || document.querySelector('#phrase, #passphrase, #unlock-password, #seed-password, #komodo-phrase, #verify-wallet-phrase')) {
       idleTimer = setTimeout(() => lock(protectedWallet(envelope) ? 'Wallet locked after inactivity.' : 'Recovery details hidden after inactivity.'), 120000);
     }
   }
   function lock(message, reopen = true) {
-    clearSweep();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
+    clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
     sendCoin = null; receiveCoin = null;
     clearReports();
     N.close(); networkEpoch++; receivePools = null; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null;
@@ -348,7 +357,7 @@
     clearSweepReceipt();
     const r={coin,txid,destination,confirmations:0,seen:false,error:false};sweepReceipt=r;
     const epoch=networkEpoch,source=envelope;
-    const active=()=>sweepReceipt===r&&epoch===networkEpoch&&source===envelope&&mode==='unlocked'&&location.hash==='#sweep'&&!document.hidden;
+    const active=()=>sweepReceipt===r&&epoch===networkEpoch&&source===envelope&&mode==='unlocked'&&['#sweep','#komodo-sweep'].includes(location.hash)&&!document.hidden;
     const check=async()=>{
       if(!active())return;
       try{const result=await N.confirmation(coin,txid,destination);if(!active())return;r.confirmations=result.confirmations;r.seen=result.seen;r.error=false;}
@@ -359,6 +368,69 @@
     };
     renderSweepReceipt();void check();
   }
+  async function prepareSweepReview(key,active,komodoRecovery=false){
+    const coin=receiveCoin,source=envelope;
+    if(key.coin!==coin||komodoRecovery&&(coin!=='pep'||!komodoVerified()))throw Error('Verify your current wallet backup before Komodo recovery.');
+    const state={key,destinationIndex:null,komodo:komodoRecovery};sweepState=state;
+    await refreshLive(coin);
+    if(!active()||sweepState!==state)return;
+    if(!fresh(coin))throw Error('Could not verify your receiving addresses. Reconnect and try again.');
+    const view=receiveBooks[coin].view(),index=view.pinned?0:view.cursor;
+    if(index>=200)throw Error('Wallet addresses are full. Select the first-address option or use another wallet.');
+    const destination=receivePools[coin][index].address;
+    if(!view.pinned&&snapshots[coin].rows[index].checked===false)throw Error('Receiving address has not been checked yet. Rescan and try again.');
+    if(receivePools[coin].some(a=>a.address===key.address))throw Error('This key already belongs to this wallet. Use Rescan to discover its balance.');
+    sweepProgress('Checking all deposits and calculating the sweep fee. Please keep this page open…');
+    const data=await N.sweepSource(coin,key.address,{compressed:key.compressed});
+    if(!active()||sweepState!==state)return;
+    const p=T.sweepPlan({coin,destination,utxos:data.utxos,tip:data.snapshot.tip,feeRate:data.snapshot.feeRate,compressed:key.compressed});
+    state.destinationIndex=index;
+    state.timer=setTimeout(()=>{if(sweepState===state){clearSweep();sendDraft=null;if(active()){if(komodoRecovery){clearKomodo();komodo();}else sweep();error('Sweep review expired. Enter the recovery details again.');}}},90000);
+    sendDraft={plan:p,walletId:WalletLibrary.id(source),sweep:true,komodo:komodoRecovery};sendReview();
+  }
+  function komodo(){
+    if(mode!=='unlocked'||receiveCoin!=='pep'||!komodoEnabled()){clearKomodo();clearSweep();go('security');return;}
+    if(sweepReceipt){renderSweepReceipt();return;}
+    clearSweep();sendDraft=null;
+    const token=generation,source=envelope;
+    const active=()=>token===generation&&source===envelope&&mode==='unlocked'&&location.hash==='#komodo-sweep'&&!document.hidden&&komodoEnabled();
+    const warning='<p class="notice">Pepecoin only. This moves all spendable PEP from the derived legacy Komodo address, minus the fee, into your current SafeCore wallet. Your current recovery phrase will control the recovered funds. Do not reuse the old Komodo seed or deposit address. Keep its backup until all assets are recovered: other coins and HD accounts are not swept.</p>';
+    if(!komodoVerified()){
+      clearKomodo();
+      $('main').innerHTML=title('Verify your new wallet','Re-enter the current SafeCore recovery phrase from your backup. This does not restore or replace a wallet.')+warning+
+        `<form id="komodo-verify-form" class="form-panel" autocomplete="off"><label for="verify-wallet-phrase">Current SafeCore recovery phrase</label><textarea id="verify-wallet-phrase" maxlength="1000" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" aria-describedby="verify-wallet-status"></textarea><div id="verify-wallet-suggestions" class="recovery-suggestions" role="group" aria-label="Current wallet recovery suggestions" hidden></div><p id="verify-wallet-status" class="inline-info" aria-live="polite"></p><label for="verify-wallet-passphrase">Extra BIP39 passphrase, if used</label><input id="verify-wallet-passphrase" type="password" maxlength="1000" autocomplete="off">${protectedWallet(envelope)?'<label for="verify-wallet-password">Current wallet password</label><input id="verify-wallet-password" type="password" autocomplete="off" required>':''}<label class="check"><input id="komodo-backup-ack" type="checkbox" required><span>I saved this new wallet’s recovery phrase and any extra passphrase separately from my old Komodo backup.</span></label>${button('verify-komodo-wallet','Verify current wallet','primary wide')}<a href="#sweep" class="text-button">Cancel</a></form>`;
+      const submit=$('verify-komodo-wallet');submit.type='submit';
+      WalletRecovery.attach(ethers,{input:$('verify-wallet-phrase'),list:$('verify-wallet-suggestions'),status:$('verify-wallet-status'),onValidity:valid=>submit.disabled=busy||!valid});
+      $('komodo-verify-form').onsubmit=async event=>{
+        event.preventDefault();if(!active()||busy)return;clearError();
+        if(!$('komodo-backup-ack').checked){error('Confirm that you have saved the new wallet backup.');return;}
+        busy=true;submit.disabled=true;
+        try{
+          const fingerprint=await WalletKomodo.verifyDestination(crypto,source,$('verify-wallet-password')?.value||'',$('verify-wallet-phrase').value,$('verify-wallet-passphrase').value);
+          if(!active())return;
+          clearKomodo();
+          const gate={fingerprint,source,epoch:networkEpoch,expires:Date.now()+600000};komodoGate=gate;
+          gate.timer=setTimeout(()=>{if(komodoGate===gate){clearKomodo();clearSweep();sendDraft=null;generation++;busy=false;if(location.hash==='#komodo-sweep'){komodo();error('Verification expired. Verify your new wallet backup again.');}}},600000);
+          busy=false;komodo();
+        }catch(e){if(active())error(e.message);}
+        finally{if(active()){busy=false;if($('verify-wallet-password'))$('verify-wallet-password').value='';if(submit.isConnected)submit.disabled=false;}}
+      };return;
+    }
+    $('main').innerHTML=title('Komodo Sweep','Recover legacy Komodo Wallet Pepecoin into your verified SafeCore wallet.')+warning+
+      `<form id="komodo-sweep-form" class="form-panel" autocomplete="off"><label for="komodo-phrase">Old Komodo passphrase / seed words</label><textarea id="komodo-phrase" maxlength="2048" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" aria-describedby="komodo-status"></textarea><div id="komodo-suggestions" class="recovery-suggestions" role="group" aria-label="Komodo word suggestions" hidden></div><p id="komodo-status" class="inline-info" aria-live="polite"></p><p class="subtle">Legacy 12 or 24 words only; not Komodo HD accounts or KMD coin. Outer spaces are trimmed to match the converter. Case and internal spacing are preserved. Suggestions change a word only when you choose one.</p><p class="subtle">The old phrase stays on this device and is not saved. Review the derived PEP address and estimated fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-komodo-sweep','Review Komodo sweep','primary wide')}<a href="#sweep" class="text-button">Cancel</a></form>`;
+    const submit=$('review-komodo-sweep');submit.type='submit';
+    WalletRecovery.attach(ethers,{input:$('komodo-phrase'),list:$('komodo-suggestions'),status:$('komodo-status'),mode:'komodo',onValidity:valid=>submit.disabled=busy||!valid});
+    $('komodo-sweep-form').onsubmit=async event=>{
+      event.preventDefault();if(!active()||busy)return;clearError();busy=true;submit.disabled=true;
+      try{
+        if(!komodoVerified())throw Error('Verify your new wallet backup again.');
+        const key=WalletKomodo.key($('komodo-phrase').value,komodoGate.fingerprint);$('komodo-phrase').value='';$('komodo-suggestions').replaceChildren();
+        sweepProgress('Checking your receiving address. Please keep this page open…');
+        await prepareSweepReview(key,()=>active()&&komodoVerified(),true);
+      }catch(e){if(active()){clearSweep();error(e.message);}}
+      finally{if(active()){busy=false;if(submit.isConnected)submit.disabled=false;if($('sweep-progress'))$('sweep-progress').hidden=true;}}
+    };
+  }
   function sweep(){
     if(sweepReceipt){renderSweepReceipt();return;}
     clearSweep();sendDraft=null;
@@ -367,6 +439,10 @@
     const ticker=E.NETWORKS[coin].ticker,token=generation,source=envelope;
     const active=()=>token===generation&&source===envelope&&mode==='unlocked'&&location.hash==='#sweep'&&!document.hidden;
     $('main').innerHTML='<div class="page-head"><h1>Sweep private key</h1></div>'+`<p>Move the full ${ticker} balance from one private key into this wallet.</p><p class="notice">Select the correct asset: PEP and WHT share the same private-key format. The key stays on this device and is not saved.</p><form id="sweep-form" class="form-panel"><label for="sweep-key">Private key (WIF)</label><div class="send-address-row"><input id="sweep-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="52" required><button id="scan-key" type="button" class="icon-button" aria-label="Scan private key QR code">${icon('camera')}</button></div><section id="scan-panel" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" role="status" hidden></p><p class="subtle">Standard WIF keys only. Deposits must be confirmed and mining rewards mature.</p><p class="subtle">Review the estimated network fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-sweep','Review sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form>`;
+    if(coin==='pep'&&komodoEnabled()){
+      $('sweep-form').insertAdjacentHTML('afterend',button('komodo-open','Komodo Sweep','wide'));
+      $('komodo-open').onclick=()=>go('komodo-sweep');
+    }
     const input=$('sweep-key'),submit=$('review-sweep'),scanButton=$('scan-key'),panel=$('scan-panel'),status=$('scan-status');submit.type='submit';
     let stopScan=null;
     scanButton.onclick=()=>{
@@ -383,22 +459,7 @@
       sweepProgress('Checking your receiving address. Please keep this page open…');
       try{
         const key=T.sweepKey(coin,input.value);input.value='';
-        const state={key,destinationIndex:null};sweepState=state;
-        await refreshLive(coin);
-        if(!active()||sweepState!==state)return;
-        if(!fresh(coin))throw Error('Could not verify your receiving addresses. Reconnect and try again.');
-        const view=receiveBooks[coin].view(),index=view.pinned?0:view.cursor;
-        if(index>=200)throw Error('Wallet addresses are full. Select the first-address option or use another wallet.');
-        const destination=receivePools[coin][index].address;
-        if(!view.pinned&&snapshots[coin].rows[index].checked===false)throw Error('Receiving address has not been checked yet. Rescan and try again.');
-        if(receivePools[coin].some(a=>a.address===key.address))throw Error('This key already belongs to this wallet. Use Rescan to discover its balance.');
-        sweepProgress('Checking all deposits and calculating the sweep fee. Please keep this page open…');
-        const data=await N.sweepSource(coin,key.address,{compressed:key.compressed});
-        if(!active()||sweepState!==state)return;
-        const p=T.sweepPlan({coin,destination,utxos:data.utxos,tip:data.snapshot.tip,feeRate:data.snapshot.feeRate,compressed:key.compressed});
-        state.destinationIndex=index;
-        state.timer=setTimeout(()=>{if(sweepState===state){clearSweep();sendDraft=null;if(active()){sweep();error('Sweep review expired. Scan or enter the key again.');}}},90000);
-        sendDraft={plan:p,walletId:WalletLibrary.id(source),sweep:true};sendReview();
+        await prepareSweepReview(key,active);
       }catch(e){if(active()){clearSweep();error(e.message);}}
       finally{if(active()){busy=false;if($('sweep-progress'))$('sweep-progress').hidden=true;if($('review-sweep')){submit.disabled=false;scanButton.disabled=false;}}}
     };
@@ -407,11 +468,16 @@
     if (!sendDraft || mode !== 'unlocked') { go('wallet'); return; }
     const p = sendDraft.plan, ticker = E.NETWORKS[p.coin].ticker;
     const sweeping=sendDraft.sweep===true;
+    if(sendDraft.komodo&&(p.coin!=='pep'||!komodoVerified())){clearSweep();clearKomodo();sendDraft=null;go('security');return;}
     $('main').innerHTML = title(sweeping?'Review sweep':'Review transaction', 'Nothing has been sent yet.', protectionIcon(protectedWallet(envelope))) +
       (sweeping?`<p class="subtle">From external ${ticker} address: <code>${escape(sweepState.key.address)}</code><br>Into your wallet, Address #${sweepState.destinationIndex+1}. The key will not be saved.</p><p class="subtle">Full source balance: ${T.format(p.budget)} ${ticker}.</p>`:'')+
       (sweeping?`<p class="notice" id="sweep-fee-estimate">Estimated network fee: <strong>${T.format(p.fee)} ${ticker}</strong>, deducted from the swept balance.</p>`:`<p class="notice">You are sending <strong>${T.format(p.amount)} ${ticker}</strong> to the recipient.</p>`)+`<div class="details send-review"><div class="detail-row"><span>Network</span><strong>${E.NETWORKS[p.coin].name} mainnet</strong></div><div class="detail-row"><span>Recipient</span><code>${escape(p.destination)}</code></div><div class="detail-row"><span>${sweeping?'Your wallet receives':'Recipient receives'}</span><strong>${T.format(p.amount)} ${ticker}</strong></div><div class="detail-row"><span>${sweeping?'Estimated network fee (included)':'Network fee (included)'}</span><strong>${T.format(p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Total deducted</span><strong>${T.format(p.amount+p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Change returned</span><strong>${T.format(p.change)} ${ticker}</strong></div>${p.change ? `<div class="detail-row"><span>Change address</span><code>${escape(p.changeAddress)}</code></div>` : ''}</div>
       <p class="subtle">${sweeping?'All source funds, minus the fee, go to your reviewed wallet address.':'Change returns to your first receiving address. This reuses an address.'} The review expires after 90 seconds.</p>
       <form id="broadcast-form" class="form-panel">${protectedWallet(envelope) ? '<label for="send-password">Wallet password</label><input id="send-password" type="password" required autocomplete="current-password">' : '<p class="notice">Password lock is off for this wallet.</p>'}<label class="check"><input id="send-ack" type="checkbox" required><span>${sweeping?'I checked the estimated fee and receiving address. Sweep into my wallet.':'I checked the address, network, amount and fee. Send this real test transaction.'}</span></label>${sweeping?'<p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>':''}${button('broadcast-send',sweeping?'Confirm sweep':'Confirm and send','primary wide')}<a class="text-button coin-empty-link" href="#wallet">Cancel</a></form>`;
+    if(sendDraft.komodo){
+      $('broadcast-form').insertAdjacentHTML('beforebegin','<p class="notice" id="komodo-review-warning">This empties the displayed old Komodo PEP address of the reviewed spendable funds, minus the fee. Your verified current SafeCore seed controls the recovered PEP. Do not reuse the Komodo seed or address. Other coins and HD accounts are not moved; keep the old backup until they are recovered.</p>');
+      $('send-ack').nextElementSibling.textContent='I recognize my old Komodo PEP address, checked the destination and fee, and will use my verified SafeCore backup for the recovered funds. I will not reuse the old Komodo seed.';
+    }
     $('broadcast-send').type = 'submit';
     $('broadcast-form').onsubmit = async event => {
       event.preventDefault(); if (busy || !sendDraft || !$('send-ack').checked) return;
@@ -422,6 +488,7 @@
       let attempted = null;
       const attemptKey = 'corevault.send-attempts.' + WalletLibrary.id(source);
       try {
+        if(draft.komodo&&(p.coin!=='pep'||!komodoVerified()))throw Error('Komodo recovery is disabled or verification expired. Verify your new wallet backup again.');
         if (draft.walletId !== WalletLibrary.id(source) || Date.now()-p.createdAt > 90000 || !liveEnabled()) throw Error('Review expired or wallet changed. Build a fresh transaction.');
         const candidate = E.validateRecipe(ethers,await E.decrypt(crypto,source,password));
         if (token !== generation || source !== envelope) return;
@@ -446,11 +513,13 @@
           sweepProgress('Signing the sweep on this device. Please keep this page open…');
           await new Promise(resolve=>setTimeout(resolve,0));
           if(token!==generation||source!==envelope||sweepState!==state||!state.key)return;
+          if(draft.komodo&&!komodoVerified())throw Error('Komodo verification expired or recovery was disabled.');
           signed=T.signSweep(p,state.key,candidate,state.destinationIndex);
         }else signed=T.sign(p,candidate);
         // Record before the broadcast. An uncertain response must never auto-retry.
         const outpoints = p.inputs.map(i=>i.txid+':'+i.pos);
         await withWalletLock(() => {
+          if(draft.komodo&&!komodoVerified())throw Error('Komodo verification expired or recovery was disabled.');
           if (token !== generation || source !== envelope || localStorage.getItem(STORE) !== JSON.stringify(source) || !liveEnabled() || Date.now()-p.createdAt > 90000) throw Error('Wallet changed or review expired. Build a fresh transaction.');
           const attempts = sendAttempts();
           if (attempts.some(a=>a.coin===p.coin&&a.outpoints.some(o=>outpoints.includes(o)))) throw Error('These inputs already have a send attempt. Check its transaction ID before retrying.');
@@ -463,7 +532,7 @@
           localStorage.setItem(attemptKey,JSON.stringify([...attempts,record]));
           attempted = record;
         });
-        if (token !== generation || source !== envelope || !liveEnabled()) throw Error('Wallet changed before submission.');
+        if (token !== generation || source !== envelope || !liveEnabled() || draft.komodo&&!komodoVerified()) throw Error('Wallet or recovery settings changed before submission.');
         $('broadcast-send').textContent = 'Submitting signed transaction…';
         if(sweeping)sweepProgress('Submitting the sweep. Please do not close this page or submit again…');
         const txid = await N.client(p.coin).call('blockchain.transaction.broadcast',[signed.raw]);
@@ -474,7 +543,7 @@
           localStorage.setItem(attemptKey,JSON.stringify(records.map(a=>a.txid===txid?attempted:a)));
         });
         if (token === generation && source === envelope) {
-          clearSweep();sendDraft = null; if(snapshots[p.coin])snapshots[p.coin].cached=true;
+          clearSweep();if(draft.komodo)clearKomodo();sendDraft = null; if(snapshots[p.coin])snapshots[p.coin].cached=true;
           if(sweeping)watchSweep(p.coin,txid,p.destination);
           else {$('main').innerHTML = title('Transaction submitted', 'Accepted by the node; confirmation is still pending.') + `<code id="submitted-txid" class="address">${txid}</code><a href="#activity" class="text-button">Check activity →</a>`;void checkSentBalances();}
         }
@@ -485,7 +554,7 @@
         }
         if (token === generation) error(attempted && !(e instanceof N.RPCError) ? `Submission status is uncertain. Do not send again. Check transaction ${attempted.txid}.` : e.message);
       } finally {
-        if(draft.sweep&&attempted)clearSweep();
+        if(draft.sweep&&attempted){clearSweep();if(draft.komodo)clearKomodo();}
         if($('sweep-progress'))$('sweep-progress').hidden=true;
         busy = false;
         if ($('broadcast-send')) { $('broadcast-send').disabled = Boolean(attempted); $('broadcast-send').textContent = attempted ? 'Check transaction status before retrying' : sweeping?'Confirm sweep':'Confirm and send'; }
@@ -506,11 +575,13 @@
       try { attempts = sendAttempts(); } catch (e) { return `<p class="notice">${escape(e.message)}</p>`; }
       return coins.map(coin => {
         const snap = snapshots[coin];
-        const history = snap ? [...new Map(snap.rows.flatMap(r=>r.history).map(h=>[h.tx_hash,h])).values()].sort((a,b)=>(b.height>0?b.height:Infinity)-(a.height>0?a.height:Infinity)).slice(0,30) : [];
+        // Reconcile saved sends against all history; limit only the rendered rows.
+        const history = snap ? [...new Map(snap.rows.flatMap(r=>r.history).map(h=>[h.tx_hash,h])).values()].sort((a,b)=>(b.height>0?b.height:Infinity)-(a.height>0?a.height:Infinity)) : [];
+        const seen = new Set(history.map(h=>h.tx_hash));
         const txLink=hash=>coin==='pep'&&/^[0-9a-f]{64}$/i.test(hash)?`<a href="https://pepecoinservice.org/explorer/tx/${hash.toLowerCase()}/" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="View Pepecoin transaction ${hash}"><code>${hash}</code></a>`:`<code>${escape(hash)}</code>`;
-        const outstanding=attempts.filter(a=>a.coin===coin&&!history.some(h=>h.tx_hash===a.txid));
+        const outstanding=attempts.filter(a=>a.coin===coin&&!seen.has(a.txid));
         const recorded = outstanding.map(a=>`<div class="live-tx">${txLink(a.txid)}<small>${a.status==='unknown' ? 'Submission uncertain — do not resend until checked.' : 'Submitted — awaiting appearance in server history.'}</small></div>`).join('');
-        const rows=recorded+(snap ? (history.map(h=>`<div class="live-tx">${txLink(h.tx_hash)}<small>${h.height>0 ? `${Math.max(0,snap.tip-h.height+1)} confirmations` : 'Pending'}</small></div>`).join('') || (!outstanding.length?'<p class="subtle">No transactions yet.</p>':'')) : `<p class="subtle">${networkErrors[coin] ? 'Unable to refresh. Try again shortly.' : 'Checking transactions…'}</p>`);
+        const rows=recorded+(snap ? (history.slice(0,30).map(h=>`<div class="live-tx">${txLink(h.tx_hash)}<small>${h.height>0 ? `${Math.max(0,snap.tip-h.height+1)} confirmations` : 'Pending'}</small></div>`).join('') || (!outstanding.length?'<p class="subtle">No transactions yet.</p>':'')) : `<p class="subtle">${networkErrors[coin] ? 'Unable to refresh. Try again shortly.' : 'Checking transactions…'}</p>`);
         return `<details class="activity-asset" data-activity-coin="${coin}"><summary class="coin-picker">${coinMark(coin)}<span>${E.NETWORKS[coin].name}<small>${E.NETWORKS[coin].ticker}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="activity-list" tabindex="0" role="region" aria-label="${E.NETWORKS[coin].name} transaction history">${snap&&!fresh(coin)?`<p class="subtle">Last updated ${escape(new Date(snap.at).toLocaleString())}</p>`:''}${rows}</div></details>`;
       }).join('');
     }
@@ -642,6 +713,11 @@
       </section>
       <section class="panel"><h2>Wallet settings</h2><p class="inline-info">Keep your recovery phrase safe. Clearing browser data removes wallets saved on this device.</p>${exists ? button('remove-start','Remove local wallet','danger space-top') : ''}${['localhost','127.0.0.1'].includes(location.hostname)&&location.port==='8787'?'<a href="#reset-tests" class="text-button coin-empty-link">Reset all local test data</a>':''}</section></div>`;
     if (exists) {
+      $('remove-start').parentElement.insertAdjacentHTML('afterbegin',`<label class="check"><input id="komodo-recovery-enabled" type="checkbox" ${komodoEnabled()?'checked':''} ${mode!=='unlocked'?'disabled':''}><span><strong>Komodo recovery (Pepecoin only)</strong><small>Off by default. Show Komodo Sweep below Sweep private key. Requires verification of this wallet’s recovery backup.</small></span></label>`);
+      $('komodo-recovery-enabled').onchange=event=>{
+        try{if(event.target.checked)localStorage.setItem(komodoPreference(),'true');else localStorage.removeItem(komodoPreference());clearKomodo();toast(event.target.checked?'Komodo Sweep enabled for this wallet’s Pepecoin.':'Komodo recovery disabled.');}
+        catch(_){event.target.checked=komodoEnabled();error('Could not save the recovery setting.');}
+      };
       $('export').onclick = exportBackup;
       $('show-seed').onclick = () => go('reveal');
       if($('unlock-security'))$('unlock-security').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
@@ -860,7 +936,7 @@
       try{
         await withWalletLock(()=>{
           const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF];
-          const prefixes=['corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.'];
+          const prefixes=['corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.'];
           const keys=Object.keys(localStorage).filter(k=>exact.includes(k)||prefixes.some(p=>k.startsWith(p)));
           for(const key of keys)localStorage.removeItem(key);
           envelope=null;mode='demo';lock();loadCoinPrefs();document.documentElement.dataset.theme='dark';
@@ -895,7 +971,7 @@
             library.remove(target);
             try{
               for(const coin of Object.keys(E.NETWORKS))localStorage.removeItem('corevault.balance.'+target+'.'+coin);
-              for(const prefix of ['corevault.receive.','corevault.send-attempts.','corevault.live.'])localStorage.removeItem(prefix+target);
+              for(const prefix of ['corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.'])localStorage.removeItem(prefix+target);
             }catch(_){cleanupFailed=true;}
           }
           if(isActive||storageFailure){envelope = null; mode = 'demo'; lock();}
@@ -917,10 +993,11 @@
   }
   function render() {
     let route = location.hash.slice(1) || 'wallet';
-    if (!['wallet','wallets','live','send','sweep','reveal','export','coins','receive','activity','security','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
-    if(route!=='sweep'){clearSweep();clearSweepReceipt();}
+    if (!['wallet','wallets','live','send','sweep','komodo-sweep','reveal','export','coins','receive','activity','security','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
+    if(!['sweep','komodo-sweep'].includes(route)){clearSweep();clearSweepReceipt();}
+    if(route!=='komodo-sweep')clearKomodo();
     if (route !== 'send') sendCoin = null;
-    if (!['receive','sweep'].includes(route)) receiveCoin = null;
+    if (!['receive','sweep','komodo-sweep'].includes(route)) receiveCoin = null;
     if (pending && route !== 'backup') pending = null;
     document.documentElement.dataset.walletState = mode;
     if(route!=='icons')applyBrand(savedBrand());
@@ -935,11 +1012,11 @@
     $('lock').hidden = !protectedWallet(envelope);
     $('breadcrumb').textContent = ({wallet:'Overview',coins:'Coins',receive:'Receive',activity:'Activity',security:'Security',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
     document.querySelectorAll('[data-nav]').forEach(el => {
-      const active = el.dataset.nav === (route==='sweep'?'receive':['coins','wallets'].includes(route) ? 'wallet' : ['setup','backup','unlock','remove','reveal','export','reset-tests','icons'].includes(route) ? 'security' : route);
+      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['coins','wallets'].includes(route) ? 'wallet' : ['setup','backup','unlock','remove','reveal','export','reset-tests','icons'].includes(route) ? 'security' : route);
       el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current');
     });
     if (mode === 'storage-error' && !['remove','reset-tests'].includes(route)) storageError();
-    else ({wallet:overview,wallets,live:()=>go('wallet'),send,sweep,reveal,export:exportConfirm,coins,receive,activity,security,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
+    else ({wallet:overview,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,export:exportConfirm,coins,receive,activity,security,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
     document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
     if (['wallet','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {
       const targets = route !== 'receive' ? Object.keys(E.NETWORKS) : [receiveCoin];
@@ -965,7 +1042,7 @@
     sendCoin = null;
     // Only an explicit Overview coin click may preselect a deposit asset.
     // Other routes clear receiveCoin on render; the bottom tab starts blank.
-    if(!['#receive','#sweep'].includes(location.hash))receiveCoin=null;
+    if(!['#receive','#sweep','#komodo-sweep'].includes(location.hash))receiveCoin=null;
     generation++; stagedFile = null; busy = false; clearError(); render(); window.scrollTo(0,0);
   });
   function resumeUnprotected() {
@@ -990,6 +1067,10 @@
     input.files=transfer.files;input.dispatchEvent(new Event('change'));
   });
   window.addEventListener('storage', event => {
+    if(event.key===komodoPreference()){
+      clearKomodo();clearSweep();sendDraft=null;generation++;busy=false;
+      if(location.hash==='#komodo-sweep')go('security');else if(location.hash==='#security'||location.hash==='#sweep')render();
+    }
     if(event.key===BRAND_PREF) {applyBrand(savedBrand());if(location.hash==='#icons')iconGallery();}
     if (event.key === 'corevault.theme') document.documentElement.dataset.theme = event.newValue === 'light' ? 'light' : 'dark';
     if (event.key === COIN_PREFS) { loadCoinPrefs(); if (['', '#wallet', '#coins'].includes(location.hash)) render(); }

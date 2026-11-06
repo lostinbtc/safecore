@@ -367,6 +367,49 @@ key is never added to local storage, backups, logs or requests. JavaScript garba
 collection does not guarantee physical memory zeroization. Tests use public,
 disposable fixtures only; never use fixture keys for funds.
 
+### Optional Komodo recovery (Pepecoin only)
+
+This control is hidden by default. In **Security → Komodo recovery (Pepecoin
+only)**, enable it for the selected unlocked wallet. Then choose **Receive →
+Pepecoin → Sweep private key → Komodo Sweep**. The setting is local, per wallet,
+and contains no recovery material. It never enables a Whippet or KMD sweep.
+
+Before entering the old Komodo phrase, re-enter the current SafeCore recovery
+phrase from its backup, the exact extra BIP39 passphrase if used, and the current
+wallet password if protected. This verifies the destination wallet without
+creating, restoring, replacing or exporting a wallet. Verification is held only
+in memory, expires after ten minutes, and is cleared on leaving the flow,
+background/lock, wallet change or disabling the control. Normal inactivity hiding
+also applies. Reusing the old Komodo words as the new wallet's seed is refused.
+
+The source follows the legacy single-address transformation in
+[ks2pwif at 8a72544](https://github.com/PepeEnthusiast/ks2pwif/blob/8a725440427534c7b3638db5f0a952b1073d8458/src/index.js):
+SHA-256 of UTF-8 text; clear the first byte's low three bits, clear the last
+byte's high bit and set its next bit; use those bytes as the big-endian secp256k1
+key with a compressed public key and Pepecoin prefixes. Outer whitespace is
+trimmed to match that converter's UI. Case, internal whitespace and Unicode bytes
+are not normalized. SafeCore implements the transformation independently using
+its existing libraries; it does not download or execute the converter at runtime.
+
+The old-phrase entry reuses the local restore-word suggestions, but its validation
+is isolated: 12 or 24 words are accepted without SafeCore's HD mnemonic checksum
+gate. [Komodo's documentation](https://komodoplatform.com/en/docs/komodo-wallet/desktop/import-private-key-or-seed-phrase/)
+uses the English BIP39 list for standard backups and also describes custom seeds.
+Suggestions are optional explicit replacements, not automatic corrections.
+Matching the word count does not verify ownership: confirm the displayed old PEP
+address before approving a sweep. Other phrase lengths, Komodo HD accounts,
+hardware-wallet derivations, KMD and other assets are not supported by this flow.
+
+The existing full-source sweep checks, byte-based fee review, current-wallet
+destination selection, signing and first-confirmation screen are reused. The
+review warns that all reviewed spendable PEP leaves the derived old address,
+minus the fee, and the current SafeCore backup controls the recovered funds.
+Do not reuse the old Komodo seed/address, but retain its backup until any other
+assets have been recovered. A seed is not deleted on-chain, and this operation
+does not empty unrelated addresses or coins. New deposits after the final source
+check are outside the reviewed transaction. Old phrases and derived keys are
+never stored in wallet backups, settings, logs or network requests.
+
 ### Current ordinary-send transaction limits
 
 | Rule | Current value |

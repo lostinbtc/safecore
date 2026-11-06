@@ -12,8 +12,8 @@ android {
         applicationId 'org.pepecoinservice.safecore.testing'
         minSdk 26
         targetSdk 35
-        versionCode 14
-        versionName '0.1.0-test.14'
+        versionCode 15
+        versionName '0.1.0-test.15'
         buildConfigField 'boolean', 'DEBUG_TOOLS_ENABLED', debugTools.toString()
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
@@ -38,7 +38,7 @@ android {
 tasks.register('bundleWallet', Sync) {
     from('../../www') {
         include 'index.html', 'styles.css', 'engine.js', 'viewport.js', 'recovery.js', 'receive.js', 'library.js',
-                'transactions.js', 'scanner.js', 'network.js', 'reporting.js', 'app.js', 'native.js',
+                'transactions.js', 'komodo.js', 'scanner.js', 'network.js', 'reporting.js', 'app.js', 'native.js',
                 'assets/pepecoin.png', 'assets/whippet.png', 'assets/corevault.svg',
                 'assets/ethers.umd.min.js', 'assets/ethers.LICENSE', 'assets/qrcode.min.js', 'assets/qrcode.LICENSE', 'assets/whippet-legacy.js', 'assets/jsQR.js', 'assets/jsQR.LICENSE'
         (1..30).each { include String.format('assets/icons/safecore-%02d.svg', it) }

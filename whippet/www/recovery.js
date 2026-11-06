@@ -4,15 +4,16 @@
   if(typeof module==='object'&&module.exports)module.exports=api;
   else root.WalletRecovery=api;
 })(typeof globalThis==='object'?globalThis:this,function(){
-  function create(ethers){
+  function create(ethers,{mode='bip39'}={}){
+    if(!['bip39','komodo'].includes(mode))throw Error('Unsupported recovery entry mode.');
     const words=Array.from({length:2048},(_,i)=>ethers.wordlists.en.getWord(i));
     const dictionary=new Set(words),counts=[12,15,18,21,24];
     const normalize=value=>String(value).normalize('NFKD').trim().toLowerCase().replace(/\s+/g,' ');
     function inspect(value){
       const phrase=normalize(value),tokens=phrase?phrase.split(' '):[];
       const invalid=tokens.flatMap((word,i)=>dictionary.has(word)?[]:[i+1]);
-      const supported=counts.includes(tokens.length);
-      const valid=!invalid.length&&supported&&ethers.utils.isValidMnemonic(phrase,ethers.wordlists.en);
+      const supported=(mode==='komodo'?[12,24]:counts).includes(tokens.length);
+      const valid=mode==='komodo'?supported&&value.length<=2048:!invalid.length&&supported&&ethers.utils.isValidMnemonic(phrase,ethers.wordlists.en);
       return {count:tokens.length,invalid,supported,valid};
     }
     function suggest(value,caret,end=caret){
@@ -34,8 +35,8 @@
     }
     return {inspect,suggest,complete};
   }
-  function attach(ethers,{input,list,status,onValidity}){
-    const model=create(ethers);let composing=false,dismissed=false,frame=0;
+  function attach(ethers,{input,list,status,onValidity,mode='bip39'}){
+    const model=create(ethers,{mode});let composing=false,dismissed=false,frame=0;
     function hide(){list.replaceChildren();list.hidden=true;}
     function position(){
       if(!input.isConnected||list.hidden)return;
@@ -55,7 +56,8 @@
       const result=model.inspect(input.value);
       input.setAttribute('aria-invalid',String(input.value.trim().length>0&&!result.valid));
       if(input.disabled){status.textContent='';hide();onValidity(false);return;}
-      if(!result.count)status.textContent='Enter your recovery words in order.';
+      if(mode==='komodo')status.textContent=!result.count?'Enter the old Komodo words exactly as backed up.':!result.valid?'Use the exact 12 or 24 words from the legacy Komodo backup.':result.invalid.length?'Some words are outside the standard list. Keep the original spelling and verify the derived PEP address.':'Word count accepted. This does not verify the phrase: check the derived PEP address.';
+      else if(!result.count)status.textContent='Enter your recovery words in order.';
       else if(result.invalid.length)status.textContent=`Check ${result.invalid.length===1?'word':'words'} ${result.invalid.slice(0,6).join(', ')}: incomplete or misspelled.`;
       else if(!result.supported)status.textContent=`${result.count} words entered. Use the exact words from your backup (usually 12 or 24).`;
       else if(!result.valid)status.textContent='These words do not pass the recovery check. Check their order and spelling.';

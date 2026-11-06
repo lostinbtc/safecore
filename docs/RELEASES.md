@@ -5,10 +5,27 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
-This prerelease build is SafeCore 0.1.0-test.14, Android 8.0+ (API 26), with
+This prerelease build is SafeCore 0.1.0-test.15, Android 8.0+ (API 26), with
 `safeCoreDebugTools=false`. USB/WebView debugging and screenshots are disabled.
 It starts without saved wallets on a fresh installation. It contains no desktop
 database, recovery material, RPC credentials or signing private key.
+
+Version 0.1.0-test.15 adds opt-in legacy Komodo recovery for Pepecoin only.
+Enable it per wallet in Security, then use Receive → Pepecoin → Sweep private
+key → Komodo Sweep. The destination wallet's backup must be verified first;
+the old phrase is processed locally and is never saved. Legacy derivation is
+isolated from SafeCore HD recovery. Review the derived source address, receiving
+address and fee before confirming. This sweeps the reviewed spendable PEP from
+one derived legacy address, not other assets or HD accounts. Do not reuse the old
+seed; retain its backup until any other assets are recovered. See the wallet
+guide for exact supported phrase formats and expiry/cleanup behavior.
+
+Activity now reconciles send attempts against all fetched address history before
+limiting the displayed history to 30 entries, so older confirmed sends do not
+reappear as outstanding after a refresh or reload. Existing test.14 send-refresh
+behavior, ordinary-send limits, wallet storage and signing identity are unchanged.
+Earlier prereleases remain available to authorized repository users; releases
+in this private repository require access permission.
 
 Version 0.1.0-test.14 tracks new ordinary sends until their first confirmation,
 then freshly checks the input addresses, wallet change address and any wallet-owned
@@ -66,7 +83,7 @@ Your own build generally has a different signing key. Back up first.
 3. Store the APK in an isolated `release-artifacts/<tag>` branch, not the `main`
    source history. Record the immutable artifact commit and hash in
    `release/manifest.json`. That transport branch contains only the deliberately
-   public APK. It is not wallet storage and is not used to run code.
+   distributable APK. It is not wallet storage and is not used to run code.
 4. Submit source plus manifest through a pull request targeting protected `main`.
    After required checks pass and the PR is merged, tag the merged source commit.
    The release workflow fetches the pinned artifact commit, verifies hash and exact bundled
@@ -78,6 +95,10 @@ Your own build generally has a different signing key. Back up first.
 
 The artifact transport branch makes locally signed publication possible without
 putting a personal GitHub API token or Android signing key on the runner.
+Checkout uses the short-lived repository token without persisting credentials.
+The publisher authenticates its separate artifact fetch with the same token,
+scoped to that GitHub HTTPS subprocess. Both public and private repositories are
+supported; private release downloads require repository access.
 The workflow has repository-content write permission only for release publication;
 the ordinary test workflow is read-only. Neither workflow deploys servers or
 installs the app on a phone. Review workflow changes like any privileged code.
