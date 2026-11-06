@@ -1,5 +1,6 @@
 """Offline publication guards: no actual GitHub submissions or real credentials."""
 import contextlib
+import base64
 import hashlib
 import importlib.util
 import io
@@ -64,6 +65,21 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'checksum'):
             self.run_publish(bad_bytes=True)
         self.assertEqual(self.requests, [])
+
+    def test_private_artifact_fetch_uses_ephemeral_scoped_credentials(self):
+        run = self.run_publish()
+        fetch = run.call_args_list[0]
+        self.assertEqual(fetch.args[0], ['git', '-c', 'credential.helper=',
+                         'fetch', '--depth=1', 'https://github.com/example/safecore.git',
+                         'refs/heads/release-artifacts/v0.1.0-test.9'])
+        environment = fetch.kwargs['env']
+        self.assertEqual(environment['GIT_CONFIG_COUNT'], '1')
+        self.assertEqual(environment['GIT_CONFIG_KEY_0'], 'http.https://github.com/.extraheader')
+        expected = base64.b64encode(b'x-access-token:public-test-token').decode()
+        self.assertEqual(environment['GIT_CONFIG_VALUE_0'], 'AUTHORIZATION: basic ' + expected)
+        self.assertEqual(environment['GIT_TERMINAL_PROMPT'], '0')
+        self.assertNotIn(self.environment['GITHUB_TOKEN'], ' '.join(fetch.args[0]))
+        self.assertNotIn('env', run.call_args_list[1].kwargs)
 
     def test_bad_tag_stops_before_network(self):
         self.environment['GITHUB_REF'] = 'refs/heads/main'

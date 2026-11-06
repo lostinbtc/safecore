@@ -10,14 +10,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Fetch exact event commit (public repository)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "$GITHUB_SHA"
-          git checkout --detach FETCH_HEAD
+      - name: Fetch exact event commit (private or public repository)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - run: npm ci --ignore-scripts
       - run: npm test
       - name: Check offline recovery and wallet backup compatibility

@@ -1,4 +1,5 @@
 """Publish a locally verified APK; never handles Android signing private keys."""
+import base64
 import hashlib
 import json
 import os
@@ -30,8 +31,22 @@ def main():
         raise ValueError('Invalid artifact name')
     if manifest['debug_tools'] is not False:
         raise ValueError('Refusing a debugging-enabled release')
+    token = os.environ['GITHUB_TOKEN']
+    # Private repositories need authentication for the separate artifact fetch.
+    # Scope the short-lived token to this subprocess and GitHub HTTPS only;
+    # never put credentials in a remote URL, command arguments or Git config.
+    git_environment = os.environ.copy()
+    git_environment.update({
+        'GIT_CONFIG_COUNT': '1',
+        'GIT_CONFIG_KEY_0': 'http.https://github.com/.extraheader',
+        'GIT_CONFIG_VALUE_0': 'AUTHORIZATION: basic ' + base64.b64encode(
+            ('x-access-token:' + token).encode()).decode(),
+        'GIT_TERMINAL_PROMPT': '0',
+    })
     branch = 'refs/heads/release-artifacts/' + tag
-    subprocess.run(['git', 'fetch', '--depth=1', 'origin', branch], check=True)
+    subprocess.run(['git', '-c', 'credential.helper=', 'fetch', '--depth=1',
+                    'https://github.com/' + repository + '.git', branch],
+                   check=True, env=git_environment)
     actual = subprocess.check_output(['git', 'rev-parse', 'FETCH_HEAD'], text=True).strip()
     if actual != commit:
         raise ValueError('Artifact branch differs from the reviewed commit')
@@ -43,7 +58,6 @@ def main():
         target.write_bytes(apk)
         subprocess.run(['python3', 'whippet/tests/android_bundle.py', str(target)], check=True)
     checksum = (digest + '  ' + filename + '\n').encode()
-    token = os.environ['GITHUB_TOKEN']
     base = 'https://api.github.com/repos/' + repository
 
     def api(url, method='GET', data=None, content_type='application/json'):

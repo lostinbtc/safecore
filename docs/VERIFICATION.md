@@ -1,5 +1,40 @@
 # Verification
 
+## 0.1.0-test.15: opt-in legacy Komodo Pepecoin recovery
+
+Fourteen core suites and twenty isolated browser suites pass. The legacy
+derivation is checked independently with
+Node/OpenSSL SHA256 and secp256k1 against disposable public fixtures, including
+case, internal spacing, Unicode, outer trimming and 12/24-word inputs. Current
+wallet backup verification covers plaintext and encrypted vaults, extra BIP39
+passphrases, wrong credentials and refusal to reuse the old seed. Standard
+SafeCore mnemonic validation remains separate from legacy Komodo word entry.
+
+Recovery browser fixtures cover default-off and per-wallet opt-in, PEP-only
+controls and route guards, backup verification, cancellation, backgrounding,
+verification/review expiry, disabled recovery at submission, pinned/next-empty
+destinations, fees, first confirmation and absence of the old phrase in storage.
+No live recovery phrase or mainnet broadcast is used by these tests.
+The nine Komodo UI scenarios include a reload that preserves the second selected
+wallet, proving that enabling recovery does not opt other wallets in.
+
+The Android QA and test.15 liveTest builds and lint pass (zero errors, six existing warnings).
+The exact bundled-asset audit includes `komodo.js` and excludes wallet databases,
+backups and signing keys. The version code is 15, app debugging is disabled, and
+the signing certificate matches test.14. The artifact's hash and immutable
+transport commit are recorded in `release/manifest.json`. Changed/new source
+secret scans pass. These checks are not an independent security audit or a
+real-funds Komodo recovery.
+
+The Activity regression checks full fetched history before truncating display,
+including reload, old confirmed attempts, retained uncertain attempts and scoped
+wallet state. Eight release-tool tests pass, including the private-repository
+artifact fetch: authentication is scoped to GitHub HTTPS in a subprocess
+environment, never stored in Git config or command arguments. Both workflows
+use a pinned checkout action without persisted credentials. Live GitHub checks
+and release publication must still complete after the source PR is opened and
+merged; local fixtures do not prove a particular account's Actions permissions.
+
 ## 0.1.0-test.14 confirmed-send balance refresh
 
 Thirteen core suites, nineteen isolated browser suites, recovery compatibility

@@ -8,7 +8,7 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
   await page.evaluate(()=>{
     const recipe=WalletEngine.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
     const lib=WalletLibrary.create(localStorage);lib.save(WalletEngine.unprotected(crypto,recipe),'Fixture A');lib.save(WalletEngine.unprotected(crypto,recipe),'Fixture B');
-    for(const key of ['corevault.balance.fixture.pep','corevault.receive.fixture','corevault.send-attempts.fixture','corevault.live.fixture','corevault.theme','corevault.hidden-coins.v1'])localStorage.setItem(key,'fixture');
+    for(const key of ['corevault.balance.fixture.pep','corevault.receive.fixture','corevault.send-attempts.fixture','corevault.live.fixture','corevault.komodo-recovery.fixture','corevault.theme','corevault.hidden-coins.v1'])localStorage.setItem(key,'fixture');
     localStorage.setItem('unrelated-setting','keep');
   });
   await page.goto('http://localhost:8787/#reset-tests');
