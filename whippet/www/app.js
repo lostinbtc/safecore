@@ -48,6 +48,12 @@
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
   let receiveBooks = null, addingWallet = false, revealed = false;
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
+  let rescanning=false,sweepState=null;
+  let sweepReceipt=null,sweepReceiptTimer=null;
+  function clearSweepReceipt(){clearTimeout(sweepReceiptTimer);sweepReceiptTimer=null;sweepReceipt=null;}
+  function sweepProgress(message){const el=$('sweep-progress');if(el){el.textContent=message;el.hidden=false;}}
+  let initialDiscovery = new Set();
+  function clearSweep(){if(sweepState){clearTimeout(sweepState.timer);sweepState.key=null;sweepState=null;}const field=$('sweep-key');if(field)field.value='';}
   let reports={},reportTimers={},deleteTarget=null;
   function clearReports(){for(const timer of Object.values(reportTimers))clearTimeout(timer);reportTimers={};reports={};}
   const reported=coin=>reports[coin]?.value;
@@ -75,8 +81,10 @@
   function prepareAddresses(candidate, vault) {
     sendCoin = null; receiveCoin = null;
     clearReports();
-    const pools = E.receivePool(ethers, candidate);
+    clearSweep();clearSweepReceipt();rescanning=false;
+    const pools = E.receivePool(ethers, candidate,200);
     N.close(); networkEpoch++; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null; receivePools = pools;
+    initialDiscovery = new Set(Object.keys(pools));
     let prefs = {};
     try { prefs = JSON.parse(localStorage.getItem('corevault.receive.' + WalletLibrary.id(vault)) || '{}'); } catch (_) {}
     receiveBooks = Object.fromEntries(Object.entries(pools).map(([coin,pool]) => [coin, ReceiveBook.create(pool, prefs?.[coin] || {})]));
@@ -85,6 +93,12 @@
         if(cached){snapshots[coin]=cached;reports[coin]=WalletReporting.create(cached);receiveBooks[coin].remember(cached.everUsed);}
       } catch (_) { /* Missing/corrupt cache triggers discovery, never a false zero. */ }
     }
+    // Start both assets even when opening on Security or an unselected Receive tab.
+    // Callers finish unlocking synchronously before this microtask runs.
+    const epoch = networkEpoch;
+    queueMicrotask(() => {
+      if (epoch === networkEpoch) for (const coin of initialDiscovery) void refreshLive(coin);
+    });
   }
   function openUnprotected() {
     if (envelope?.format === E.OPEN_FORMAT) {
@@ -109,9 +123,11 @@
     }
   }
   function lock(message, reopen = true) {
+    clearSweep();clearSweepReceipt();rescanning=false;
     sendCoin = null; receiveCoin = null;
     clearReports();
     N.close(); networkEpoch++; receivePools = null; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null;
+    initialDiscovery.clear();
     generation++; pending = null; receiveBooks = null; stagedFile = null; busy = false; revealed = false; addingWallet = false;
     clearTimeout(idleTimer);
     mode = envelope ? 'locked' : mode === 'storage-error' ? 'storage-error' : 'demo';
@@ -128,18 +144,20 @@
     return Boolean(envelope);
   }
   const fresh = coin => snapshots[coin] && !snapshots[coin].cached && !networkErrors[coin] && Date.now() - snapshots[coin].at < 45000;
-  async function refreshLive(coin) {
+  async function refreshLive(coin,full=false) {
     if (!liveEnabled() || mode !== 'unlocked' || !receivePools?.[coin] || document.hidden) return null;
-    if (scans[coin]) return scans[coin];
+    while (scans[coin]) {if(!full)return scans[coin];const epoch=networkEpoch;await scans[coin];if(epoch!==networkEpoch)return null;}
     lastRefresh[coin] = Date.now();
     const epoch = networkEpoch, source = envelope;
     const work = (async () => {
       try {
         const prior=snapshots[coin];
         if(prior)prior.everUsed=[...new Set([...(prior.everUsed||[]),...receiveBooks[coin].preferences().used])];
-        const snapshot = await N.scan(coin, receivePools[coin],prior);
+        const snapshot = await N.scan(coin, receivePools[coin],prior,{full:full || initialDiscovery.has(coin),verify:reports[coin]?.pending===true});
         if (epoch !== networkEpoch || source !== envelope || !liveEnabled()) return null;
-        for (const row of snapshot.rows) receiveBooks[coin].observe(row.account.address, row.history);
+        // Completion belongs to this wallet session, not its disk cache or display delay.
+        initialDiscovery.delete(coin);
+        for (const row of snapshot.rows) if(row.checked!==false)receiveBooks[coin].observe(row.account.address, row.history);
         snapshots[coin] = snapshot; delete networkErrors[coin];
         receiveBooks[coin].remember(snapshot.everUsed||[]);
         const gate=reports[coin]||(reports[coin]=WalletReporting.create());
@@ -282,19 +300,88 @@
       finally { if (token === generation) { busy = false; if ($('review-send')) { $('review-send').disabled = false; $('review-send').textContent = 'Review transaction'; } } }
     };
   }
+  function renderSweepReceipt(){
+    const r=sweepReceipt;if(!r)return;
+    const confirmed=r.confirmations>0;
+    const message=confirmed?'The sweep has its first confirmation.':r.error?'Unable to check confirmation right now. Retrying automatically. Do not repeat the sweep.':r.seen?'Waiting for the first confirmation. Keep this page open to follow progress. Do not repeat the sweep.':'Submitted to the node. Waiting for it to appear in transaction history. Do not repeat the sweep.';
+    $('main').innerHTML=title(confirmed?'Sweep confirmed':'Sweep submitted',confirmed?'Funds were sent to your wallet.':'The transaction has been submitted; confirmation is pending.')+
+      `<p class="notice" id="sweep-confirmation" role="status" aria-live="polite">${message}</p><code class="address">${escape(r.txid)}</code><p class="subtle">Closing this page will not cancel the submitted transaction. Its status is available in Activity.</p><a href="#activity" class="text-button">Check activity →</a>`;
+  }
+  function watchSweep(coin,txid,destination){
+    clearSweepReceipt();
+    const r={coin,txid,destination,confirmations:0,seen:false,error:false};sweepReceipt=r;
+    const epoch=networkEpoch,source=envelope;
+    const active=()=>sweepReceipt===r&&epoch===networkEpoch&&source===envelope&&mode==='unlocked'&&location.hash==='#sweep'&&!document.hidden;
+    const check=async()=>{
+      if(!active())return;
+      try{const result=await N.confirmation(coin,txid,destination);if(!active())return;r.confirmations=result.confirmations;r.seen=result.seen;r.error=false;}
+      catch(_){if(!active())return;r.error=true;}
+      renderSweepReceipt();
+      if(!r.confirmations)sweepReceiptTimer=setTimeout(check,WalletReporting.POLL_MS);
+      else void refreshLive(coin);
+    };
+    renderSweepReceipt();void check();
+  }
+  function sweep(){
+    if(sweepReceipt){renderSweepReceipt();return;}
+    clearSweep();sendDraft=null;
+    const coin=receiveCoin;
+    if(mode!=='unlocked'||!E.NETWORKS[coin]){go('receive');return;}
+    const ticker=E.NETWORKS[coin].ticker,token=generation,source=envelope;
+    const active=()=>token===generation&&source===envelope&&mode==='unlocked'&&location.hash==='#sweep'&&!document.hidden;
+    $('main').innerHTML='<div class="page-head"><h1>Sweep private key</h1></div>'+`<p>Move the full ${ticker} balance from one private key into this wallet.</p><p class="notice">Select the correct asset: PEP and WHT share the same private-key format. The key stays on this device and is not saved.</p><form id="sweep-form" class="form-panel"><label for="sweep-key">Private key (WIF)</label><div class="send-address-row"><input id="sweep-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="52" required><button id="scan-key" type="button" class="icon-button" aria-label="Scan private key QR code">${icon('camera')}</button></div><section id="scan-panel" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" role="status" hidden></p><p class="subtle">Standard WIF keys only. Deposits must be confirmed and mining rewards mature.</p><p class="subtle">Review the estimated network fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-sweep','Review sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form>`;
+    const input=$('sweep-key'),submit=$('review-sweep'),scanButton=$('scan-key'),panel=$('scan-panel'),status=$('scan-status');submit.type='submit';
+    let stopScan=null;
+    scanButton.onclick=()=>{
+      if(!active()||scanButton.disabled)return;input.value='';panel.hidden=false;status.hidden=false;scanButton.disabled=true;submit.disabled=true;
+      stopScan=WalletScanner.start({video:$('scan-video'),status,hint:$('scan-hint'),coin,privateKey:true,
+        parseValue:raw=>{T.sweepKey(coin,raw);return raw.trim();},
+        onClose:()=>{panel.hidden=true;scanButton.disabled=false;submit.disabled=false;stopScan=null;},
+        onAddress:value=>{if(active()){input.value=value;status.textContent='Private key scanned. Review the sweep before sending.';}}
+      });
+    };
+    $('cancel-scan').onclick=()=>{stopScan?.();status.hidden=true;};
+    $('sweep-form').onsubmit=async event=>{
+      event.preventDefault();if(busy||!active())return;stopScan?.();clearError();busy=true;submit.disabled=true;scanButton.disabled=true;
+      sweepProgress('Checking your receiving address. Please keep this page open…');
+      try{
+        const key=T.sweepKey(coin,input.value);input.value='';
+        const state={key,destinationIndex:null};sweepState=state;
+        await refreshLive(coin);
+        if(!active()||sweepState!==state)return;
+        if(!fresh(coin))throw Error('Could not verify your receiving addresses. Reconnect and try again.');
+        const view=receiveBooks[coin].view(),index=view.pinned?0:view.cursor;
+        if(index>=200)throw Error('Wallet addresses are full. Select the first-address option or use another wallet.');
+        const destination=receivePools[coin][index].address;
+        if(!view.pinned&&snapshots[coin].rows[index].checked===false)throw Error('Receiving address has not been checked yet. Rescan and try again.');
+        if(receivePools[coin].some(a=>a.address===key.address))throw Error('This key already belongs to this wallet. Use Rescan to discover its balance.');
+        sweepProgress('Checking all deposits and calculating the sweep fee. Please keep this page open…');
+        const data=await N.sweepSource(coin,key.address,{compressed:key.compressed});
+        if(!active()||sweepState!==state)return;
+        const p=T.sweepPlan({coin,destination,utxos:data.utxos,tip:data.snapshot.tip,feeRate:data.snapshot.feeRate,compressed:key.compressed});
+        state.destinationIndex=index;
+        state.timer=setTimeout(()=>{if(sweepState===state){clearSweep();sendDraft=null;if(active()){sweep();error('Sweep review expired. Scan or enter the key again.');}}},90000);
+        sendDraft={plan:p,walletId:WalletLibrary.id(source),sweep:true};sendReview();
+      }catch(e){if(active()){clearSweep();error(e.message);}}
+      finally{if(active()){busy=false;if($('sweep-progress'))$('sweep-progress').hidden=true;if($('review-sweep')){submit.disabled=false;scanButton.disabled=false;}}}
+    };
+  }
   function sendReview() {
     if (!sendDraft || mode !== 'unlocked') { go('wallet'); return; }
     const p = sendDraft.plan, ticker = E.NETWORKS[p.coin].ticker;
-    $('main').innerHTML = title('Review transaction', 'Nothing has been sent yet.', protectionIcon(protectedWallet(envelope))) +
-      `<p class="notice">You are sending <strong>${T.format(p.amount)} ${ticker}</strong> to the recipient.</p><div class="details send-review"><div class="detail-row"><span>Network</span><strong>${E.NETWORKS[p.coin].name} mainnet</strong></div><div class="detail-row"><span>Recipient</span><code>${escape(p.destination)}</code></div><div class="detail-row"><span>Recipient receives</span><strong>${T.format(p.amount)} ${ticker}</strong></div><div class="detail-row"><span>Network fee (included)</span><strong>${T.format(p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Total deducted</span><strong>${T.format(p.amount+p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Change returned</span><strong>${T.format(p.change)} ${ticker}</strong></div>${p.change ? `<div class="detail-row"><span>Change address</span><code>${escape(p.changeAddress)}</code></div>` : ''}</div>
-      <p class="subtle">Change returns to your first receiving address. This reuses an address. The review expires after 90 seconds.</p>
-      <form id="broadcast-form" class="form-panel">${protectedWallet(envelope) ? '<label for="send-password">Wallet password</label><input id="send-password" type="password" required autocomplete="current-password">' : '<p class="notice">Password lock is off for this wallet.</p>'}<label class="check"><input id="send-ack" type="checkbox" required><span>I checked the address, network, amount and fee. Send this real test transaction.</span></label>${button('broadcast-send','Confirm and send','primary wide')}<a class="text-button coin-empty-link" href="#wallet">Cancel</a></form>`;
+    const sweeping=sendDraft.sweep===true;
+    $('main').innerHTML = title(sweeping?'Review sweep':'Review transaction', 'Nothing has been sent yet.', protectionIcon(protectedWallet(envelope))) +
+      (sweeping?`<p class="subtle">From external ${ticker} address: <code>${escape(sweepState.key.address)}</code><br>Into your wallet, Address #${sweepState.destinationIndex+1}. The key will not be saved.</p><p class="subtle">Full source balance: ${T.format(p.budget)} ${ticker}.</p>`:'')+
+      (sweeping?`<p class="notice" id="sweep-fee-estimate">Estimated network fee: <strong>${T.format(p.fee)} ${ticker}</strong>, deducted from the swept balance.</p>`:`<p class="notice">You are sending <strong>${T.format(p.amount)} ${ticker}</strong> to the recipient.</p>`)+`<div class="details send-review"><div class="detail-row"><span>Network</span><strong>${E.NETWORKS[p.coin].name} mainnet</strong></div><div class="detail-row"><span>Recipient</span><code>${escape(p.destination)}</code></div><div class="detail-row"><span>${sweeping?'Your wallet receives':'Recipient receives'}</span><strong>${T.format(p.amount)} ${ticker}</strong></div><div class="detail-row"><span>${sweeping?'Estimated network fee (included)':'Network fee (included)'}</span><strong>${T.format(p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Total deducted</span><strong>${T.format(p.amount+p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Change returned</span><strong>${T.format(p.change)} ${ticker}</strong></div>${p.change ? `<div class="detail-row"><span>Change address</span><code>${escape(p.changeAddress)}</code></div>` : ''}</div>
+      <p class="subtle">${sweeping?'All source funds, minus the fee, go to your reviewed wallet address.':'Change returns to your first receiving address. This reuses an address.'} The review expires after 90 seconds.</p>
+      <form id="broadcast-form" class="form-panel">${protectedWallet(envelope) ? '<label for="send-password">Wallet password</label><input id="send-password" type="password" required autocomplete="current-password">' : '<p class="notice">Password lock is off for this wallet.</p>'}<label class="check"><input id="send-ack" type="checkbox" required><span>${sweeping?'I checked the estimated fee and receiving address. Sweep into my wallet.':'I checked the address, network, amount and fee. Send this real test transaction.'}</span></label>${sweeping?'<p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>':''}${button('broadcast-send',sweeping?'Confirm sweep':'Confirm and send','primary wide')}<a class="text-button coin-empty-link" href="#wallet">Cancel</a></form>`;
     $('broadcast-send').type = 'submit';
     $('broadcast-form').onsubmit = async event => {
       event.preventDefault(); if (busy || !sendDraft || !$('send-ack').checked) return;
       const token = generation, source = envelope, draft = sendDraft;
       const password = $('send-password')?.value || '';
       busy = true; clearError(); $('broadcast-send').disabled = true; $('broadcast-send').textContent = 'Checking and signing locally…';
+      if(sweeping)sweepProgress('Rechecking the source balance and fee. Please do not close this page or submit again…');
       let attempted = null;
       const attemptKey = 'corevault.send-attempts.' + WalletLibrary.id(source);
       try {
@@ -304,7 +391,26 @@
         await N.checkInputs(p.coin,p.inputs);
         if (token !== generation || source !== envelope || !liveEnabled()) return;
         if (Date.now()-p.createdAt > 90000) throw Error('Review expired. Build a fresh transaction.');
-        const signed = T.sign(p,candidate);
+        let signed;
+        if(draft.sweep){
+          const state=sweepState;if(!state?.key)throw Error('Sweep key cleared. Scan or enter it again.');
+          const current=await N.sweepSource(p.coin,state.key.address,{compressed:state.key.compressed});
+          if(token!==generation||source!==envelope||sweepState!==state||!state.key)return;
+          const identity=items=>items.map(u=>u.txid+':'+u.pos+':'+u.value).sort().join('|');
+          if(identity(current.utxos)!==identity(p.inputs))throw Error('Source outputs changed. Build a fresh sweep review.');
+          if(T.sweepFee(p.estimatedBytes,current.snapshot.feeRate).requiredFee>p.fee)throw Error('The required network fee increased beyond the reviewed cushion. Build a fresh sweep review.');
+          if(!receiveBooks[p.coin].view().pinned){
+            sweepProgress('Verifying your receiving address. Please keep this page open…');
+            await refreshLive(p.coin);
+            if(token!==generation||source!==envelope||sweepState!==state||!state.key)return;
+            if(!fresh(p.coin)||receiveBooks[p.coin].view().cursor!==state.destinationIndex)throw Error('Receiving address changed. Build a fresh sweep review.');
+          }
+          if(Date.now()-p.createdAt>90000)throw Error('Sweep review expired.');
+          sweepProgress('Signing the sweep on this device. Please keep this page open…');
+          await new Promise(resolve=>setTimeout(resolve,0));
+          if(token!==generation||source!==envelope||sweepState!==state||!state.key)return;
+          signed=T.signSweep(p,state.key,candidate,state.destinationIndex);
+        }else signed=T.sign(p,candidate);
         // Record before the broadcast. An uncertain response must never auto-retry.
         const outpoints = p.inputs.map(i=>i.txid+':'+i.pos);
         await withWalletLock(() => {
@@ -317,6 +423,7 @@
         });
         if (token !== generation || source !== envelope || !liveEnabled()) throw Error('Wallet changed before submission.');
         $('broadcast-send').textContent = 'Submitting signed transaction…';
+        if(sweeping)sweepProgress('Submitting the sweep. Please do not close this page or submit again…');
         const txid = await N.client(p.coin).call('blockchain.transaction.broadcast',[signed.raw]);
         if (txid !== signed.txid) throw Error('Unexpected broadcast response. Check the recorded transaction ID before retrying.');
         attempted.status='submitted';
@@ -325,8 +432,9 @@
           localStorage.setItem(attemptKey,JSON.stringify(records.map(a=>a.txid===txid?attempted:a)));
         });
         if (token === generation && source === envelope) {
-          sendDraft = null; if(snapshots[p.coin])snapshots[p.coin].cached=true;
-          $('main').innerHTML = title('Transaction submitted', 'Accepted by the node; confirmation is still pending.') + `<code class="address">${txid}</code><a href="#activity" class="text-button">Check activity →</a>`;
+          clearSweep();sendDraft = null; if(snapshots[p.coin])snapshots[p.coin].cached=true;
+          if(sweeping)watchSweep(p.coin,txid,p.destination);
+          else $('main').innerHTML = title('Transaction submitted', 'Accepted by the node; confirmation is still pending.') + `<code class="address">${txid}</code><a href="#activity" class="text-button">Check activity →</a>`;
         }
       } catch (e) {
         if (attempted && e instanceof N.RPCError) {
@@ -335,8 +443,10 @@
         }
         if (token === generation) error(attempted && !(e instanceof N.RPCError) ? `Submission status is uncertain. Do not send again. Check transaction ${attempted.txid}.` : e.message);
       } finally {
+        if(draft.sweep&&attempted)clearSweep();
+        if($('sweep-progress'))$('sweep-progress').hidden=true;
         busy = false;
-        if ($('broadcast-send')) { $('broadcast-send').disabled = Boolean(attempted); $('broadcast-send').textContent = attempted ? 'Check transaction status before retrying' : 'Confirm and send'; }
+        if ($('broadcast-send')) { $('broadcast-send').disabled = Boolean(attempted); $('broadcast-send').textContent = attempted ? 'Check transaction status before retrying' : sweeping?'Confirm sweep':'Confirm and send'; }
       }
     };
   }
@@ -345,7 +455,7 @@
   const button = (id, text, kind = '', glyph = '') => `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
   const recoveryNotice = '<div class="notice">Your recovery phrase controls your funds. Keep a backup somewhere safe and never share it.</div>';
   function bindCoins() {
-    document.querySelectorAll('[data-coin]').forEach(el => el.addEventListener('click', () => { receiveCoin = el.dataset.coin; render(); }));
+    document.querySelectorAll('[data-coin]').forEach(el => el.addEventListener('click', () => { receiveCoin = el.dataset.coin;const selector=document.querySelector('.wallet-coin-switch');if(selector)selector.open=false;render(); }));
   }
   function activityRows(coinFilter = null) {
     if (mode !== 'demo' && liveEnabled()) {
@@ -373,6 +483,7 @@
     const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),priceFresh()?pepPrice.value:null,priceFresh()?pepPrice.usdt:null);
     const worth=valuation.value===null?'*':valuation.value>0&&valuation.value<0.01?'<0.01':new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}).format(valuation.value);
     const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${valuation.value!==null?'≈ ':''}${escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section><a class="text-button" href="#coins">Add coins +</a></div>`;
+    const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="primary overview-rescan" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const usd=value=>value>0&&value<0.01?'<$0.01':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value);
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
@@ -382,7 +493,13 @@
       const status=s?`${!fresh(coin)?'Last known · ':''}Updated ${escape(new Date(s.at).toLocaleString())}${s.unconfirmed?` · Pending ${T.format(s.unconfirmed)} ${n.ticker}`:''}${networkErrors[coin]?' · Unable to refresh':''}`:n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':'Checking balance…';
       return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${n.comingSoon?n.name+' coming soon':'Receive '+n.name}" ${n.comingSoon?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${total!==null?T.format(total):'*'} <small>${n.ticker}</small></strong><small>${n.comingSoon?'*':value}</small></span></button>`;
     }).join('')}<p class="subtle holdings-note">* Price not available</p></section>`;
-    $('main').innerHTML = heading + holdings + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : '');
+    const full=Object.keys(E.NETWORKS).filter(c=>receiveBooks?.[c]?.view().exhausted);
+    $('main').innerHTML = heading + full.map(c=>`<p class="notice">${E.NETWORKS[c].ticker} wallet addresses are full (200 used). Existing addresses still receive funds. Create another wallet for new addresses.</p>`).join('') + holdings + rescanControl + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : '');
+    if($('rescan'))$('rescan').onclick=async()=>{
+      if(rescanning)return;rescanning=true;const epoch=networkEpoch;clearError();overview();
+      try{for(const coin of Object.keys(E.NETWORKS)){if(epoch!==networkEpoch)return;await refreshLive(coin,true);}if(epoch===networkEpoch)toast(Object.keys(networkErrors).length?'Rescan incomplete. Check your connection and try again.':'Rescan complete: checked 200 addresses per asset.');}
+      finally{if(epoch===networkEpoch){rescanning=false;if(['','#wallet'].includes(location.hash))render();}}
+    };
     document.querySelectorAll('[data-overview-coin]').forEach(el=>el.onclick=()=>{
       if(!E.NETWORKS[el.dataset.overviewCoin])return;
       receiveCoin=el.dataset.overviewCoin;go('receive');
@@ -421,13 +538,14 @@
     results();
   }
   function receive() {
+    const pickerOpen=Boolean($('receive-coin')?.parentElement.open);
     const visible = visibleCoins().filter(coin => E.NETWORKS[coin]);
     if (!visible.length) {
       $('main').innerHTML = '<div class="page-head"><h1>Receive</h1></div><a class="text-button" href="#coins">Add coins →</a>'; return;
     }
     if (!visible.includes(receiveCoin)) receiveCoin = null;
     const coin = receiveCoin, n = COINS[coin];
-    const selector = `<details class="wallet-coin-switch"><summary id="receive-coin" class="coin-picker" aria-label="Choose receiving coin">${coin ? coinMark(coin) : ''}<span>${n ? n.name : 'Choose an asset'}<small>${n ? n.ticker : 'Select the coin you want to receive'}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="wallet-coin-options">${visible.map(coin => `<button data-coin="${coin}">${coinMark(coin)}<span>${COINS[coin].name}<small>${COINS[coin].ticker}</small></span></button>`).join('')}</div></details>`;
+    const selector = `<details class="wallet-coin-switch" ${pickerOpen?'open':''}><summary id="receive-coin" class="coin-picker" aria-label="Choose receiving coin">${coin ? coinMark(coin) : ''}<span>${n ? n.name : 'Choose an asset'}<small>${n ? n.ticker : 'Select the coin you want to receive'}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="wallet-coin-options">${visible.map(coin => `<button data-coin="${coin}">${coinMark(coin)}<span>${COINS[coin].name}<small>${COINS[coin].ticker}</small></span></button>`).join('')}</div></details>`;
     if (!coin) {
       $('main').innerHTML = '<div class="page-head"><h1>Receive</h1></div>' + selector;
       bindCoins(); return;
@@ -437,12 +555,13 @@
     const account = view && !waitingLive && !(view.exhausted && view.automatic) ? view.account : null;
     $('main').innerHTML = '<div class="page-head"><h1>Receive</h1></div>' + selector +
       `<section class="receive-card"><div class="address-navigation">${button('previous-address','← Previous','text-button')}<span id="address-number">Address #${(view?.index || 0) + 1}</span>${button('next-address','Next →','text-button')}</div>
-      <div id="qr" class="qr">${account ? '' : `<div class="qr-empty">${icon('lock')}<span>${waitingLive ? escape(networkErrors[coin] || 'Checking receiving-address history…') : view?.exhausted ? 'More addresses must be discovered before receiving.' : mode === 'locked' ? 'Open your wallet to see its address' : 'Create or restore a wallet first'}</span></div>`}</div>
+      <div id="qr" class="qr">${account ? '' : `<div class="qr-empty">${icon('lock')}<span>${waitingLive ? escape(networkErrors[coin] || 'Checking receiving-address history…') : view?.exhausted ? 'Wallet addresses are full (200 used). Existing addresses still work.' : mode === 'locked' ? 'Open your wallet to see its address' : 'Create or restore a wallet first'}</span></div>`}</div>
       ${account ? `<code class="address" id="address">${escape(account.address)}</code>${button('copy-address','Copy address','wide','copy')}` : `<h2>No payment address yet</h2>${view?.exhausted || waitingLive ? '' : button('receive-setup',mode === 'locked' ? 'Open wallet' : 'Create or restore','primary')}`}
       </section><label class="check reuse-check"><input id="reuse-first" type="checkbox" ${view?.pinned ? 'checked' : ''} ${!book ? 'disabled' : ''}><span><strong>Keep using the first address</strong><small>Use the same receiving address until you uncheck this.</small></span></label>
       ${view?.browsing ? button('latest-address','Return to current address','text-button') : ''}
-      <p class="subtle">${view?.pinned ? 'Receiving is locked to Address #1 until you uncheck this.' : 'A new address becomes available after a payment arrives. Previous addresses still work.'}</p>`;
+      <p class="subtle">${view?.pinned ? 'Receiving is locked to Address #1 until you uncheck this.' : 'A new address becomes available after a payment arrives. Previous addresses still work.'}</p>${view?.exhausted?'<p class="notice">Wallet addresses are full (200 used). You can keep receiving at existing addresses, or create another wallet.</p>':''}${mode==='unlocked'?button('sweep-open','Sweep private key','wide'):''}`;
     bindCoins();
+    if($('sweep-open'))$('sweep-open').onclick=()=>go('sweep');
     $('previous-address').disabled = !view?.canPrevious;
     $('next-address').disabled = !view?.canNext;
     function update(action) {
@@ -756,9 +875,10 @@
   }
   function render() {
     let route = location.hash.slice(1) || 'wallet';
-    if (!['wallet','wallets','live','send','reveal','export','coins','receive','activity','security','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
+    if (!['wallet','wallets','live','send','sweep','reveal','export','coins','receive','activity','security','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
+    if(route!=='sweep'){clearSweep();clearSweepReceipt();}
     if (route !== 'send') sendCoin = null;
-    if (route !== 'receive') receiveCoin = null;
+    if (!['receive','sweep'].includes(route)) receiveCoin = null;
     if (pending && route !== 'backup') pending = null;
     document.documentElement.dataset.walletState = mode;
     if(route!=='icons')applyBrand(savedBrand());
@@ -773,11 +893,11 @@
     $('lock').hidden = !protectedWallet(envelope);
     $('breadcrumb').textContent = ({wallet:'Overview',coins:'Coins',receive:'Receive',activity:'Activity',security:'Security',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
     document.querySelectorAll('[data-nav]').forEach(el => {
-      const active = el.dataset.nav === (['coins','wallets'].includes(route) ? 'wallet' : ['setup','backup','unlock','remove','reveal','export','reset-tests','icons'].includes(route) ? 'security' : route);
+      const active = el.dataset.nav === (route==='sweep'?'receive':['coins','wallets'].includes(route) ? 'wallet' : ['setup','backup','unlock','remove','reveal','export','reset-tests','icons'].includes(route) ? 'security' : route);
       el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current');
     });
     if (mode === 'storage-error' && !['remove','reset-tests'].includes(route)) storageError();
-    else ({wallet:overview,wallets,live:()=>go('wallet'),send,reveal,export:exportConfirm,coins,receive,activity,security,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
+    else ({wallet:overview,wallets,live:()=>go('wallet'),send,sweep,reveal,export:exportConfirm,coins,receive,activity,security,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
     document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
     if (['wallet','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {
       const targets = route !== 'receive' ? Object.keys(E.NETWORKS) : [receiveCoin];
@@ -803,7 +923,7 @@
     sendCoin = null;
     // Only an explicit Overview coin click may preselect a deposit asset.
     // Other routes clear receiveCoin on render; the bottom tab starts blank.
-    if(location.hash!=='#receive')receiveCoin=null;
+    if(!['#receive','#sweep'].includes(location.hash))receiveCoin=null;
     generation++; stagedFile = null; busy = false; clearError(); render(); window.scrollTo(0,0);
   });
   function resumeUnprotected() {
@@ -836,9 +956,17 @@
   for (const event of ['pointerdown','keydown']) document.addEventListener(event, resetIdle, {passive:true});
   render();
   resetIdle();
+  const notificationTimers={};
+  N.onChange(coin=>{
+    if(notificationTimers[coin])return;
+    const epoch=networkEpoch;
+    notificationTimers[coin]=setTimeout(()=>{delete notificationTimers[coin];if(epoch===networkEpoch&&!document.hidden&&mode==='unlocked')void refreshLive(coin);},250);
+  });
   setInterval(() => {
-    if (!document.hidden && mode === 'unlocked' && liveEnabled() && ['', '#wallet', '#receive', '#activity', '#send'].includes(location.hash)) {
-      const targets = location.hash !== '#receive' ? Object.keys(E.NETWORKS) : receiveCoin ? [receiveCoin] : [];
+    if (!document.hidden && mode === 'unlocked' && liveEnabled()) {
+      const active = ['', '#wallet', '#receive', '#activity', '#send'].includes(location.hash);
+      const routine = !active ? [] : location.hash !== '#receive' ? Object.keys(E.NETWORKS) : receiveCoin ? [receiveCoin] : [];
+      const targets = new Set([...initialDiscovery, ...routine]);
       for (const coin of targets) void refreshLive(coin);
       if(['','#wallet'].includes(location.hash))void refreshPrice();
     }

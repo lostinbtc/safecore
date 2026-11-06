@@ -42,12 +42,19 @@ configuration, CSP and Android external-navigation allowlists consistent.
 
 ## Important limits
 
-- Receive discovery is bounded to 20 addresses per supported coin.
+- Wallet load/unlock and Overview's Rescan check all 200 receiving addresses per
+  supported coin. Routine monitoring then uses a 20-address minimum window with
+  lookahead growth in tens. Failed initial scans retry; cached balances never
+  count as completion. The discovery cap is index 199.
+- Sweep private keys stay in memory; only public addresses and signed transactions
+  reach the network. PEP/WHT share WIF version 158, so asset selection is explicit.
 - New validated restores report immediately; subsequent balance changes have a
   4-second stabilization window, with 4-second foreground polling. A cached value
   is not proof of current funds.
-- PEP and WHT use a fixed 0.01 coin fee under conservative transaction-size/input
-  limits, not a dynamic mempool estimator. See the wallet guide for exact gates.
+- Ordinary PEP/WHT sends use a fixed 0.01 coin fee under conservative size/input
+  limits. Sweeps instead include all verified source outputs with a size-based
+  fee and 25% cushion. A full sweep that cannot fit below the standard 100 kB
+  boundary is refused, never silently truncated. See the wallet guide for gates.
 - WHT has no price source: its unknown valuation is shown as `*`, not zero.
 - Whippet AuxPoW parsing has synthetic coverage; real post-activation fixtures
   must be validated before claiming future-consensus compatibility.

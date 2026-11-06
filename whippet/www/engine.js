@@ -6,8 +6,8 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const NETWORKS = Object.freeze({
-    pep: Object.freeze({ name: 'Pepecoin', ticker: 'PEP', prefix: 56, path: "m/44'/3434'/0'/0/{index}" }),
-    wht: Object.freeze({ name: 'Whippet', ticker: 'WHT', prefix: 73, path: "m/0'/3'/{index}'" }),
+    pep: Object.freeze({ name: 'Pepecoin', ticker: 'PEP', prefix: 56, wif: 158, path: "m/44'/3434'/0'/0/{index}" }),
+    wht: Object.freeze({ name: 'Whippet', ticker: 'WHT', prefix: 73, wif: 158, path: "m/0'/3'/{index}'" }),
   });
   const ITERATIONS = 600000;
   const FORMAT = 'pepecoin-whippet-encrypted-v1';
@@ -50,7 +50,7 @@
   }
   const hex = bytes => Array.from(bytes, n => n.toString(16).padStart(2, '0')).join('');
   function receivePool(ethers, payload, count = 20) {
-    if (!Number.isSafeInteger(count) || count < 1 || count > 100) throw new Error('Invalid receive pool size.');
+    if (!Number.isSafeInteger(count) || count < 1 || count > 200) throw new Error('Invalid receive pool size.');
     const valid = validateRecipe(ethers, payload);
     const master = ethers.utils.HDNode.fromMnemonic(valid.mnemonic, valid.passphrase);
     return Object.fromEntries(Object.entries(NETWORKS).map(([coin, network]) => {

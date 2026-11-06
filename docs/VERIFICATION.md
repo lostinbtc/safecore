@@ -1,5 +1,46 @@
 # Verification
 
+## 0.1.0-test.13 discovery and sweeping
+
+The test.13 build includes discovery, rescan and private-key sweeping changes.
+Twelve core suites and eighteen isolated
+browser suites pass, plus seven release-tool tests. Additional sweep UI cases
+cover expiry and app backgrounding. Automated tests do not broadcast mainnet
+transactions. Separately, a user-operated six-input PEP sweep was observed to
+receive its first confirmation with the source balance reduced to zero and the
+reviewed fee preserved. No private key was accessed by the diagnostic tools.
+
+Discovery fixtures cover a late deposit to address #5, lookahead growth in tens,
+the 200-address boundary, old-cache migration, full Rescan, notification-driven
+updates outside the current window, reconnect, periodic probing and failed scans.
+Initial-discovery UI fixtures check full 200-address scans for both coins on
+load/unlock, cached startup, non-overview routes, failed-scan retries, wallet
+switching and re-unlock. Routine polling does not repeat the full scan; Rescan does.
+Fetched history must match its announced status before it can become reusable.
+Private-key fixtures cover both coins, compressed/uncompressed WIF, and independent
+Bitcore verification of every generated sweep signature, including 121-input
+compressed/uncompressed sweeps and the 253-input CompactSize boundary. Fees
+are proportional to bytes with a single 25% cushion, not whole-kilobyte rounded.
+Fixtures check fractional-base-unit rounding, 999/1000/1001-byte continuity,
+both network tickers, higher live rates, full-source conservation, one-output/no-change behavior,
+size-limit refusal and unchanged ordinary-send limits are checked. Network
+fixtures cover 121 outputs, long source history, deduplicated/bounded raw fetches,
+and rejection of pending/immature outputs and malformed previous transactions. UI tests cover
+QR decoding from generated frames, first-address/next-empty destinations,
+password confirmation, cancellation, source changes, uncertain broadcasts, full
+address pools, large sweeps, fee rises inside/beyond the cushion, and absence of
+WIF data in storage. Receive picker state survives
+background refreshes.
+Sweep receipt fixtures cover pending-to-one-confirmation transitions on both
+coins, offline/indexing retries without rebroadcast, staged submission progress,
+duplicate-click prevention and navigation during an in-flight confirmation check.
+Overview Rescan placement is checked at narrow mobile and desktop widths.
+
+Android build/lint pass with zero errors and six existing warnings. Debugging is
+off and the exact bundled-asset audit passes. This is not a physical-camera test
+or an independent security audit. Test sweeps use public disposable keys only;
+the single-standard-transaction sweep boundary and 200-address discovery cap are explicit.
+
 ## 0.1.0-test.12 polling optimization
 
 Includes Chromatic's reviewed PR #1, merged into main at `8356cfe`. Network

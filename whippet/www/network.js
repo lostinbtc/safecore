@@ -5,9 +5,11 @@
     wht:{url:'wss://electrum.pepecoinservice.org:50005/whippet',genesis:'863714e1c1a15526a0081a35097c56e28dbd43ef97f76fec0ccd5a7510326292'}
   };
   class RPCError extends Error{}
+  const listeners=new Set();
+  const notify=coin=>{for(const listener of listeners)listener(coin);};
   class Client {
-    constructor(coin){if(!CONFIG[coin])throw Error('Unsupported live coin.');this.coin=coin;this.pending=new Map();this.id=0;this.socket=null;this.ready=null;}
-    close(){const socket=this.socket;this.socket=null;this.ready=null;if(socket)socket.close();for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('Connection closed.'));}this.pending.clear();}
+    constructor(coin){if(!CONFIG[coin])throw Error('Unsupported live coin.');this.coin=coin;this.pending=new Map();this.dirty=new Map();this.statuses=new Map();this.subscribed=new Set();this.id=0;this.socket=null;this.ready=null;}
+    close(){const socket=this.socket;this.socket=null;this.ready=null;this.statuses.clear();this.subscribed.clear();this.dirty.clear();if(socket)socket.close();for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('Connection closed.'));}this.pending.clear();}
     async connect(){
       if(this.ready)return this.ready;
       this.ready=(async()=>{
@@ -22,6 +24,7 @@
               if(typeof event.data!=='string'||event.data.length>2000000)throw Error('Invalid Electrum response.');
               for(const line of event.data.trim().split('\n')){
                 const messages=JSON.parse(line);for(const m of Array.isArray(messages)?messages:[messages]){
+                  if(m.method==='blockchain.scripthash.subscribe'&&Array.isArray(m.params)&&this.subscribed.has(m.params[0])&&validHash(m.params[0])&&validStatus(m.params[1])){this.statuses.set(m.params[0],{status:m.params[1],at:Date.now()});this.dirty.set(m.params[0],(this.dirty.get(m.params[0])||0)+1);notify(this.coin);continue;}
                   const p=this.pending.get(m.id);if(!p)continue;this.pending.delete(m.id);clearTimeout(p.timer);
                   if(m.error)p.reject(new RPCError(typeof m.error.message==='string'?m.error.message.slice(0,250):'Electrum rejected the request.'));else p.resolve(m.result);
                 }
@@ -37,6 +40,7 @@
     }
     request(method,params){
       if(!this.socket||this.socket.readyState!==WebSocket.OPEN)return Promise.reject(Error('Electrum is disconnected.'));
+      if(method==='blockchain.scripthash.subscribe')this.subscribed.add(params[0]);
       const id=++this.id;
       return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('Electrum response timed out.'));},20000);this.pending.set(id,{resolve,reject,timer});this.socket.send(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');});
     }
@@ -49,6 +53,8 @@
   // Row object -> the status it was fetched under. Keyed by row identity, so a
   // stale row can never be paired with a newer status (e.g. an older snapshot).
   const statusOf=new WeakMap();
+  const emptyRow=account=>({account,confirmed:0n,unconfirmed:0n,history:[],utxos:[],checked:false});
+  async function batches(items,fn){for(let i=0;i<items.length;i+=10)await Promise.all(items.slice(i,i+10).map(fn));}
   function safeInteger(n){if(!Number.isSafeInteger(n))throw Error('Balance exceeds this test client’s safe numeric range.');return BigInt(n);}
   // Cache is public display/discovery metadata, never authority to spend.
   function encode(snapshot){
@@ -57,27 +63,28 @@
   function decode(raw,coin,accounts){
     try{
       const s=JSON.parse(raw),integer=v=>{if(typeof v!=='string'||! /^-?\d{1,17}$/.test(v))throw Error('Invalid amount');return BigInt(v);};
-      if(s.version!==1||s.coin!==coin||!Number.isSafeInteger(s.at)||s.at<0||s.at>Date.now()+60000||!Number.isSafeInteger(s.tip)||s.tip<0||s.rows.length!==accounts.length||!Array.isArray(s.everUsed))return null;
+      if(s.version!==1||s.coin!==coin||!Number.isSafeInteger(s.at)||s.at<0||s.at>Date.now()+60000||!Number.isSafeInteger(s.tip)||s.tip<0||!Array.isArray(s.rows)||!s.rows.length||s.rows.length>accounts.length||!Array.isArray(s.everUsed))return null;
       if(s.everUsed.some(i=>!Number.isInteger(i)||i<0||i>=accounts.length))return null;
       s.rows=s.rows.map((r,i)=>{
         if(r.account.address!==accounts[i].address||r.account.index!==i||!Array.isArray(r.history)||r.history.length>1000||r.history.some(h=>!validHash(h.tx_hash)||!Number.isInteger(h.height)||h.height< -1))throw Error('Invalid cached address');
         const confirmed=integer(r.confirmed),unconfirmed=integer(r.unconfirmed);if(confirmed<0n)throw Error('Invalid balance');
-        return {account:accounts[i],confirmed,unconfirmed,history:r.history,utxos:[]};
+        return {account:accounts[i],confirmed,unconfirmed,history:r.history,utxos:[],checked:r.checked!==false};
       });
+      while(s.rows.length<accounts.length)s.rows.push(emptyRow(accounts[s.rows.length]));
       s.confirmed=s.rows.reduce((n,r)=>n+r.confirmed,0n);s.unconfirmed=s.rows.reduce((n,r)=>n+r.unconfirmed,0n);
       s.feeRate=1000000n;s.cached=true;
       s.everUsed=[...new Set([...s.everUsed,...s.rows.filter(r=>r.history.length||r.confirmed||r.unconfirmed).map(r=>r.account.index)])];
       return s;
     }catch(_){return null;}
   }
-  async function scan(coin,accounts,previous=null){
+  async function scan(coin,accounts,previous=null,options={}){
     const c=client(coin),T=root.WalletTransactions;
-    if(!Array.isArray(accounts)||accounts.length!==20)throw Error('Expected the 20-address development receive pool.');
+    if(!Array.isArray(accounts)||!accounts.length||accounts.length>200||accounts.some((a,i)=>a.index!==i))throw Error('Expected an ordered address pool of up to 200 addresses.');
     const tip=await c.call('blockchain.headers.subscribe');if(!Number.isSafeInteger(tip.height)||tip.height<0)throw Error('Invalid chain height.');
     const query=async account=>{
       const sh=T.scriptHash(coin,account.address);
       const [balance,history,utxos]=await Promise.all([c.call('blockchain.scripthash.get_balance',[sh]),c.call('blockchain.scripthash.get_history',[sh]),c.call('blockchain.scripthash.listunspent',[sh])]);
-      if(!Array.isArray(history)||history.length>1000||history.some(h=>!validHash(h.tx_hash)||!Number.isInteger(h.height)||h.height< -1)||!Array.isArray(utxos)||utxos.length>100)throw Error('Unexpected address history size or format.');
+      if(!Array.isArray(history)||(!options.sweep&&history.length>1000)||history.some(h=>!validHash(h.tx_hash)||!Number.isInteger(h.height)||h.height< -1)||!Array.isArray(utxos)||(!options.sweep&&utxos.length>100))throw Error('Unexpected address history size or format.');
       const confirmed=safeInteger(balance.confirmed),unconfirmed=safeInteger(balance.unconfirmed);if(confirmed<0n)throw Error('Invalid confirmed balance.');
       // Confirmed DB and mempool can briefly overlap at block arrival. Reject
       // inconsistent snapshots; never cache or enable sending from double counts.
@@ -91,38 +98,55 @@
     const used=new Set(reusable?previous.everUsed||[]:[]);
     if(reusable)for(const r of previous.rows)if(r.history.length||r.confirmed||r.unconfirmed||r.utxos.length)used.add(r.account.index);
     let frontier=0;while(used.has(frontier))frontier++;
-    const wanted=reusable?[...new Set([...used,...(frontier<accounts.length?[frontier]:[])])]:accounts.map(a=>a.index);
-    const rows=reusable?previous.rows.slice():Array(accounts.length);
-    const queried=new Set(),checked=new Set();
-    // Subscribing is idempotent and re-sent every scan (no reliance on pushes).
-    // A live row is reused only if its fetched status still matches.
+    // Keep a 10–20 address lookahead, expanding in tens, never beyond 200.
+    const end=()=>Math.min(accounts.length,Math.max(20,Math.ceil((Math.max(-1,...used)+1)/10)*10+10));
+    let windowEnd=end();
+    const probeDue=reusable&&Date.now()-(previous.probedAt||previous.at)>=30000;
+    let probeCursor=reusable&&Number.isInteger(previous.probeCursor)?previous.probeCursor:20;
+    if(probeCursor>=accounts.length)probeCursor=20;
+    const probe=probeDue?accounts.slice(probeCursor,probeCursor+10).map(a=>a.index):[];
+    const changed=accounts.filter(a=>c.dirty.has(T.scriptHash(coin,a.address))).map(a=>a.index);
+    const wanted=options.full?accounts.map(a=>a.index):[...new Set([...accounts.slice(0,windowEnd).map(a=>a.index),...used,...probe,...changed])];
+    const rows=reusable?previous.rows.slice():accounts.map(emptyRow);
+    const queried=new Set(),checked=new Set(),revisions=new Map();
+    // Push notifications update live statuses. Reconcile at least every 30s and
+    // after reconnect/cache restore; explicit Rescan always requests fresh status.
     async function refresh(index){
-      const account=accounts[index],status=await c.call('blockchain.scripthash.subscribe',[T.scriptHash(coin,account.address)]);
+      const account=accounts[index],sh=T.scriptHash(coin,account.address),revision=c.dirty.get(sh),known=c.statuses.get(sh);
+      const status=known&&reusable&&!previous.cached&&!options.full&&!options.verify&&Date.now()-known.at<30000?known.status:await c.call('blockchain.scripthash.subscribe',[sh]);
       if(!validStatus(status))throw Error('Unexpected address status format.');
+      // Do not overwrite a newer notification that arrived during this request.
+      if(c.dirty.get(sh)===revision&&(!known||known.status!==status||options.full||Date.now()-known.at>=30000))c.statuses.set(sh,{status,at:Date.now()});
       const prior=reusable&&!previous.cached?previous.rows[index]:null;
       let row;
-      if(prior&&statusOf.get(prior)===status)row=prior;
-      else{row=await query(account);statusOf.set(row,status);queried.add(index);}
+      if(prior&&!options.full&&statusOf.get(prior)===status)row=prior;
+      else{row=await query(account);if(T.historyStatus(row.history)!==status)throw Error('Address history changed during refresh. Please retry.');row.checked=true;statusOf.set(row,status);queried.add(index);}
       rows[index]=row;checked.add(index);
+      revisions.set(sh,revision);
       if(row.history.length||row.confirmed||row.unconfirmed||row.utxos.length)used.add(index);
     }
-    await Promise.all(wanted.map(refresh));
+    await batches(wanted,refresh);
+    while(end()>windowEnd){const next=end();await batches(accounts.slice(windowEnd,next).filter(a=>!checked.has(a.index)).map(a=>a.index),refresh);windowEnd=next;}
     // A deposit can unlock another address during this scan. Check it now,
     // rather than displaying an address whose history has not been refreshed.
     frontier=0;while(used.has(frontier))frontier++;
     while(frontier<accounts.length&&!checked.has(frontier)){await refresh(frontier);if(!used.has(frontier))break;while(used.has(frontier))frontier++;}
     const relay=await c.call('blockchain.relayfee');
     if(!Number.isFinite(relay)||relay<0)throw Error('Could not verify the network relay fee.');
-    // Both supported coins use the flat fee; retain the live relay floor.
+    // Ordinary sends use a flat fee; sweeps scale this per-kB floor by size.
     const rate=Math.max(0.01,relay);
     if(!Number.isFinite(rate)||rate>0.1)throw Error('Fee estimate exceeds development safety limit.');
-    return {coin,tip:tip.height,rows,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now()};
+    // A failed scan must not consume notifications for rows it never published.
+    for(const [sh,revision] of revisions)if(c.dirty.get(sh)===revision)c.dirty.delete(sh);
+    return {coin,tip:tip.height,rows,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now(),probedAt:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:probeDue?probeCursor+10:probeCursor};
   }
-  async function spendable(snapshot){
+  async function spendable(snapshot,{sweep=false,compressed=true}={}){
     const c=client(snapshot.coin),T=root.WalletTransactions;
     const candidates=snapshot.rows.flatMap(r=>r.utxos).filter(u=>u.height>0);
-    if(candidates.length>40)throw Error('Too many outputs for this small-value development test.');
-    const txids=[...new Set(candidates.map(u=>u.txid))];const fetched=await Promise.all(txids.map(txid=>c.call('blockchain.transaction.get',[txid,false])));const raws=new Map(txids.map((txid,i)=>[txid,fetched[i]]));
+    if(sweep){if(candidates.length)T.sweepSize(candidates.length,compressed);}
+    else if(candidates.length>40)throw Error('Too many outputs for this small-value development test.');
+    const txids=[...new Set(candidates.map(u=>u.txid))],raws=new Map();
+    await batches(txids,async txid=>raws.set(txid,await c.call('blockchain.transaction.get',[txid,false])));
     return candidates.flatMap(u=>{const raw=raws.get(u.txid),parsed=T.parse(raw);if(parsed.coinbase&&snapshot.tip-u.height+1<240)return [];return [T.verifyUTXO(snapshot.coin,{...u,raw},snapshot.tip)];});
   }
   async function checkInputs(coin,inputs){
@@ -132,5 +156,24 @@
       for(const i of inputs.filter(i=>i.address===address))if(!remaining.some(u=>u.tx_hash===i.txid&&u.tx_pos===i.pos&&safeInteger(u.value)===i.value&&u.height>0))throw Error('An input changed or was spent. Build a fresh review.');
     }
   }
-  root.WalletNetwork={CONFIG,RPCError,client,scan,encode,decode,spendable,checkInputs,close:()=>{for(const c of Object.values(clients))c.close();}};
+  // Public, read-only confirmation checks. Never resubmit a transaction here.
+  async function confirmation(coin,txid,address){
+    if(!validHash(txid))throw Error('Invalid transaction ID.');
+    const sh=root.WalletTransactions.scriptHash(coin,address),c=client(coin);
+    const [history,tip]=await Promise.all([c.call('blockchain.scripthash.get_history',[sh]),c.call('blockchain.headers.subscribe')]);
+    if(!Number.isSafeInteger(tip?.height)||tip.height<0||!Array.isArray(history)||history.some(h=>!validHash(h.tx_hash)||!Number.isSafeInteger(h.height)||h.height< -1))throw Error('Could not verify transaction confirmation.');
+    const matches=history.filter(h=>h.tx_hash===txid);
+    if(matches.length>1||matches[0]?.height>tip.height)throw Error('Inconsistent transaction confirmation.');
+    const height=matches[0]?.height;
+    return {seen:matches.length===1,confirmations:height>0?tip.height-height+1:0};
+  }
+  // Sweeps query one external public address; private keys never cross this boundary.
+  async function sweepSource(coin,address,{compressed=true}={}){
+    const snapshot=await scan(coin,[{index:0,address}],null,{full:true,sweep:true});
+    if(snapshot.rows[0].history.some(h=>h.height<=0)||snapshot.rows[0].utxos.some(u=>u.height<=0)||snapshot.unconfirmed!==0n)throw Error('Wait for all source transactions to confirm before sweeping.');
+    const utxos=await spendable(snapshot,{sweep:true,compressed});
+    if(utxos.length!==snapshot.rows[0].utxos.length)throw Error('Wait for mining rewards to mature before sweeping.');
+    return {snapshot,utxos};
+  }
+  root.WalletNetwork={CONFIG,RPCError,client,scan,encode,decode,spendable,checkInputs,sweepSource,confirmation,onChange:fn=>{listeners.add(fn);return ()=>listeners.delete(fn);},close:()=>{for(const c of Object.values(clients))c.close();}};
 })(typeof globalThis==='object'?globalThis:this);
