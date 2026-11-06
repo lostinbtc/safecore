@@ -95,6 +95,11 @@
       return {account,confirmed,unconfirmed,history,utxos:utxos.map(u=>{if(!validHash(u.tx_hash)||!Number.isSafeInteger(u.tx_pos)||u.tx_pos<0||!Number.isSafeInteger(u.height)||u.height<0)throw Error('Invalid unspent output.');const value=safeInteger(u.value);if(value<0n)throw Error('Invalid output amount.');return {txid:u.tx_hash,pos:u.tx_pos,height:u.height,value,address:account.address,index:account.index};})};
     };
     const reusable=previous?.coin===coin&&previous.rows?.length===accounts.length&&previous.rows.every((r,i)=>r.account.address===accounts[i].address);
+    const targeted=options.indices!==undefined;
+    if(targeted&&(!Array.isArray(options.indices)||!options.indices.length||options.indices.some(i=>!Number.isInteger(i)||i<0||i>=accounts.length)||options.full))throw Error('Invalid focused refresh indices.');
+    // Partial refreshes can retain only rows validated live in this session.
+    // A restored disk cache must complete discovery first.
+    if(targeted&&(!reusable||previous.rows.some(r=>r.checked===false||!statusOf.has(r))))throw Error('Complete live discovery before a focused refresh.');
     const used=new Set(reusable?previous.everUsed||[]:[]);
     if(reusable)for(const r of previous.rows)if(r.history.length||r.confirmed||r.unconfirmed||r.utxos.length)used.add(r.account.index);
     let frontier=0;while(used.has(frontier))frontier++;
@@ -106,31 +111,31 @@
     if(probeCursor>=accounts.length)probeCursor=20;
     const probe=probeDue?accounts.slice(probeCursor,probeCursor+10).map(a=>a.index):[];
     const changed=accounts.filter(a=>c.dirty.has(T.scriptHash(coin,a.address))).map(a=>a.index);
-    const wanted=options.full?accounts.map(a=>a.index):[...new Set([...accounts.slice(0,windowEnd).map(a=>a.index),...used,...probe,...changed])];
+    const wanted=targeted?[...new Set(options.indices)]:options.full?accounts.map(a=>a.index):[...new Set([...accounts.slice(0,windowEnd).map(a=>a.index),...used,...probe,...changed])];
     const rows=reusable?previous.rows.slice():accounts.map(emptyRow);
     const queried=new Set(),checked=new Set(),revisions=new Map();
     // Push notifications update live statuses. Reconcile at least every 30s and
     // after reconnect/cache restore; explicit Rescan always requests fresh status.
     async function refresh(index){
       const account=accounts[index],sh=T.scriptHash(coin,account.address),revision=c.dirty.get(sh),known=c.statuses.get(sh);
-      const status=known&&reusable&&!previous.cached&&!options.full&&!options.verify&&Date.now()-known.at<30000?known.status:await c.call('blockchain.scripthash.subscribe',[sh]);
+      const status=known&&reusable&&!previous.cached&&!options.full&&!options.verify&&!targeted&&Date.now()-known.at<30000?known.status:await c.call('blockchain.scripthash.subscribe',[sh]);
       if(!validStatus(status))throw Error('Unexpected address status format.');
       // Do not overwrite a newer notification that arrived during this request.
       if(c.dirty.get(sh)===revision&&(!known||known.status!==status||options.full||Date.now()-known.at>=30000))c.statuses.set(sh,{status,at:Date.now()});
       const prior=reusable&&!previous.cached?previous.rows[index]:null;
       let row;
-      if(prior&&!options.full&&statusOf.get(prior)===status)row=prior;
+      if(prior&&!options.full&&!targeted&&statusOf.get(prior)===status)row=prior;
       else{row=await query(account);if(T.historyStatus(row.history)!==status)throw Error('Address history changed during refresh. Please retry.');row.checked=true;statusOf.set(row,status);queried.add(index);}
       rows[index]=row;checked.add(index);
       revisions.set(sh,revision);
       if(row.history.length||row.confirmed||row.unconfirmed||row.utxos.length)used.add(index);
     }
     await batches(wanted,refresh);
-    while(end()>windowEnd){const next=end();await batches(accounts.slice(windowEnd,next).filter(a=>!checked.has(a.index)).map(a=>a.index),refresh);windowEnd=next;}
+    while(!targeted&&end()>windowEnd){const next=end();await batches(accounts.slice(windowEnd,next).filter(a=>!checked.has(a.index)).map(a=>a.index),refresh);windowEnd=next;}
     // A deposit can unlock another address during this scan. Check it now,
     // rather than displaying an address whose history has not been refreshed.
     frontier=0;while(used.has(frontier))frontier++;
-    while(frontier<accounts.length&&!checked.has(frontier)){await refresh(frontier);if(!used.has(frontier))break;while(used.has(frontier))frontier++;}
+    while(!targeted&&frontier<accounts.length&&!checked.has(frontier)){await refresh(frontier);if(!used.has(frontier))break;while(used.has(frontier))frontier++;}
     const relay=await c.call('blockchain.relayfee');
     if(!Number.isFinite(relay)||relay<0)throw Error('Could not verify the network relay fee.');
     // Ordinary sends use a flat fee; sweeps scale this per-kB floor by size.
@@ -138,7 +143,7 @@
     if(!Number.isFinite(rate)||rate>0.1)throw Error('Fee estimate exceeds development safety limit.');
     // A failed scan must not consume notifications for rows it never published.
     for(const [sh,revision] of revisions)if(c.dirty.get(sh)===revision)c.dirty.delete(sh);
-    return {coin,tip:tip.height,rows,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now(),probedAt:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:probeDue?probeCursor+10:probeCursor};
+    return {coin,tip:tip.height,rows,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now(),probedAt:targeted?previous.probedAt||previous.at:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:!targeted&&probeDue?probeCursor+10:probeCursor};
   }
   async function spendable(snapshot,{sweep=false,compressed=true}={}){
     const c=client(snapshot.coin),T=root.WalletTransactions;

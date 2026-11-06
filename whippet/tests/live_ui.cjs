@@ -94,6 +94,8 @@ const raw=ethers.utils.hexlify(T.serialize(funding)).slice(2),txid=T.parse(raw).
         assert.equal(calls.length,1);assert.match(calls[0].params[0],/^[0-9a-f]+$/);
         assert.equal(T.parse(calls[0].params[0]).outputs[0].value,scenario==='open'?499000000n:99000000n);
         assert.equal(await page.evaluate(()=>window.__checks),1);
+        const saved=await page.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('corevault.send-attempts.'))[1])[0]);
+        assert.deepEqual(saved.refreshIndices,[0]);assert.equal(saved.balanceRefreshed,false);
       }
       assert.deepEqual(errors,[]);await context.close();
     }

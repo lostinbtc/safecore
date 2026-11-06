@@ -1,5 +1,21 @@
 # Verification
 
+## 0.1.0-test.14 confirmed-send balance refresh
+
+Thirteen core suites, nineteen isolated browser suites, recovery compatibility
+and seven release-tool tests pass. Android build/lint pass with zero errors and
+six existing warnings. Exact bundled assets, signature, version and disabled
+debugging are verified; staged-source secret and publication checks pass.
+
+Focused-refresh fixtures cover both coins, input/change address selection,
+deduplication, retention of unrelated balances, forced fresh rereads and rejection
+of restored disk caches, invalid indices and inconsistent responses. Browser
+fixtures cover pending and offline checks, persisted tracking across reload,
+background cancellation, stale in-flight scan suppression and no rebroadcast.
+The ordinary-send fixture verifies that public refresh indices are recorded.
+Wallet vault format, derivation and signing identity remain unchanged;
+no private wallet data is part of these tests or the APK.
+
 ## 0.1.0-test.13 discovery and sweeping
 
 The test.13 build includes discovery, rescan and private-key sweeping changes.
