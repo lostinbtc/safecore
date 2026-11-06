@@ -278,6 +278,23 @@ outputs before signing. PEP and WHT addresses are not interchangeable.
 This build supports ordinary P2PKH destinations only, not P2SH, multisig,
 Whippet assets/covenants or Dogecoin sending.
 
+### After an ordinary send
+
+New ordinary sends record their transaction ID and affected wallet address indices
+(input addresses, change and any wallet-owned recipient). While unlocked and
+visible, the wallet checks confirmation every four seconds. After one confirmation,
+it refreshes only those addresses and retains other validated live rows. This
+focused refresh takes priority over an in-flight scan; older results cannot replace
+the new balance. The four-second fresh-matching-read balance guard still applies.
+The transaction receipt updates when the balance has refreshed, and Overview/Send
+use the same updated state without requiring a manual 200-address Rescan.
+
+Public tracking metadata survives navigation and restart. Lock/background stops
+checks; reopening completes initial discovery before resuming focused refreshes.
+Offline checks retry reads only, never broadcasts. Older records without address
+metadata continue to use ordinary refresh. Full discovery and manual Rescan can
+still take longer than four seconds; this change does not remove that work.
+
 ### Sweeping a private key
 
 Choose an asset in Receive, then **Sweep private key**. Paste or camera-scan a

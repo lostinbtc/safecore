@@ -5,10 +5,19 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
-This prerelease build is SafeCore 0.1.0-test.13, Android 8.0+ (API 26), with
+This prerelease build is SafeCore 0.1.0-test.14, Android 8.0+ (API 26), with
 `safeCoreDebugTools=false`. USB/WebView debugging and screenshots are disabled.
 It starts without saved wallets on a fresh installation. It contains no desktop
 database, recovery material, RPC credentials or signing private key.
+
+Version 0.1.0-test.14 tracks new ordinary sends until their first confirmation,
+then freshly checks the input addresses, wallet change address and any wallet-owned
+recipient. A focused refresh supersedes slower scans without allowing their late
+results to overwrite it. Changed balances still require a fresh matching read
+after four seconds. Public tracking metadata survives restart; background/lock
+stops checks, and reopening first completes normal discovery. No transaction is
+automatically rebroadcast. Older send records without this metadata continue to
+use normal wallet refresh. The test.13 APK remains available as a separate release.
 
 Version 0.1.0-test.13 adds full 200-address discovery on wallet load/unlock and
 manual Rescan, sliding-window monitoring, Electrum status notifications, and the

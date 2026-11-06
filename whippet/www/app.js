@@ -49,6 +49,8 @@
   let receiveBooks = null, addingWallet = false, revealed = false;
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
   let rescanning=false,sweepState=null;
+  const scanVersions={},fullScanCompletions={};
+  let sendRefreshRun=null;
   let sweepReceipt=null,sweepReceiptTimer=null;
   function clearSweepReceipt(){clearTimeout(sweepReceiptTimer);sweepReceiptTimer=null;sweepReceipt=null;}
   function sweepProgress(message){const el=$('sweep-progress');if(el){el.textContent=message;el.hidden=false;}}
@@ -81,7 +83,7 @@
   function prepareAddresses(candidate, vault) {
     sendCoin = null; receiveCoin = null;
     clearReports();
-    clearSweep();clearSweepReceipt();rescanning=false;
+    clearSweep();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
     const pools = E.receivePool(ethers, candidate,200);
     N.close(); networkEpoch++; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null; receivePools = pools;
     initialDiscovery = new Set(Object.keys(pools));
@@ -123,7 +125,7 @@
     }
   }
   function lock(message, reopen = true) {
-    clearSweep();clearSweepReceipt();rescanning=false;
+    clearSweep();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
     sendCoin = null; receiveCoin = null;
     clearReports();
     N.close(); networkEpoch++; receivePools = null; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null;
@@ -144,17 +146,22 @@
     return Boolean(envelope);
   }
   const fresh = coin => snapshots[coin] && !snapshots[coin].cached && !networkErrors[coin] && Date.now() - snapshots[coin].at < 45000;
-  async function refreshLive(coin,full=false) {
+  async function refreshLive(coin,full=false,indices=null) {
     if (!liveEnabled() || mode !== 'unlocked' || !receivePools?.[coin] || document.hidden) return null;
-    while (scans[coin]) {if(!full)return scans[coin];const epoch=networkEpoch;await scans[coin];if(epoch!==networkEpoch)return null;}
+    if(indices&&initialDiscovery.has(coin))return null;
+    // Confirmed-send refreshes supersede slow scans instead of queuing behind them.
+    // The version guard prevents those older results from restoring spent balances.
+    while (!indices&&scans[coin]) {if(!full)return scans[coin];const epoch=networkEpoch;await scans[coin];if(epoch!==networkEpoch)return null;}
+    const version=(scanVersions[coin]||0)+1;scanVersions[coin]=version;
     lastRefresh[coin] = Date.now();
     const epoch = networkEpoch, source = envelope;
     const work = (async () => {
       try {
         const prior=snapshots[coin];
         if(prior)prior.everUsed=[...new Set([...(prior.everUsed||[]),...receiveBooks[coin].preferences().used])];
-        const snapshot = await N.scan(coin, receivePools[coin],prior,{full:full || initialDiscovery.has(coin),verify:reports[coin]?.pending===true});
-        if (epoch !== networkEpoch || source !== envelope || !liveEnabled()) return null;
+        const snapshot = await N.scan(coin, receivePools[coin],prior,{full:full || initialDiscovery.has(coin),verify:reports[coin]?.pending===true,...(indices?{indices}:{})});
+        if (epoch !== networkEpoch || version!==scanVersions[coin] || source !== envelope || !liveEnabled()) return null;
+        if(full)fullScanCompletions[coin]=(fullScanCompletions[coin]||0)+1;
         // Completion belongs to this wallet session, not its disk cache or display delay.
         initialDiscovery.delete(coin);
         for (const row of snapshot.rows) if(row.checked!==false)receiveBooks[coin].observe(row.account.address, row.history);
@@ -172,19 +179,19 @@
         }
         try {
           await withWalletLock(()=>{
-            if(epoch!==networkEpoch||source!==envelope)return;
+            if(epoch!==networkEpoch||version!==scanVersions[coin]||source!==envelope)return;
             const key='corevault.balance.'+WalletLibrary.id(source)+'.'+coin;
             const existing=N.decode(localStorage.getItem(key),coin,receivePools[coin]);
             snapshot.everUsed=[...new Set([...(snapshot.everUsed||[]),...(existing?.everUsed||[])])];
             localStorage.setItem(key,N.encode(snapshot));
           });
         } catch (_) { toast('Balance refreshed, but could not be saved on this device.'); }
-        return snapshot;
+        return epoch===networkEpoch&&version===scanVersions[coin]?snapshot:null;
       } catch (e) {
-        if (epoch === networkEpoch) { networkErrors[coin] = e.message;reports[coin]?.invalidate();clearTimeout(reportTimers[coin]);delete reportTimers[coin]; }
+        if (epoch === networkEpoch&&version===scanVersions[coin]) { networkErrors[coin] = e.message;reports[coin]?.invalidate();clearTimeout(reportTimers[coin]);delete reportTimers[coin]; }
         return null;
       } finally {
-        if (epoch === networkEpoch) {
+        if (epoch === networkEpoch&&version===scanVersions[coin]) {
           delete scans[coin];
           if (['', '#wallet', '#activity'].includes(location.hash) || coin === receiveCoin && location.hash === '#receive') render();
           if (location.hash === '#send') updateSendPicker();
@@ -197,7 +204,37 @@
     const raw = localStorage.getItem('corevault.send-attempts.' + WalletLibrary.id(envelope));
     const attempts = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(attempts) || attempts.some(a=>!a || !/^[0-9a-f]{64}$/.test(a.txid) || !Object.hasOwn(E.NETWORKS,a.coin) || !Array.isArray(a.outpoints) || a.outpoints.some(o=>! /^[0-9a-f]{64}:\d+$/.test(o)) || !['unknown','submitted'].includes(a.status))) throw Error('Send records could not be read. Do not retry a previous payment until its status is checked.');
+    if(attempts.some(a=>a.refreshIndices!==undefined&&(!Array.isArray(a.refreshIndices)||!a.refreshIndices.length||a.refreshIndices.length>200||a.refreshIndices.some(i=>!Number.isInteger(i)||i<0||i>=200))||a.balanceRefreshed!==undefined&&typeof a.balanceRefreshed!=='boolean'))throw Error('Invalid send refresh metadata.');
     return attempts;
+  }
+  async function checkSentBalances(){
+    if(sendRefreshRun||mode!=='unlocked'||!envelope||document.hidden)return;
+    const run={},epoch=networkEpoch,source=envelope;sendRefreshRun=run;
+    const active=()=>sendRefreshRun===run&&epoch===networkEpoch&&source===envelope&&mode==='unlocked'&&!document.hidden;
+    try{
+      for(const attempt of sendAttempts().filter(a=>a.refreshIndices&&!a.balanceRefreshed)){
+        if(!active())return;
+        const coin=attempt.coin,indices=attempt.refreshIndices;
+        if(initialDiscovery.has(coin)||!snapshots[coin])continue;
+        try{
+          const result=await N.confirmation(coin,attempt.txid,receivePools[coin][indices[0]].address);
+          if(!active())return;
+          if(result.confirmations<1)continue;
+          const snapshot=await refreshLive(coin,false,indices);
+          if(!active())return;
+          if(!snapshot)continue; // A changed total still needs a fresh matching read.
+          await withWalletLock(()=>{
+            if(!active())return;
+            const records=sendAttempts();
+            localStorage.setItem('corevault.send-attempts.'+WalletLibrary.id(source),JSON.stringify(records.map(a=>a.txid===attempt.txid?{...a,balanceRefreshed:true}:a)));
+          });
+          if(active()&&$('submitted-txid')?.textContent===attempt.txid){
+            $('main').innerHTML=title('Transaction confirmed','Your wallet balance has been refreshed.')+`<code class="address">${escape(attempt.txid)}</code><a href="#activity" class="text-button">Check activity →</a>`;
+          }
+        }catch(_){/* Keep the public attempt pending; retry reads, never broadcast. */}
+      }
+    }catch(_){/* Malformed local records cannot authorize requests or a send. */}
+    finally{if(sendRefreshRun===run)sendRefreshRun=null;}
   }
   const fundedCoins = () => Object.keys(E.NETWORKS).filter(coin => {
     const value = reported(coin);
@@ -418,6 +455,11 @@
           const attempts = sendAttempts();
           if (attempts.some(a=>a.coin===p.coin&&a.outpoints.some(o=>outpoints.includes(o)))) throw Error('These inputs already have a send attempt. Check its transaction ID before retrying.');
           const record = {txid:signed.txid,coin:p.coin,outpoints,at:Date.now(),status:'unknown'};
+          if(!sweeping){
+            const affected=new Set(p.inputs.map(i=>i.index));
+            for(const account of receivePools[p.coin])if(account.address===p.destination||p.change>0n&&account.address===p.changeAddress)affected.add(account.index);
+            record.refreshIndices=[...affected];record.balanceRefreshed=false;
+          }
           localStorage.setItem(attemptKey,JSON.stringify([...attempts,record]));
           attempted = record;
         });
@@ -434,7 +476,7 @@
         if (token === generation && source === envelope) {
           clearSweep();sendDraft = null; if(snapshots[p.coin])snapshots[p.coin].cached=true;
           if(sweeping)watchSweep(p.coin,txid,p.destination);
-          else $('main').innerHTML = title('Transaction submitted', 'Accepted by the node; confirmation is still pending.') + `<code class="address">${txid}</code><a href="#activity" class="text-button">Check activity →</a>`;
+          else {$('main').innerHTML = title('Transaction submitted', 'Accepted by the node; confirmation is still pending.') + `<code id="submitted-txid" class="address">${txid}</code><a href="#activity" class="text-button">Check activity →</a>`;void checkSentBalances();}
         }
       } catch (e) {
         if (attempted && e instanceof N.RPCError) {
@@ -497,7 +539,7 @@
     $('main').innerHTML = heading + full.map(c=>`<p class="notice">${E.NETWORKS[c].ticker} wallet addresses are full (200 used). Existing addresses still receive funds. Create another wallet for new addresses.</p>`).join('') + holdings + rescanControl + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : '');
     if($('rescan'))$('rescan').onclick=async()=>{
       if(rescanning)return;rescanning=true;const epoch=networkEpoch;clearError();overview();
-      try{for(const coin of Object.keys(E.NETWORKS)){if(epoch!==networkEpoch)return;await refreshLive(coin,true);}if(epoch===networkEpoch)toast(Object.keys(networkErrors).length?'Rescan incomplete. Check your connection and try again.':'Rescan complete: checked 200 addresses per asset.');}
+      try{let complete=true;for(const coin of Object.keys(E.NETWORKS)){if(epoch!==networkEpoch)return;const before=fullScanCompletions[coin]||0;await refreshLive(coin,true);if((fullScanCompletions[coin]||0)===before)complete=false;}if(epoch===networkEpoch)toast(!complete||Object.keys(networkErrors).length?'Rescan incomplete. Check your connection and try again.':'Rescan complete: checked 200 addresses per asset.');}
       finally{if(epoch===networkEpoch){rescanning=false;if(['','#wallet'].includes(location.hash))render();}}
     };
     document.querySelectorAll('[data-overview-coin]').forEach(el=>el.onclick=()=>{
@@ -968,6 +1010,7 @@
       const routine = !active ? [] : location.hash !== '#receive' ? Object.keys(E.NETWORKS) : receiveCoin ? [receiveCoin] : [];
       const targets = new Set([...initialDiscovery, ...routine]);
       for (const coin of targets) void refreshLive(coin);
+      void checkSentBalances();
       if(['','#wallet'].includes(location.hash))void refreshPrice();
     }
   },WalletReporting.POLL_MS);
