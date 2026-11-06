@@ -58,7 +58,7 @@ public final class MainActivity extends Activity {
     private boolean cameraPage() {
         if(web == null || web.getUrl() == null)return false;
         Uri page=Uri.parse(web.getUrl());
-        return localPage(page) && "send".equals(page.getFragment());
+        return localPage(page) && ("send".equals(page.getFragment()) || "sweep".equals(page.getFragment()));
     }
     private void denyCamera() {
         PermissionRequest request=cameraRequest;cameraRequest=null;cameraPrompt=false;cameraResultReady=false;
@@ -167,7 +167,7 @@ public final class MainActivity extends Activity {
             @Override public void onPermissionRequest(PermissionRequest request) {
                 if(!foreground||!cameraPage()||!cameraResources(request.getOrigin(),request.getResources())||cameraRequest!=null){request.deny();return;}
                 cameraRequest=request;
-                // Permission is available only to an explicitly opened send scanner.
+                // Permission is available only to an explicitly opened send/sweep scanner.
                 web.evaluateJavascript("Boolean(document.getElementById('scan-panel') && !document.getElementById('scan-panel').hidden)", active->{
                     if(cameraRequest!=request)return;
                     if(!foreground||!cameraPage()||!"true".equals(active)){denyCamera();return;}

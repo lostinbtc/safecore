@@ -18,7 +18,7 @@
     }
     validate(coin,result);return result;
   }
-  function start({video,status,hint,coin,validate,onAddress,onClose}){
+  function start({video,status,hint,coin,validate,onAddress,onClose,parseValue,privateKey=false}){
     let stopped=false,stream=null,timer=0,frameDeadline=0,frames=0,detections=0;
     const message=text=>{status.textContent=text;if(hint)hint.textContent=text;};
     video.dataset.ready='false';video.muted=true;video.autoplay=true;video.playsInline=true;
@@ -54,8 +54,8 @@
           if(qr){
             video.dataset.qrDetections=String(++detections);
             let recipient;
-            try{recipient=address(qr.data,coin,validate);}
-            catch(_){message('Not a valid address for this coin. Try another QR code.');}
+            try{recipient=parseValue?parseValue(qr.data):address(qr.data,coin,validate);}
+            catch(_){message(privateKey?'Not a supported WIF private key. Try another QR code.':'Not a valid address for this coin. Try another QR code.');}
             if(recipient){stop();onAddress(recipient);return;}
           }
         }catch(_){message('Could not read the camera. Cancel and try again.');stop();return;}

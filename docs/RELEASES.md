@@ -5,10 +5,23 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
-The current prerelease is SafeCore 0.1.0-test.12, Android 8.0+ (API 26), with
+This prerelease build is SafeCore 0.1.0-test.13, Android 8.0+ (API 26), with
 `safeCoreDebugTools=false`. USB/WebView debugging and screenshots are disabled.
 It starts without saved wallets on a fresh installation. It contains no desktop
 database, recovery material, RPC credentials or signing private key.
+
+Version 0.1.0-test.13 adds full 200-address discovery on wallet load/unlock and
+manual Rescan, sliding-window monitoring, Electrum status notifications, and the
+blue lower-right Overview Rescan control. Receive now supports one-key WIF sweeps
+with QR scanning, complete source-input validation, per-byte fees with a 25%
+cushion, explicit fee review, staged submission progress and a first-confirmation
+receipt screen. Pinned receiving-address preferences continue to select index 0.
+Sweeps otherwise use the next verified unused receiving address.
+
+Ordinary-send fees and limits are unchanged. Sweeps must fit one standard
+transaction; oversized sources are rejected, never partially swept. Full Rescan
+can delay balance publication and Send readiness while it completes. Discovery
+does not extend beyond receiving index 199. See the wallet guide for these limits.
 
 Version 0.1.0-test.12 includes Chromatic's polling optimization and Android URL
 guards from PR #1. Each scan checks Electrum address status and reuses unchanged

@@ -5,6 +5,10 @@
   else root.WalletTransactions=factory(root.WalletEngine,root.ethers);
 })(typeof globalThis==='object'?globalThis:this,function(E,ethers){
   const U=ethers.utils, COIN=100000000n, DUST=1000000n, MAX_FEE=10000000n, FLAT_MAX_INPUTS=6;
+  // Both supported chains reject standard transactions at >= 400,000 weight.
+  // These legacy (non-witness) sweeps must therefore stay below 100,000 bytes.
+  const SWEEP_MAX_BYTES=100000;
+  const SWEEP_FEE_POLICY=Object.freeze({baseRate:COIN/100n,bytesPerUnit:1000,cushionPercent:25,maxRate:10000000n});
   const bytes=x=>U.arrayify(x), hex=x=>U.hexlify(x).slice(2), concat=parts=>U.concat(parts);
   const reverse=x=>Uint8Array.from(x).reverse();
   const hash256=x=>bytes(U.sha256(U.sha256(x)));
@@ -21,6 +25,7 @@
     return '76a914'+hex(a.slice(1,21))+'88ac';
   }
   const scriptHash=(coin,address)=>hex(reverse(bytes(U.sha256('0x'+script(coin,address)))));
+  const historyStatus=history=>history.length?U.sha256(U.toUtf8Bytes(history.map(h=>h.tx_hash+':'+h.height+':').join(''))).slice(2):null;
   function serialize(tx,scripts){
     return concat([le(tx.version,4),vi(tx.inputs.length),...tx.inputs.flatMap((i,n)=>[reverse(bytes('0x'+i.txid)),le(i.pos,4),blob(scripts?scripts[n]:i.script||''),le(i.sequence??0xffffffff,4)]),vi(tx.outputs.length),...tx.outputs.flatMap(o=>[le(o.value,8),blob(o.script)]),le(tx.locktime||0,4)]);
   }
@@ -42,7 +47,7 @@
     return {...tx,txid:hex(reverse(hash256(serialize(tx)))),coinbase:inputs.length===1&&inputs[0].txid==='0'.repeat(64)&&inputs[0].pos===0xffffffff};
   }
   function verifyUTXO(coin,u,tip){
-    if(!u||!Number.isInteger(u.index)||u.index<0||u.index>=20||!Number.isInteger(u.pos)||u.pos<0||!Number.isInteger(u.height)||u.height<=0||u.height>tip)throw Error('Only confirmed wallet outputs can be spent.');
+    if(!u||!Number.isInteger(u.index)||u.index<0||u.index>=200||!Number.isInteger(u.pos)||u.pos<0||!Number.isInteger(u.height)||u.height<=0||u.height>tip)throw Error('Only confirmed wallet outputs can be spent.');
     const prev=parse(u.raw),out=prev.outputs[u.pos];
     if(prev.txid!==u.txid||!out||out.value!==integer(u.value)||out.script!==script(coin,u.address))throw Error('Previous transaction does not match the claimed wallet output.');
     if(prev.coinbase&&tip-u.height+1<240)throw Error('Mining reward is not mature yet (240 confirmations required).');
@@ -76,18 +81,17 @@
     const outputs=[{value,script:destinationScript}];if(change)outputs.push({value:change,script:changeScript});
     return {coin,destination,changeAddress,amount:value,fee,change,inputs,outputs,tip,feeIncluded,flatFee,budget,version:1,locktime:0,createdAt:Date.now()};
   }
-  function sign(p,recipe){
-    const valid=E.validateRecipe(ethers,recipe),master=U.HDNode.fromMnemonic(valid.mnemonic,valid.passphrase);
-    if(p.version!==1||p.locktime!==0||p.inputs.length<1||p.inputs.length>8||p.amount<DUST||p.fee<0n||p.fee>MAX_FEE)throw Error('Invalid send review.');
+  function signWith(p,keyForInput,limits={inputs:8,bytes:10000,fee:MAX_FEE}){
+    if(p.version!==1||p.locktime!==0||p.inputs.length<1||p.inputs.length>limits.inputs||p.amount<DUST||p.fee<0n||p.fee>limits.fee)throw Error('Invalid send review.');
     if(p.feeIncluded&&p.amount+p.fee!==p.budget)throw Error('The reviewed total changed.');
     if(p.flatFee&&(!['pep','wht'].includes(p.coin)||p.fee!==1000000n))throw Error('The reviewed flat fee changed.');
     if(p.outputs.length!==(p.change?2:1)||p.outputs[0].value!==p.amount||p.outputs[0].script!==script(p.coin,p.destination)||p.change&&(p.outputs[1].value!==p.change||p.outputs[1].script!==script(p.coin,p.changeAddress)))throw Error('Send review outputs changed.');
-    const ownedChange=E.accounts(ethers,valid,0)[p.coin].address;
-    if(p.changeAddress!==ownedChange)throw Error('Change address does not belong to this wallet.');
     let total=0n;
+    const seen=new Set();
     const scripts=p.inputs.map((input,index)=>{
       const u=verifyUTXO(p.coin,input,p.tip);total+=u.value;
-      const node=master.derivePath(E.NETWORKS[p.coin].path.replace('{index}',String(u.index)));
+      const outpoint=u.txid+':'+u.pos;if(seen.has(outpoint))throw Error('Duplicate transaction input.');seen.add(outpoint);
+      const node=keyForInput(u);
       const ownScript='76a914'+U.ripemd160(U.sha256(node.publicKey)).slice(2)+'88ac';
       if(ownScript!==u.script)throw Error('Input is not owned by this seed.');
       const signingScripts=p.inputs.map((_,i)=>i===index?u.script:'');
@@ -95,13 +99,70 @@
       const sig=new U.SigningKey(node.privateKey).signDigest(digest);
       function derInt(h){let v=h.slice(2).replace(/^(00)+/,'')||'00';if(parseInt(v.slice(0,2),16)&128)v='00'+v;return '02'+hex(le(v.length/2,1))+v;}
       const body=derInt(sig.r)+derInt(sig.s),der='30'+hex(le(body.length/2,1))+body+'01';
-      return hex(le(der.length/2,1))+der+'21'+node.publicKey.slice(2);
+      return hex(le(der.length/2,1))+der+hex(le(bytes(node.publicKey).length,1))+node.publicKey.slice(2);
     });
     if(total!==p.amount+p.change+p.fee)throw Error('Transaction amounts do not balance.');
     const raw=hex(serialize(p,scripts)),decoded=parse(raw);
-    if(raw.length/2>10000)throw Error('Test transaction is too large.');
+    if(raw.length/2>limits.bytes)throw Error('Transaction exceeds the reviewed size limit.');
     if(p.flatFee&&raw.length/2>1000)throw Error('Transaction exceeds the flat-fee size limit.');
     return {raw,txid:decoded.txid};
   }
-  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,amount,format,script,scriptHash,parse,serialize,verifyUTXO,plan,sign};
+  function sign(p,recipe){
+    const valid=E.validateRecipe(ethers,recipe),master=U.HDNode.fromMnemonic(valid.mnemonic,valid.passphrase);
+    if(p.changeAddress!==E.accounts(ethers,valid,0)[p.coin].address)throw Error('Change address does not belong to this wallet.');
+    return signWith(p,u=>master.derivePath(E.NETWORKS[p.coin].path.replace('{index}',String(u.index))));
+  }
+  function sweepKey(coin,wif){
+    // Never include supplied text in errors, logs, storage, URLs or network calls.
+    try{
+      if(!E.NETWORKS[coin]||typeof wif!=='string'||! /^[1-9A-HJ-NP-Za-km-z]{51,52}$/.test(wif.trim()))throw Error();
+      const a=U.base58.decode(wif.trim()),compressed=a.length===38;
+      if(![37,38].includes(a.length)||a[0]!==E.NETWORKS[coin].wif||compressed&&a[33]!==1||hex(hash256(a.slice(0,-4)).slice(0,4))!==hex(a.slice(-4)))throw Error();
+      const privateKey=U.hexlify(a.slice(1,33)),scalar=BigInt(privateKey);
+      if(scalar===0n||scalar>=0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n)throw Error();
+      const publicKey=U.computePublicKey(privateKey,compressed),payload=concat([[E.NETWORKS[coin].prefix],U.ripemd160(U.sha256(publicKey))]);
+      return {coin,privateKey,publicKey,compressed,address:U.base58.encode(concat([payload,hash256(payload).slice(0,4)]))};
+    }catch(_){throw Error('Use a valid mainnet WIF private key. Encrypted keys, hex keys and recovery phrases are not supported.');}
+  }
+  function sweepSize(count,compressed=true){
+    if(!Number.isSafeInteger(count)||count<1||typeof compressed!=='boolean')throw Error('Invalid sweep input count or key format.');
+    // Maximum DER signature + sighash byte, both public-key encodings, CompactSize
+    // input count, and exactly one P2PKH output. Never assume every WIF is compressed.
+    const size=4+(count<253?1:count<=65535?3:5)+count*(compressed?149:181)+1+34+4;
+    if(size>=SWEEP_MAX_BYTES)throw Error('The full balance is too large for one standard transaction. A multi-transaction sweep is required; no coins have moved.');
+    return size;
+  }
+  function sweepFee(size,feeRate=SWEEP_FEE_POLICY.baseRate){
+    if(!Number.isSafeInteger(size)||size<1||size>=SWEEP_MAX_BYTES)throw Error('Invalid sweep transaction size.');
+    let rate=integer(feeRate);if(rate<SWEEP_FEE_POLICY.baseRate)rate=SWEEP_FEE_POLICY.baseRate;
+    if(rate>SWEEP_FEE_POLICY.maxRate)throw Error('Network fee rate exceeds the sweep safety limit.');
+    // Prorate by bytes, apply the cushion once, then round up only to base units.
+    // Keep the uncushioned requirement alongside it for the pre-broadcast check.
+    const numerator=BigInt(size)*rate,unit=BigInt(SWEEP_FEE_POLICY.bytesPerUnit),denominator=unit*100n;
+    return {rate,requiredFee:(numerator+unit-1n)/unit,fee:(numerator*BigInt(100+SWEEP_FEE_POLICY.cushionPercent)+denominator-1n)/denominator};
+  }
+  function sweepPlan({coin,destination,utxos,tip,feeRate,compressed=true}){
+    if(!Array.isArray(utxos)||!utxos.length)throw Error('No confirmed spendable coins found for this key on the selected network.');
+    if(!Number.isSafeInteger(tip)||tip<0)throw Error('A fresh chain snapshot is required.');
+    const estimatedBytes=sweepSize(utxos.length,compressed),destinationScript=script(coin,destination);
+    const {rate,fee}=sweepFee(estimatedBytes,feeRate),seen=new Set();
+    const inputs=utxos.map(u=>{
+      const input=verifyUTXO(coin,u,tip),id=input.txid+':'+input.pos;
+      if(seen.has(id))throw Error('Duplicate transaction input.');seen.add(id);
+      if(input.address!==utxos[0].address)throw Error('A sweep must spend from one private key.');
+      return input;
+    });
+    const total=integer(inputs.reduce((n,u)=>n+u.value,0n)),value=total-fee;
+    if(value<DUST)throw Error(`The balance must cover the ${format(fee)} network fee plus at least 0.01 for your wallet. No coins have moved.`);
+    return {coin,destination,changeAddress:destination,amount:value,fee,change:0n,inputs,outputs:[{value,script:destinationScript}],tip,feeIncluded:true,flatFee:false,budget:total,version:1,locktime:0,createdAt:Date.now(),sweep:true,compressed,feeRate:rate,estimatedBytes};
+  }
+  function signSweep(p,key,recipe,destinationIndex){
+    if(!Number.isInteger(destinationIndex)||destinationIndex<0||destinationIndex>=200||key.coin!==p.coin||p.change!==0n||p.outputs.length!==1||p.flatFee!==false||p.feeIncluded!==true||p.sweep!==true||p.compressed!==key.compressed)throw Error('Invalid sweep review.');
+    const size=sweepSize(p.inputs.length,key.compressed),{fee}=sweepFee(size,p.feeRate);
+    if(p.estimatedBytes!==size||p.fee!==fee)throw Error('The reviewed sweep size or fee changed.');
+    const owned=E.accounts(ethers,recipe,destinationIndex)[p.coin].address;
+    if(p.destination!==owned||p.changeAddress!==owned||key.address===owned)throw Error('Sweep destination must be a different address in your wallet.');
+    return signWith(p,()=>key,{inputs:p.inputs.length,bytes:size,fee});
+  }
+  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,SWEEP_FEE_POLICY,amount,format,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
 });

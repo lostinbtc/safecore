@@ -179,10 +179,31 @@ The setting is saved locally and survives restarts and in-place APK updates.
 Uninstalling or clearing app data removes it. Seed recovery and current wallet
 backup files restore keys, not this local preference; select it again afterward.
 
-Initial discovery without a valid cache checks all 20 addresses. Later scans
-query every ever-used address plus the next unused address. If that next address
-has history, discovery advances within the same bounded pool. An ever-used
-address is not forgotten because its balance becomes zero.
+Each wallet load or unlock performs one full scan of receiving indices 0–199
+(200 addresses) per coin, even when saved balances are available. Failed initial
+scans retry while the wallet is unlocked and visible; only a successful scan
+completes that asset's initial discovery. Overview's **Rescan** also checks all
+200 addresses on demand. These scans use batches of ten, not 200 simultaneous
+requests.
+
+After initial discovery, routine monitoring uses a window starting at 20 receiving
+addresses and extends in batches of 10 as the highest used index reaches the
+final ten addresses of the window, up to index 199. It monitors all earlier addresses, including
+empty gaps, and never forgets an ever-used address because its balance is zero.
+Legacy 20-row caches expand without treating unknown rows as checked history.
+
+Electrum subscriptions deliver status changes; unchanged live rows are reused.
+Statuses are reconciled roughly every 30 seconds while active, on reconnect,
+and before accepting a pending balance change. Roughly every 30 seconds an additional
+batch of ten addresses is probed beyond the initial range, cycling through the
+200-address pool. Overview's **Rescan** immediately checks the entire range in
+batches of ten (at most 30 balance/history/UTXO requests concurrently per coin).
+No sweep key is involved in wallet discovery. Lock/background stops normal scans.
+
+When all 200 addresses have been used, Overview and Receive display an address
+capacity warning. No new address is issued beyond the cap. Existing addresses,
+including the pinned first address, still work. Create another wallet for fresh
+addresses; do not infer that a seed has no funds beyond this discovery boundary.
 
 This is not general gap-limit recovery. Funds sent to unmonitored paths or
 indices may not appear. The balance is the sum of monitored addresses, not a
@@ -257,7 +278,79 @@ outputs before signing. PEP and WHT addresses are not interchangeable.
 This build supports ordinary P2PKH destinations only, not P2SH, multisig,
 Whippet assets/covenants or Dogecoin sending.
 
-### Current limits
+### Sweeping a private key
+
+Choose an asset in Receive, then **Sweep private key**. Paste or camera-scan a
+standard compressed or uncompressed mainnet WIF. Encrypted/BIP38 keys, raw hex,
+recovery phrases, URLs and payment URIs are not accepted. PEP and WHT both use
+WIF prefix 158: the key format cannot distinguish these chains. The selected
+asset, independently checked server genesis and derived source address determine
+which network is queried. No seed, private key or password is sent to a server.
+
+The destination is index 0 when **Keep using the first address** is selected;
+otherwise it is the next unused, live-checked receiving address, not a historical
+address being browsed. A full unpinned wallet cannot accept a sweep into a new
+address. Keys for addresses already in this wallet are rejected with a Rescan hint.
+
+All source outputs must be confirmed and mature. Every unspent output at the
+selected key's address is included in one transaction, with one wallet output
+and no change back to the source. Sweeps do not use the ordinary send path's
+input-count, candidate-count or flat-fee limits. Previous transactions are fetched
+in batches of at most ten, deduplicated, and independently checked before signing.
+
+The fee is based on a conservative signed-size estimate (including compressed or
+uncompressed public keys and CompactSize counts), charged proportionally by byte,
+not rounded to whole kilobytes. The rate is the greater of the live relay floor
+and 0.01 coin/kB, plus a 25% fee cushion applied once. Calculation uses integers:
+`ceil(estimatedBytes * rateInBaseUnitsPerKB * 125 / 100000)`.
+Only the final fractional base unit is rounded up. For example, a one-input
+compressed-key sweep estimated at 193 bytes pays 0.0024125 coin at the default
+rate; a 5-coin balance delivers 4.9975875. The fee is deducted from the full
+source balance. Review shows that balance, the fee and the amount arriving.
+The sweep form does not show fee formulas or percentage examples. The review
+highlights the estimated fee in the selected coin and requires explicit
+acknowledgment followed by **Confirm sweep** before submission.
+The rate remains bounded at 0.1 coin/kB before the cushion; the ordinary-send
+0.1-coin total-fee ceiling does not apply to larger sweeps. Nothing is sent if
+the balance cannot cover the fee plus the minimum 0.01 wallet output.
+
+The proportional 0.01 coin/kB baseline is documented for both
+[Pepecoin](https://github.com/pepecoinppc/pepecoin/blob/master/doc/fee-recommendation.md)
+and [Whippet](https://github.com/chromatic/whippet-experimental-blockchain/blob/main/doc/fee-recommendation.md).
+The sweep's conservative size estimate can slightly exceed the final signed size;
+the reviewed fee is not silently changed after signing. The pre-broadcast check
+uses the same byte-based calculation without the cushion, requiring a fresh
+review if the current requirement exceeds the already approved buffered fee.
+
+Both supported chains have a 400,000-weight standard-transaction boundary; these
+legacy non-witness sweeps must be below 100,000 bytes. If the conservative estimate
+cannot fit the entire balance, the sweep is rejected with a multi-transaction
+explanation. Automatic multi-transaction sweeping is not implemented. No partial
+sweep is silently substituted. The Electrum response-size and safe-integer guards
+also remain in effect; this is not a claim to support unlimited histories.
+
+Explicit confirmation and the destination wallet's password (if protected) are
+required. Source outputs, relay fee and the destination are rechecked before
+signing. Changed source outputs or a fee requirement beyond the reviewed cushion
+require a fresh review. Deposits arriving after the final check are not part of
+the reviewed transaction and may require another sweep.
+Existing input-reservation and uncertain-broadcast protections also apply.
+
+Visible progress distinguishes source checks, receiving-address checks, signing
+and submission. After an accepted sweep, the receipt screen polls the public
+destination history every four seconds until the transaction has one confirmation,
+then displays **Sweep confirmed**. Offline or delayed-indexing results remain
+pending and retry status checks only, never the broadcast. Navigation, lock and
+backgrounding stop this screen's watcher; the saved transaction ID remains in
+Activity. Closing the page after submission does not cancel a transaction.
+
+The WIF field is masked and cleared after parsing. Secret references are discarded
+on cancellation, navigation, lock/background, expiry and broadcast attempts. The
+key is never added to local storage, backups, logs or requests. JavaScript garbage
+collection does not guarantee physical memory zeroization. Tests use public,
+disposable fixtures only; never use fixture keys for funds.
+
+### Current ordinary-send transaction limits
 
 | Rule | Current value |
 | --- | --- |
@@ -310,7 +403,7 @@ Camera tracks stop on success, cancel, navigation, backgrounding and removal of
 the scanner view. A stream arriving after cancellation is immediately stopped.
 Permission denial or no camera leaves manual entry available.
 
-Android grants only video capture to the local, visible Send scanner after OS
+Android grants only video capture to a local, visible Send or Sweep scanner after OS
 permission. Microphone and other WebView resource requests remain denied.
 The app-owned permission sheet's temporary hidden state preserves the send form;
 a real native background transition still locks and cancels capture.
@@ -486,7 +579,7 @@ directory. Do not infer production readiness from a regtest or emulator pass.
 | --- | --- |
 | Balance is `*` | Wallet state, service reachability, chain identity and missing/corrupt cache; do not replace unknown with zero |
 | Last-known balance does not update | Connectivity and timestamps; retain the cache and recovery material |
-| Expected funds absent after restore | Exact phrase, BIP39 passphrase, derivation recipe and 20-address boundary |
+| Expected funds absent after restore | Exact phrase, BIP39 passphrase, derivation recipe; run Rescan; addresses beyond index 199 are outside this wallet's discovery cap |
 | Send disabled or rejected | Confirmed mature funds, current snapshot, pending reporting change, reservations and size/amount limits |
 | Wrong-network/checksum error | Selected coin and full recipient address; never bypass validation |
 | Submission uncertain | Check the retained transaction ID before retrying; never clear reservations to force another send |

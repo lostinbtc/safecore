@@ -13,13 +13,13 @@ class Socket{static OPEN=1;constructor(){this.readyState=1;queueMicrotask(()=>th
   else result=.01;
   queueMicrotask(()=>this.onmessage({data:JSON.stringify({id:q.id,result})}));
  }}
-const ctx={WebSocket:Socket,WalletTransactions:{scriptHash:(_,a)=>a},setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
+const ctx={WebSocket:Socket,WalletTransactions:{scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
 (async()=>{try{const s=await N.scan('wht',accounts);assert.equal(s.confirmed+s.unconfirmed,100000000000n);
- for(mode of ['duplicate-history','duplicate-output','mismatched-total'])await assert.rejects(()=>N.scan('wht',accounts,s),/Inconsistent|do not agree/);
- assert.equal(s.confirmed+s.unconfirmed,100000000000n);mode='confirmed';const next=await N.scan('wht',accounts,s);assert.equal(next.confirmed,100000000000n);assert.equal(next.unconfirmed,0n);
+ for(mode of ['duplicate-history','duplicate-output','mismatched-total'])await assert.rejects(()=>N.scan('wht',accounts,s,{verify:true}),/Inconsistent|do not agree/);
+ assert.equal(s.confirmed+s.unconfirmed,100000000000n);mode='confirmed';const next=await N.scan('wht',accounts,s,{verify:true});assert.equal(next.confirmed,100000000000n);assert.equal(next.unconfirmed,0n);
  // Electrum status reuse: an unchanged address makes no balance/history/UTXO requests; a changed one does.
  const fetches=()=>calls.filter(c=>/get_balance|get_history|listunspent/.test(c.method)).map(c=>c.params[0]);
  calls.length=0;const again=await N.scan('wht',accounts,next);assert.deepEqual(fetches(),[]);assert.equal(again.confirmed,100000000000n);
- mode='pending';calls.length=0;const changed=await N.scan('wht',accounts,again);assert.deepEqual(fetches(),['fixture-0','fixture-0','fixture-0']);assert.equal(changed.unconfirmed,100000000000n);
+ mode='pending';calls.length=0;const changed=await N.scan('wht',accounts,again,{verify:true});assert.deepEqual(fetches(),['fixture-0','fixture-0','fixture-0']);assert.equal(changed.unconfirmed,100000000000n);
  console.log('PASS: pending/confirmed overlap, duplicate outputs and inconsistent totals rejected; prior snapshot preserved and settled 1000 WHT accepted; unchanged addresses reuse rows by Electrum status while changed ones are refetched.');
 }finally{N.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

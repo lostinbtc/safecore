@@ -171,6 +171,9 @@ main { padding: 26px 20px 12px; min-height: calc(100dvh - 220px); }
 .hero-actions button { flex: 1; }
 .primary { background: var(--blue); border-color: transparent; color: #071420; }
 .primary:hover:not(:disabled) { background: #91d2ff; }
+.overview-actions { min-height: 68px; }
+.overview-rescan { position: fixed; z-index: 21; right: max(20px,calc((100vw - 430px)/2 + 20px)); bottom: calc(89px + env(safe-area-inset-bottom)); min-height: 44px; min-width: 104px; }
+body:has(.overview-rescan) #toast, body:has(.overview-rescan) #error { bottom: calc(149px + env(safe-area-inset-bottom)); }
 .hero .primary { background: var(--accent); }
 .hero .primary:hover { filter: brightness(1.1); }
 .button-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
