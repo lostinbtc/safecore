@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1] / 'www'
 FILES = {'index.html', 'styles.css', 'engine.js', 'viewport.js', 'recovery.js', 'receive.js', 'library.js', 'transactions.js', 'komodo.js', 'scanner.js', 'network.js', 'reporting.js', 'app.js', 'native.js',
-         'assets/pepecoin.png', 'assets/whippet.png', 'assets/corevault.svg', 'assets/ethers.umd.min.js',
+         'assets/pepecoin.png', 'assets/whippet.png', 'assets/corevault.svg', 'assets/safecore.LICENSE', 'assets/ethers.umd.min.js',
          'assets/qrcode.min.js', 'assets/whippet-legacy.js', 'assets/jsQR.js', 'assets/jsQR.LICENSE', 'assets/ethers.LICENSE', 'assets/qrcode.LICENSE'}
 FILES |= {f'assets/icons/safecore-{i:02d}.svg' for i in range(1, 31)}
 

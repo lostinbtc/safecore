@@ -75,10 +75,28 @@ verified locally, but that is not independent verification of the entire chain.
 | Android sources | Local asset loading, permissions, lifecycle protection, clipboard and document picker |
 | `scripts/serve.py` | Loopback-only, allowlisted development server |
 
-Navigation is Overview, Receive, Send, Activity and Security. The header wallet
+Navigation is Overview, Receive, Send, Activity and Settings (gear). The header wallet
 icon opens wallet management. A selected-wallet name is shown beneath the brand;
 there is no preview/development status badge. Protected wallets also have a lock
 control. Coin visibility, theme and icon choices do not alter keys.
+Appearance defaults to **Use device theme** and follows system light/dark changes;
+Settings retains persistent Light/Dark overrides. Android passes its device theme
+to the bundled page without reloading wallet state. Wallet deletion is available
+in **Your wallets**, not duplicated in Settings. Overview omits update timestamps
+but still reports pending amounts and refresh failures.
+The bottom navigation uses floating icons and labels without button backgrounds,
+with a subtle active icon/text glow;
+tap targets and space above the navigation remain reserved on small screens.
+Overview prices, holding estimates and the wallet total all use USDT, sharing the
+same conversion and rounding. Missing USDT conversion rates show an unavailable
+price, never a USD value labeled as USDT. Unpriced holdings remain excluded and
+marked with an asterisk; these estimates do not affect exact on-chain amounts.
+
+Electrum JSON monetary integers above JavaScript's safe-number range are preserved
+as decimal strings before parsing, then validated and converted directly to BigInt.
+Large Whippet balances therefore retain all eight decimal places. Amounts remain
+bounded by signed 64-bit transaction integers; inconsistent balances, malformed
+amounts and imprecise floating-point responses are rejected rather than rounded.
 
 State boundaries matter: changing or locking a wallet invalidates in-flight work.
 Storage updates use Web Locks to coordinate tabs. Stale navigation events cannot
@@ -108,10 +126,23 @@ backup, or the supported legacy Whippet backup format. Manual restore accepts
 standard BIP39 word counts and validates dictionary membership, count and checksum.
 The creation-only acknowledgment is not required on Restore.
 
-Suggestions come from the bundled 2,048-word list. They update while the keyboard
-is composing a word, appear beside the caret and insert only after an explicit
-selection. There is no silent spelling correction, remote lookup or saved phrase
-draft. Submit-time validation still runs if a disabled control is bypassed.
+Restore has a dedicated full-page editor with empty numbered word fields and
+12/15/18/21/24-word lengths. A local on-screen keyboard highlights possible next
+letters without showing a predicted-word strip. Complete unambiguous words
+advance automatically; words that can still grow (such as `act` → `action`)
+wait for Space, Enter or **Next word**. Backspace sits at the right of the bottom
+letter row. The page and keyboard stay anchored; the entry pane scrolls only as
+needed. There are no prefilled words or automatic guesses. Hardware typing and pasting
+a full phrase into the first field also work. Filled extra words must be cleared
+before reducing the word count; missing slots never silently shift later words.
+
+Validation uses the bundled 2,048-word list. No recovery draft is saved or sent
+to a server. Back, navigation, backgrounding and idle lock clear unfinished
+entry. Advanced settings contain backup-file import, the optional wallet name,
+extra BIP39 passphrase and local password lock. These do not change the existing
+derivation or encryption formats. Submit-time checksum validation still runs if
+a disabled control is bypassed. Komodo uses the same numbered layout with separate
+legacy validation and exact-text handling.
 
 Unprotected backup recipes are checked before staging. Encrypted recipes are
 checked after decryption. After successful restore, both supported coin scans
@@ -136,6 +167,13 @@ formats or address versions as a cosmetic rename.
 The current UI derives indices **0–19** per coin. Other accounts, higher indices
 and external change branches are not discovered. Compatibility with another
 wallet depends on its exact derivation recipe, not simply its use of BIP39.
+
+Coinomi accepts compatible recovery phrases on supported networks; the address
+derivation and any extra BIP39 passphrase must match. Confirm a known receiving
+address after restoring. This is not a claim that every SafeCore asset or address
+path is supported by Coinomi; Whippet uses the legacy path listed above.
+See [Coinomi's migration guidance](https://coinomi.freshdesk.com/support/solutions/articles/29000009716-migrating-from-other-wallets-into-coinomi)
+and [backup/restore guidance](https://coinomi.freshdesk.com/support/solutions/articles/29000019254-how-can-i-back-up-my-wallet-what-happens-if-i-lose-my-phone-).
 
 ### Passwords and secrets
 
@@ -185,6 +223,16 @@ scans retry while the wallet is unlocked and visible; only a successful scan
 completes that asset's initial discovery. Overview's **Rescan** also checks all
 200 addresses on demand. These scans use batches of ten, not 200 simultaneous
 requests.
+
+Initial discovery quietly updates the UI after each 20 verified addresses while
+the rest of the scan continues. There are no progress banners or completion
+alerts. Receive can show an individually checked address before discovery ends;
+Send waits for completion. Incomplete checkpoints are display-only, never saved
+as a completed balance cache or accepted for spending. Previously cached balances
+remain in unvisited rows until checked, avoiding a temporary zero on reopening.
+Each asset scans independently. Wallet switches, locking and app backgrounding
+invalidate in-flight work; unopened/password-locked wallets are not decrypted
+or scanned behind the user's back.
 
 After initial discovery, routine monitoring uses a window starting at 20 receiving
 addresses and extends in batches of 10 as the highest used index reaches the
@@ -369,18 +417,21 @@ disposable fixtures only; never use fixture keys for funds.
 
 ### Optional Komodo recovery (Pepecoin only)
 
-This control is hidden by default. In **Security → Komodo recovery (Pepecoin
-only)**, enable it for the selected unlocked wallet. Then choose **Receive →
-Pepecoin → Sweep private key → Komodo Sweep**. The setting is local, per wallet,
+This control is hidden by default. In **Settings → Komodo recovery (PEP)**,
+enable it for the selected unlocked wallet. Then choose **Receive →
+Pepecoin → Sweep Komodo seed**, directly below **Sweep private key**.
+Send and Receive show coin choices directly, without a dropdown.
+The setting is local, per wallet,
 and contains no recovery material. It never enables a Whippet or KMD sweep.
 
-Before entering the old Komodo phrase, re-enter the current SafeCore recovery
-phrase from its backup, the exact extra BIP39 passphrase if used, and the current
-wallet password if protected. This verifies the destination wallet without
-creating, restoring, replacing or exporting a wallet. Verification is held only
-in memory, expires after ten minutes, and is cleared on leaving the flow,
-background/lock, wallet change or disabling the control. Normal inactivity hiding
-also applies. Reusing the old Komodo words as the new wallet's seed is refused.
+Enter only the old Komodo phrase. A required acknowledgment reminds the user to
+save the current SafeCore backup and not reuse the old seed; it does not prove
+they have a backup. The current SafeCore seed/passphrase is not requested.
+The unlocked wallet supplies an in-memory mnemonic fingerprint for the no-reuse
+check; it is never persisted. Protected wallets still require their password at
+final send confirmation. The recovery session expires after ten minutes and the
+fee review after 90 seconds. Leaving, background/lock, wallet change or disabling
+recovery clears the session and entered words. Normal inactivity hiding applies.
 
 The source follows the legacy single-address transformation in
 [ks2pwif at 8a72544](https://github.com/PepeEnthusiast/ks2pwif/blob/8a725440427534c7b3638db5f0a952b1073d8458/src/index.js):
@@ -396,6 +447,9 @@ is isolated: 12 or 24 words are accepted without SafeCore's HD mnemonic checksum
 gate. [Komodo's documentation](https://komodoplatform.com/en/docs/komodo-wallet/desktop/import-private-key-or-seed-phrase/)
 uses the English BIP39 list for standard backups and also describes custom seeds.
 Suggestions are optional explicit replacements, not automatic corrections.
+The numbered editor starts empty, allows words outside the suggestion dictionary,
+and has an uppercase toggle. Pasting a phrase into the first field preserves its
+case, internal whitespace and Unicode bytes; only outer whitespace is trimmed.
 Matching the word count does not verify ownership: confirm the displayed old PEP
 address before approving a sweep. Other phrase lengths, Komodo HD accounts,
 hardware-wallet derivations, KMD and other assets are not supported by this flow.
@@ -488,6 +542,12 @@ Historical key names are compatibility identifiers. Collection writes precede
 activation so an activation failure does not intentionally discard the old
 wallet. Malformed storage fails closed instead of silently creating a replacement.
 
+In **Your wallets**, expand the desired row, then choose **Export** without
+switching wallets. Rows start collapsed; expanding one only reveals its controls.
+The active wallet is marked **(current)**, and its recovery control names that
+wallet explicitly. Use **Open** to switch wallets. Export is not duplicated in
+Settings. Unprotected confirmation identifies
+the selected wallet and expires if its saved contents change or the app locks.
 Export each wallet separately. Protected exports remain encrypted; unprotected
 exports contain readable recovery words and require confirmation. Import validates
 the envelope and recipe. Android uses a system document picker with a 64 KB limit;
@@ -525,9 +585,23 @@ A secure browser context with Web Crypto, BigInt and Web Locks is required.
 Camera access also requires browser permission. There is no service worker,
 CDN runtime dependency, analytics or remote font.
 
-Configured chain and price services must match their expected network identities,
-the page's content security policy and the Android allowlist. This distribution
-retains the tested public client defaults. For your own service deployment, see
+Settings → Electrum connections supports a separate custom server for each coin.
+Enter a secure `wss://host:port/path`, test it, then choose Use connection. Raw
+Electrum TCP/SSL ports are not WebSocket endpoints. Normal TLS certificate checks
+and the expected coin genesis are required; credentials, query strings and
+fragments are not accepted. A test checks chain height and relay fee without wallet
+queries or broadcasts. It does not prove the operator is honest or that a future
+transaction will be accepted. Compatible servers support the ordinary send flow;
+signing remains local and all existing transaction checks still apply.
+
+Choose a trusted operator: it sees your public address queries and IP address.
+Overrides apply to wallets on this device/browser and are not included in backups.
+Tests do not change the active server. Using a connection clears pending transaction
+reviews and refreshes discovery; failures never silently fall back. Restore default
+connections resets both coins, including invalid saved preferences. The content
+policy permits secure WebSocket hosts for user-selected servers, while scripts and
+ordinary HTTP requests retain their restrictions. This distribution retains the
+tested public client defaults. For your own service deployment, see
 [self-hosting](../docs/SELF_HOSTING.md). There is no runtime private-RPC configuration
 loader in the app; do not put server credentials in client code.
 
@@ -570,10 +644,26 @@ allow it. The APK includes allowlisted application assets only, never desktop
 wallet storage or test fixtures. A fresh installation starts empty.
 
 `safeCoreDebugTools=false` is the current default. It disables liveTest app
-debugging and USB WebView inspection, and enables screenshot/task-preview
-protection. Setting it true requires rebuilding and reinstalling; it is not a
+debugging and USB WebView inspection. Setting it true requires rebuilding and reinstalling; it is not a
 remote backend switch. The separate Gradle debug variant remains a QA app and
 must not be used to verify the liveTest manifest's non-debuggable setting.
+
+**Settings → Block screenshots** is on by default, independently of debugging
+and wallet passwords. Android stores this device-wide preference outside wallet
+backups. Allowing screenshots requires a native confirmation; re-enabling the
+block applies immediately. Android's secure-window flag also restricts screen
+recording. Background windows remain protected, and Android 13+ task previews are
+disabled even when foreground screenshots are allowed. The localhost/browser UI
+shows this control disabled: a website cannot enforce Android screenshot blocking.
+Allowing captures can expose recovery words; it never enables USB debugging.
+
+**Settings → Hide balances** masks Overview's total, coin balances and holding
+values, pending amounts, and Send's asset-picker balances. This display-only
+preference persists across wallets and reloads on this app/browser; it does not
+alter wallet backups, network scans, transaction amounts or fees. Explicit payment
+entry, Max and transaction reviews remain visible so users can verify a payment.
+Public unit prices and addresses are not hidden. The legacy `#security` route is
+retained for bookmarks and the narrowly scoped Android settings bridge.
 
 Android blocks cleartext traffic, invalid TLS, remote-page navigation, file URL
 access and broad native JavaScript interfaces. Its narrow adapter handles

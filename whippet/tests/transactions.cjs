@@ -1,6 +1,12 @@
 const assert=require('node:assert/strict');
 const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=require('../www/assets/ethers.umd.min.js');
 const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+for(const [value,display] of [[0n,'0'],[1n,'0.00000001'],[99999999999n,'999.99999999'],[100000000000n,'1,000'],[470900000000n,'4,709'],[193992200111100n,'1,939,922.001111'],[-193992200111100n,'-1,939,922.001111'],[900719925474099312345678n,'9,007,199,254,740,993.12345678']]){
+  assert.equal(T.formatDisplay(value),display);
+  assert.equal(T.format(value),display.replaceAll(',',''),'Machine amounts must remain ungrouped');
+}
+assert.equal(T.amount('1939922.001111'),193992200111100n);
+assert.throws(()=>T.amount('1,939,922.001111'));
 for(const coin of ['pep','wht']){
   const a=E.accounts(ethers,recipe,0)[coin],dest=E.accounts(ethers,recipe,1)[coin].address;
   const funding={version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:'',sequence:0xffffffff}],outputs:[{value:500000000n,script:T.script(coin,a.address)}],locktime:0};

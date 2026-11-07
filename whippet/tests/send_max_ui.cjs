@@ -29,8 +29,14 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
    assert.match(await p.locator('#send-estimate').innerText(),new RegExp(`You are sending 949.99 ${coin.toUpperCase()}`));
    await p.locator('#review-send').click();await p.locator('#broadcast-send').waitFor();
    assert.match(await p.locator('.send-review').innerText(),/949\.99/);assert.match(await p.locator('.send-review').innerText(),/0\.01/);
+   await p.evaluate(coin=>{
+    const key='corevault.connections.v1',newValue=JSON.stringify({[coin]:'wss://selected.example/'});
+    localStorage.setItem(key,newValue);window.dispatchEvent(new StorageEvent('storage',{key,newValue}));
+   },coin);
+   assert.equal(await p.locator('#broadcast-send').count(),0,'Connection changes discard the old send review');
+   assert.equal(await p.evaluate(coin=>WalletNetwork.endpoint(coin),coin),'wss://selected.example/');
    await p.locator('[data-nav=wallet]').click();
   }
-  assert.deepEqual(errors,[]);console.log('PASS: PEP and WHT Max uses 950 confirmed coins; recipient gets 949.99, fee 0.01, review only and no broadcasts.');
+  assert.deepEqual(errors,[]);console.log('PASS: PEP/WHT Max, recipient/fee conservation, endpoint-change review invalidation and no broadcasts.');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

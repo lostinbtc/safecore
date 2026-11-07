@@ -22,4 +22,13 @@ assert.deepEqual(R.worth({pep:snap(1000),wht:snap(1000)},.001,1),{value:1,incomp
 assert.deepEqual(R.worth({pep:snap(0),wht:snap(1000)},.001,1),{value:null,incomplete:true});
 assert.deepEqual(R.worth({pep:snap(0),wht:snap(0)},null,null),{value:0,incomplete:false});
 assert.deepEqual(R.worth({pep:snap(1000),wht:snap(0)},.001,.5),{value:2,incomplete:false});
+// The screenshot's boundary: USD rounds to 0.37, while USDT rounds to 0.38.
+const boundary={confirmed:470928561204n,unconfirmed:0n};
+const total=R.worth({pep:boundary,wht:snap(1000)},.0000796,.9995);
+assert.equal(R.formatWorth(total.value),'0.38');
+assert.equal(R.formatWorth(R.valueInUsdt('pep',boundary.confirmed,.0000796,.9995)),'0.38');
+assert.equal(R.valueInUsdt('pep',100000000n,.01,.5),.02);
+assert.equal(R.valueInUsdt('wht',100000000n,.01,.5),null);
+for(const rate of [null,0,-1,NaN,Infinity])assert.equal(R.valueInUsdt('pep',100000000n,.01,rate),null);
+assert.equal(R.formatWorth(0),'0.00');assert.equal(R.formatWorth(.009),'<0.01');assert.equal(R.formatWorth(null),'*');
 console.log('PASS: 4-second polling default, immediate first balance including zero, subsequent 4-second fresh-match gate, changed-candidate reset, no timer-only publication, cache continuity, USDT conversion, zero-balance exclusion and unpriced holdings.');

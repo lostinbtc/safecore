@@ -35,6 +35,21 @@ const checks=()=>calls.filter(c=>c.method==='blockchain.scripthash.subscribe').m
  used.clear();s=await N.scan('wht',accounts);used.add(29);now+=30001;calls.length=0;s=await N.scan('wht',accounts,s);assert.ok(checks().includes(29));assert.ok(s.everUsed.includes(29));
  mismatch=true;await assert.rejects(()=>N.scan('wht',accounts,s,{full:true}),/history changed/);mismatch=false;
  N.close();calls.length=0;s=await N.scan('wht',accounts,s);assert.ok(checks().length>=40,'reconnect must rebuild subscriptions');
- fail=true;await assert.rejects(()=>N.scan('wht',accounts,s,{full:true}));assert.equal(s.confirmed,100000000n);
+ // Incremental display snapshots cannot be mistaken for complete spend/cache data.
+ used.clear();used.add(0);used.add(149);const progress=[];
+ s=await N.scan('wht',accounts,null,{full:true,onBatch:batch=>progress.push(batch)});
+ assert.deepEqual(progress.map(b=>b.rows.filter(r=>r.checked).length),[20,40,60,80,100,120,140,160,180,200]);
+ assert.equal(progress[0].confirmed,100000000n);assert.equal(progress[7].confirmed,200000000n);
+ assert.equal(progress[0].rows[149].checked,false,'Earlier batch snapshots must not mutate');
+ for(const batch of progress){assert.equal(batch.complete,false);assert.throws(()=>N.encode(batch),/incomplete/);await assert.rejects(()=>N.spendable(batch),/discovery/);}
+ assert.equal(s.complete,true);assert.equal(N.decode(N.encode(s),'wht',accounts).confirmed,200000000n);
+ const cached=N.decode(N.encode(s),'wht',accounts),merged=[];
+ await N.scan('wht',accounts,cached,{full:true,onBatch:batch=>merged.push(batch)});
+ assert.equal(merged[0].confirmed,200000000n,'Unvisited cached balances do not flash to zero');
+ assert.equal(merged[0].rows[149].checked,false,'Cached history cannot unlock Receive before verification');
+ let active=true;calls.length=0;
+ await assert.rejects(()=>N.scan('wht',accounts,null,{full:true,isActive:()=>active,onBatch:()=>{active=false;}}),/cancelled/);
+ assert.equal(checks().length,20,'Cancellation stops before starting the next batch');
+ fail=true;await assert.rejects(()=>N.scan('wht',accounts,s,{full:true}));assert.equal(s.confirmed,200000000n);
  console.log('PASS: #5 deposits, 20→30→40 lookahead, bounded 200-address Rescan, pushed far-address changes, legacy-cache migration, periodic discovery and 200-address cap.');
  }finally{N.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

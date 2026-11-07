@@ -15,6 +15,21 @@ recorded in [go.mod](go.mod), [go.sum](go.sum) and the Dockerfile. The upstream
 documentation below is retained for reference; its `make`/Debian packaging path
 references a `build/` tooling directory that is not included in this checkout.
 
+### Pepecoin Service deployment source
+
+On 2026-11-07, the 241 selected runtime source, asset, module and license files
+checked against the source bundled in the running Pepecoin Service Blockbook
+container matched this repository byte-for-byte. This was a source comparison,
+not a reproducible-binary or security audit.
+
+[Dockerfile.deployed](Dockerfile.deployed) preserves the build recipe from that
+running container (Go 1.21 / Debian Bullseye / RocksDB v7.7.2). The default
+[Dockerfile](Dockerfile) uses Bookworm and limits parallel build jobs; it is not
+the exact deployed recipe. To select the archived recipe, build from this directory
+with `docker build -f Dockerfile.deployed -t pepecoin-blockbook-deployed .`.
+Production RPC credentials and data are intentionally excluded; configure your
+own node using the [safe deployment templates](../../docs/SELF_HOSTING.md).
+
 Operators of modified network services must prominently offer users free access
 to the corresponding source of the deployed version, including modifications and
 required build/install scripts. An upstream link or private checkout alone does

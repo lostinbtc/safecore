@@ -18,8 +18,10 @@ SafeCore’s developers and contributors are not liable for lost funds or other 
 
 Your BIP39 recovery phrase can also be restored in Coinomi on supported networks when the address derivation and any extra BIP39 passphrase match. Verify a known receiving address after restoring.
 
-This notice does not replace applicable law or change the component licenses
-listed in [third-party notices](THIRD_PARTY_NOTICES.md).
+The app asks you to acknowledge this notice once per installation/browser and
+keeps it available under **Settings → Information**. Clearing app/browser data
+removes the acknowledgment. This notice does not replace applicable law or
+change the component licenses listed in [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Download and preview
 
@@ -32,6 +34,12 @@ python3 whippet/scripts/serve.py
 
 Open `http://localhost:8787`. See the wallet guide before importing recovery
 material. Use an independent offline backup; browser storage is not a backup.
+
+**Settings → Electrum connections** lets you test and select your own secure
+`wss://` server separately for Pepecoin and Whippet if the defaults are unavailable.
+Choose a trusted operator: servers see your public address queries and IP address.
+Connection preferences stay on this device, not in wallet backups. Restore default
+connections is always available; the app does not silently switch servers.
 
 ## Components
 
