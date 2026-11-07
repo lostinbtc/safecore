@@ -5,8 +5,9 @@ relicensing of them.
 
 | Component | License / notice |
 | --- | --- |
+| Original SafeCore wallet, recovery tool, supporting tooling and documentation | MIT; [full license](LICENSE), copyright lostinbtc and SafeCore contributors; separately licensed components excluded |
 | ElectrumX fork | MIT; [full license](services/electrumx/LICENCE), Neil Booth / Electrum developers |
-| Pepecoin Blockbook fork | GNU AGPL-3.0; [full license](services/blockbook/COPYING), original notices retained in source |
+| Pepecoin Blockbook fork | GNU AGPL-3.0; [full license](services/blockbook/COPYING), SatoshiLabs / Trezor and contributors; [dated fork notice](services/blockbook/README.md), original notices retained in source |
 | ethers.js 5.7.2 | MIT; [wallet license](whippet/www/assets/ethers.LICENSE), [offline recovery license](recovery/assets/ethers.LICENSE); both bundles are identical |
 | QRCode.js | MIT; [full license](whippet/www/assets/qrcode.LICENSE) |
 | jsQR 1.4.0 | Apache-2.0; [full license](whippet/www/assets/jsQR.LICENSE) |
@@ -16,12 +17,23 @@ relicensing of them.
 See [wallet asset provenance](whippet/THIRD_PARTY.md). Coin logos and marks remain
 with their respective owners; code licenses do not grant trademark rights.
 
-No blanket license has yet been selected for original SafeCore wallet/tooling
-code. Public availability should not be represented as a general open-source
-license grant for those portions. Existing upstream component licenses remain
-in effect. Resolve first-party licensing before promoting unrestricted reuse.
+The root [MIT license](LICENSE) applies to original SafeCore code and documentation
+unless a file or component specifies another license. It does not replace upstream
+licenses or notices. In particular, `services/blockbook/`, including modifications
+to that fork, remains under AGPL-3.0; `services/electrumx/` retains its own MIT
+license and copyright notices. Third-party assets and dependencies keep the
+licenses listed above. Contributions remain copyrighted by their respective authors.
 
 Preserve notices and satisfy the applicable component license when distributing
 modified software or offering a modified AGPL-covered service over a network.
-The Blockbook source and its build files are included here. This document does
-not replace the full license texts or legal review of a particular distribution.
+The Blockbook source, [Docker build recipe](services/blockbook/Dockerfile),
+dependency manifests and [deployment instructions](docs/SELF_HOSTING.md) are
+included here. Legacy upstream Makefile packaging requires additional `build/`
+tooling not included in this checkout; use the documented Dockerfile path.
+
+For a modified Blockbook network service, prominently offer users free access to
+the corresponding source of the deployed version, including required build/install
+scripts and any covered dependencies. A private repository or an upstream-only
+link does not replace that offer. Check the actual deployed revision and source
+download before asserting compliance. This document does not replace the full
+license texts or legal review of a particular distribution.
