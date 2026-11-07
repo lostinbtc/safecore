@@ -5,6 +5,7 @@ relicensing of them.
 
 | Component | License / notice |
 | --- | --- |
+| Original SafeCore wallet, recovery tool, supporting tooling and documentation | MIT; [full license](LICENSE), copyright lostinbtc and SafeCore contributors; separately licensed components excluded |
 | ElectrumX fork | MIT; [full license](services/electrumx/LICENCE), Neil Booth / Electrum developers |
 | Pepecoin Blockbook fork | GNU AGPL-3.0; [full license](services/blockbook/COPYING), SatoshiLabs / Trezor and contributors; [dated fork notice](services/blockbook/README.md), original notices retained in source |
 | ethers.js 5.7.2 | MIT; [wallet license](whippet/www/assets/ethers.LICENSE), [offline recovery license](recovery/assets/ethers.LICENSE); both bundles are identical |
@@ -16,10 +17,12 @@ relicensing of them.
 See [wallet asset provenance](whippet/THIRD_PARTY.md). Coin logos and marks remain
 with their respective owners; code licenses do not grant trademark rights.
 
-No blanket license has yet been selected for original SafeCore wallet/tooling
-code. Public availability should not be represented as a general open-source
-license grant for those portions. Existing upstream component licenses remain
-in effect. Resolve first-party licensing before promoting unrestricted reuse.
+The root [MIT license](LICENSE) applies to original SafeCore code and documentation
+unless a file or component specifies another license. It does not replace upstream
+licenses or notices. In particular, `services/blockbook/`, including modifications
+to that fork, remains under AGPL-3.0; `services/electrumx/` retains its own MIT
+license and copyright notices. Third-party assets and dependencies keep the
+licenses listed above. Contributions remain copyrighted by their respective authors.
 
 Preserve notices and satisfy the applicable component license when distributing
 modified software or offering a modified AGPL-covered service over a network.

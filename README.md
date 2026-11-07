@@ -72,9 +72,16 @@ of SafeCore.
   jsQR retains Apache-2.0. See [third-party notices](THIRD_PARTY_NOTICES.md)
   for component licenses and attribution.
 
-Original SafeCore wallet/tooling code does not yet have a general reuse license.
-This is not a blanket MIT-licensed repository; upstream licenses apply to their
-respective components. Coin names and logos remain subject to their owners' rights.
+Original SafeCore wallet, recovery-tool and supporting tooling/documentation code
+is available under the [MIT license](LICENSE), except where a file or component
+carries a separate license. Copyright remains with lostinbtc and the respective
+SafeCore contributors.
+
+The root MIT license does not relicense third-party code: the Blockbook fork,
+including its modifications, remains AGPL-3.0; ElectrumX and bundled libraries
+retain their own licenses and notices. See [third-party notices](THIRD_PARTY_NOTICES.md)
+for the component boundaries. Coin names and logos remain subject to their owners'
+rights; this license grants no trademark rights.
 
 ### Blockbook source for Pepecoin Service
 
