@@ -10,7 +10,7 @@ const store = 'whippet.dev.encrypted.v1';
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'), 'Public-test-password-123'));
   const browser = await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
   try {
-    for (const width of [320,390,430]) {
+    for (const width of [320,360,390,430]) {
       const context = await browser.newContext({viewport:{width,height:844}});
       await require('./empty_network.cjs')(context);
       const page = await context.newPage();
@@ -23,9 +23,21 @@ const store = 'whippet.dev.encrypted.v1';
       assert.equal(await page.getByRole('link',{name:'Add coins'}).count(),1);
       assert.equal(await page.locator('#header-add-coins').evaluate(el=>el.nextElementSibling.matches('.wallets-shortcut')&&el.closest('.topbar')!==null),true,'Add coins sits immediately left of the header wallet icon');
       assert.equal(await page.locator('.home-heading a[href="#coins"]').count(),0);
-      assert.equal(await page.locator('.mobile-brand').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'Header brand fits beside protected-wallet controls on narrow screens');
-      const addBox=await page.locator('#header-add-coins').boundingBox(),walletBox=await page.locator('.wallets-shortcut').boundingBox();
-      assert.ok(addBox.height>=44&&addBox.x+addBox.width<=walletBox.x&&walletBox.x+walletBox.width<=width,'Header controls stay tappable without overlap or overflow');
+      // CI and Android can resolve system fonts differently. DejaVu reproduces
+      // the original 320px overflow; generic monospace adds a portable wide case.
+      for (const font of ['', '"DejaVu Sans", sans-serif', 'monospace']) {
+        await page.evaluate(font=>{document.documentElement.style.fontFamily=font;},font);
+        const layout=await page.evaluate(()=>{
+          const box=selector=>{const el=document.querySelector(selector),r=el.getBoundingClientRect();return {x:r.x,right:r.right,width:r.width,height:r.height,scroll:el.scrollWidth,client:el.clientWidth};};
+          return {brand:box('.mobile-brand'),logo:box('.mobile-brand img'),lock:box('#lock'),add:box('#header-add-coins'),wallet:box('.wallets-shortcut')};
+        });
+        const detail=`${width}px ${font||'default'}: ${JSON.stringify(layout)}`;
+        assert.ok(layout.brand.scroll<=layout.brand.client+1&&layout.brand.right<=layout.lock.x,'Header brand fits beside protected-wallet controls: '+detail);
+        assert.equal(layout.logo.width,layout.logo.height,'Logo must not shrink out of square: '+detail);
+        assert.ok(layout.lock.width>=44&&layout.lock.height>=44&&layout.add.height>=44&&layout.wallet.width>=44&&layout.wallet.height>=44,'Header tap targets remain accessible: '+detail);
+        assert.ok(layout.lock.right<=layout.add.x&&layout.add.right<=layout.wallet.x&&layout.wallet.right<=width,'Header controls do not overlap or overflow: '+detail);
+      }
+      await page.evaluate(()=>{document.documentElement.style.fontFamily='';});
       assert.equal(await page.locator('[data-overview-coin]').count(),2);
       assert.equal(await page.locator('[data-overview-coin="doge"]').count(),0);
       await page.getByRole('link',{name:'Add coins'}).click();
