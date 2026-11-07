@@ -6,7 +6,7 @@ relicensing of them.
 | Component | License / notice |
 | --- | --- |
 | ElectrumX fork | MIT; [full license](services/electrumx/LICENCE), Neil Booth / Electrum developers |
-| Pepecoin Blockbook fork | GNU AGPL-3.0; [full license](services/blockbook/COPYING), original notices retained in source |
+| Pepecoin Blockbook fork | GNU AGPL-3.0; [full license](services/blockbook/COPYING), SatoshiLabs / Trezor and contributors; [dated fork notice](services/blockbook/README.md), original notices retained in source |
 | ethers.js 5.7.2 | MIT; [wallet license](whippet/www/assets/ethers.LICENSE), [offline recovery license](recovery/assets/ethers.LICENSE); both bundles are identical |
 | QRCode.js | MIT; [full license](whippet/www/assets/qrcode.LICENSE) |
 | jsQR 1.4.0 | Apache-2.0; [full license](whippet/www/assets/jsQR.LICENSE) |
@@ -23,5 +23,14 @@ in effect. Resolve first-party licensing before promoting unrestricted reuse.
 
 Preserve notices and satisfy the applicable component license when distributing
 modified software or offering a modified AGPL-covered service over a network.
-The Blockbook source and its build files are included here. This document does
-not replace the full license texts or legal review of a particular distribution.
+The Blockbook source, [Docker build recipe](services/blockbook/Dockerfile),
+dependency manifests and [deployment instructions](docs/SELF_HOSTING.md) are
+included here. Legacy upstream Makefile packaging requires additional `build/`
+tooling not included in this checkout; use the documented Dockerfile path.
+
+For a modified Blockbook network service, prominently offer users free access to
+the corresponding source of the deployed version, including required build/install
+scripts and any covered dependencies. A private repository or an upstream-only
+link does not replace that offer. Check the actual deployed revision and source
+download before asserting compliance. This document does not replace the full
+license texts or legal review of a particular distribution.
