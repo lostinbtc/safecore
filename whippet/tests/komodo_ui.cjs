@@ -24,7 +24,7 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  },{vault,raw,txid,address:key.address});
  await p.clock.install();await p.goto('http://localhost:8787/');
  if(scenario==='protected'){await p.locator('#lock').click();await p.locator('#unlock-password').fill(password);await p.locator('#unlock-submit').click();await p.waitForFunction(()=>document.documentElement.dataset.walletState==='unlocked');}
- const choose=async coin=>{await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').click();await p.locator('#sweep-key').waitFor();};
+ const choose=async coin=>{await p.locator('[data-nav=receive]').click();await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').waitFor();};
  await choose('pep');assert.equal(await p.locator('#komodo-open').count(),0);
  await p.evaluate(()=>location.hash='#komodo-sweep');await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-recovery-enabled').isChecked(),false);assert.equal(await p.locator('#komodo-phrase').count(),0);
  await p.locator('#komodo-recovery-enabled').check();await choose('wht');assert.equal(await p.locator('#komodo-open').count(),0);
@@ -33,37 +33,68 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  await p.locator('[data-nav=security]').click();await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-recovery-enabled').isChecked(),true);
  await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator('[data-coin=pep]').click();
  if(scenario==='pinned')await p.locator('#reuse-first').check();
- await p.locator('#sweep-open').click();await p.locator('#komodo-open').click();await p.locator('#verify-wallet-phrase').waitFor();assert.equal(await p.locator('#komodo-phrase').count(),0);
- await p.locator('#verify-wallet-phrase').fill('aban');await p.getByRole('button',{name:'Use recovery word abandon',exact:true}).click();assert.equal(await p.locator('#verify-wallet-phrase').inputValue(),'abandon ');
- await p.locator('#verify-wallet-phrase').fill(old);await p.locator('#komodo-backup-ack').check();
- if(scenario==='protected')await p.locator('#verify-wallet-password').fill(password);
- await p.locator('#verify-komodo-wallet').click();await p.locator('#error').waitFor({state:'visible'});assert.equal(await p.locator('#komodo-phrase').count(),0);
- await p.locator('#verify-wallet-phrase').fill(phrase);await p.locator('#verify-wallet-passphrase').fill(extra);
- if(scenario==='protected'){await p.locator('#verify-wallet-password').fill('Wrong-fixture-password');await p.locator('#verify-komodo-wallet').click();await p.waitForFunction(()=>document.getElementById('error').textContent.includes('Incorrect password'));assert.equal(await p.locator('#komodo-phrase').count(),0);await p.locator('#verify-wallet-password').fill(password);}
- await p.locator('#verify-komodo-wallet').click();await p.locator('#komodo-phrase').waitFor();assert.equal(await p.locator('#verify-wallet-phrase').count(),0);
- assert.match(await p.locator('#main').innerText(),/Do not reuse/);assert.match(await p.locator('#main').innerText(),/other coins and HD accounts are not swept/i);
- await p.locator('#komodo-phrase').fill('lega');await p.getByRole('button',{name:'Use recovery word legal',exact:true}).click();assert.equal(await p.locator('#komodo-phrase').inputValue(),'legal ');
- await p.locator('#komodo-phrase').fill(Array(12).fill('abandon').join(' '));assert.equal(await p.locator('#review-komodo-sweep').isDisabled(),false,'Legacy phrases do not use the HD checksum gate');
- await p.locator('#komodo-phrase').fill(scenario==='reuse'?phrase:old);
- if(scenario==='expiry'){for(let i=0;i<10;i++){await p.clock.runFor(60001);await p.evaluate(()=>document.dispatchEvent(new Event('pointerdown')));}await p.locator('#verify-wallet-phrase').waitFor();assert.equal(await p.locator('#verify-wallet-phrase').inputValue(),'');}
+ assert.equal(await p.locator('#sweep-open').evaluate(el=>el.nextElementSibling.id),'komodo-open');
+ if(scenario==='send'){
+  await p.screenshot({path:'/tmp/safecore-receive-komodo.png',fullPage:true});
+  await p.locator('#sweep-open').click();await p.locator('#sweep-key').waitFor();assert.equal(await p.locator('#komodo-open').count(),0,'Komodo is no longer inside WIF sweep');
+  await p.getByRole('link',{name:'Cancel',exact:true}).click();await p.locator('#komodo-open').waitFor();
+ }
+ await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();
+ assert.equal(await p.locator('#verify-wallet-phrase').count(),0);
+ assert.equal(await p.locator('#verify-wallet-password').count(),0);
+ assert.equal(await p.locator('.komodo-scope').innerText(),'Pepecoin (PEP) only');
+ assert.match(await p.locator('#komodo-sweep-form').innerText(),/Enter your old Komodo phrase exactly as backed up/);
+ assert.equal(await p.locator('#komodo-recovery-explainer').innerText(),'The recovered Pepecoin will be controlled by this wallet’s new seed phrase. Your old Komodo Pepecoin address will be emptied by the sweep. Do not reuse the old Komodo seed.');
+ assert.equal(await p.locator('#komodo-backup-ack + span').innerText(),'I have backed up this wallet’s new seed phrase and any extra passphrase.');
+ const word=i=>p.locator('[data-restore-word="'+i+'"]');
+ const done=async()=>{if(await p.locator('#restore-keyboard').isVisible())await p.locator('#restore-done').click();};
+ if(scenario==='send'){
+  await p.getByRole('link',{name:'Cancel',exact:true}).click();await p.locator('#komodo-open').waitFor();
+  await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();
+  await p.screenshot({path:'/tmp/safecore-komodo-empty.png',fullPage:true});
+ }
+ await word(0).fill('lega');await p.getByRole('button',{name:'Use recovery word legal',exact:true}).click();assert.equal(await word(0).inputValue(),'legal');
+ await word(0).fill(Array(12).fill('abandon').join(' '));await done();
+ assert.equal(await p.locator('#review-komodo-sweep').isDisabled(),false,'Legacy phrases do not use the HD checksum gate');
+ await word(0).fill('UnlistedWord  '+Array(11).fill('e\u0301xample').join('\t'));await done();
+ assert.equal(await p.locator('#komodo-phrase').inputValue(),'UnlistedWord  '+Array(11).fill('e\u0301xample').join('\t'),'Do not normalize legacy key material');
+ assert.equal(await p.locator('#review-komodo-sweep').isDisabled(),false,'Words outside BIP39 are accepted');
+ await word(0).fill(scenario==='reuse'?phrase:old);await done();
+ if(scenario==='send'){
+  await p.evaluate(()=>document.getElementById('komodo-sweep-form').dispatchEvent(new Event('submit',{cancelable:true,bubbles:true})));
+  assert.equal(await p.evaluate(()=>__source.length),0,'Acknowledgment required even if form validation is bypassed');
+ }
+ await p.locator('#komodo-backup-ack').check();
+ if(scenario==='expiry'){
+  await p.evaluate(()=>__holdSource=true);await p.locator('#review-komodo-sweep').click();
+  await p.waitForFunction(()=>typeof __finishSource==='function');
+  for(let i=0;i<10;i++){await p.clock.runFor(60001);await p.evaluate(()=>document.dispatchEvent(new Event('pointerdown')));}
+  await p.locator('#restore-grid').waitFor();assert.equal(await word(0).inputValue(),'');
+  await p.evaluate(()=>__finishSource());assert.equal(await p.locator('#broadcast-send').count(),0);
+ }
  else if(scenario==='background'){
   await p.evaluate(()=>window.dispatchEvent(new Event('safecore-pause')));assert.equal(await p.locator('#komodo-phrase').count(),0);
-  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await choose('pep');await p.locator('#komodo-open').click();await p.locator('#verify-wallet-phrase').waitFor();
+  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await choose('pep');await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();assert.equal(await word(0).inputValue(),'');
  }else{
   if(scenario==='cancel')await p.evaluate(()=>__holdSource=true);
   await p.locator('#review-komodo-sweep').click();
   if(scenario==='reuse'){await p.locator('#error').waitFor({state:'visible'});assert.match(await p.locator('#error').innerText(),/Do not reuse/);assert.equal(await p.evaluate(()=>__source.length),0);}
   else if(scenario==='cancel'){
-   await p.waitForFunction(()=>typeof __finishSource==='function');await p.locator('[data-nav=wallet]').click();await p.locator('.holdings').waitFor();await p.evaluate(()=>__finishSource());assert.equal(await p.locator('#broadcast-send').count(),0);
-   await choose('pep');await p.locator('#komodo-open').click();await p.locator('#verify-wallet-phrase').waitFor();
+   await p.waitForFunction(()=>typeof __finishSource==='function');await p.locator('#restore-back').click();await p.locator('#komodo-open').waitFor();await p.evaluate(()=>__finishSource());assert.equal(await p.locator('#broadcast-send').count(),0);
+   await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();
   }else{
    await p.getByRole('heading',{name:'Review sweep',exact:true}).waitFor();assert.equal(await p.locator('#komodo-phrase').count(),0);
    assert.match(await p.locator('#komodo-review-warning').innerText(),/empties the displayed old Komodo PEP address/);
    assert.match(await p.locator('#sweep-fee-estimate').innerText(),/0.004275 PEP/);
-   if(scenario==='review-expiry'){await p.clock.runFor(90001);await p.locator('#verify-wallet-phrase').waitFor();}
+   if(scenario==='review-expiry'){await p.clock.runFor(90001);await p.locator('#restore-grid').waitFor();assert.equal(await word(0).inputValue(),'');}
    else{
     if(scenario==='disable')await p.evaluate(()=>{for(const k of Object.keys(localStorage))if(k.startsWith('corevault.komodo-recovery.'))localStorage.removeItem(k);});
-    await p.locator('#send-ack').check();if(scenario==='protected')await p.locator('#send-password').fill(password);
+    await p.locator('#send-ack').check();
+    if(scenario==='protected'){
+     await p.locator('#send-password').fill('Wrong-fixture-password');await p.locator('#broadcast-send').click();
+     await p.waitForFunction(()=>document.getElementById('error').textContent.includes('Incorrect password'));
+     assert.equal(await p.evaluate(()=>__sent.length),0);await p.locator('#send-password').fill(password);
+    }
     await p.locator('#broadcast-send').click();
     if(scenario==='disable'){await p.locator('#error').waitFor({state:'visible'});assert.match(await p.locator('#error').innerText(),/disabled|expired/);}
     else{
@@ -85,4 +116,4 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  }
  for(const width of [320,390,430]){await p.setViewportSize({width,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  assert.deepEqual(errors,[]);await c.close();
-}console.log('PASS: opt-in/per-wallet persisted gate, PEP-only controls/routes, backup/password checks, isolated word entry, no seed reuse, full sweep review, pinned/next destinations, confirmation, disable/expiry/cancel/background guards and no old-seed storage.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+}console.log('PASS: opt-in/per-wallet gate, PEP-only routes, acknowledgment/password checks, exact-text predictive entry, no seed reuse, full review, pinned/next destinations, confirmation, disable/expiry/cancel/background guards and no old-seed storage.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

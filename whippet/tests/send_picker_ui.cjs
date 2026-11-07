@@ -10,9 +10,16 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await context.addInitScript(v=>{if(!localStorage.getItem('whippet.dev.encrypted.v1'))localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));},vault);
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+100));await page.goto('http://localhost:8787/#send');
-  const choose=async coin=>{await page.locator('#send-coin').click();await page.locator(`[data-send-coin="${coin}"]`).click();};
+  const choose=async coin=>{await page.locator(`[data-send-coin="${coin}"]`).click();};
   await page.waitForFunction(()=>document.querySelectorAll('[data-send-coin]').length===2);
   assert.match(await page.locator('#send-coin').innerText(),/Choose an asset/);
+  assert.equal(await page.locator('details.wallet-coin-switch, .picker-chevron').count(),0);
+  assert.equal(await page.locator('[data-send-coin=pep]').isVisible(),true);
+  assert.equal(await page.locator('[data-send-coin=wht]').isVisible(),true);
+  assert.equal(await page.locator('.wallet-coin-switch > p').innerText(),'With a balance');
+  for(const el of await page.locator('[data-send-coin]').all()){const box=await el.boundingBox();assert.ok(box.height>=48&&box.height<=54,'Compact asset rows retain touch height');}
+  assert.deepEqual(await page.locator('[data-send-coin=pep]').evaluate(el=>{const s=getComputedStyle(el);return [s.borderTopWidth,s.boxShadow,s.backgroundColor];}),['0px','none','rgba(0, 0, 0, 0)']);
+  await page.screenshot({path:'/tmp/safecore-send-choices.png'});
   assert.equal(await page.locator('#send-form').count(),0);
   assert.match(await page.locator('[data-send-coin="wht"]').textContent(),/50 WHT/);
   await page.evaluate(()=>localStorage.setItem('corevault.hidden-coins.v1',JSON.stringify(['wht','doge'])));
@@ -25,7 +32,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await page.waitForFunction(()=>window.__releaseSpend);await choose('pep');
   await page.locator('#send-address').fill('keep-this');await page.locator('#send-amount').fill('3');
   await page.evaluate(()=>__releaseSpend());await page.clock.runFor(4000);
-  assert.match(await page.locator('#send-coin').innerText(),/Pepecoin/);
+  assert.equal(await page.locator('[data-send-coin=pep]').getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('#send-address').inputValue(),'keep-this');assert.equal(await page.locator('#send-amount').inputValue(),'3');
   // Accepted zero balances disappear without choosing a different asset for us.
   await page.evaluate(()=>{__balances.wht=0;});await page.clock.runFor(4000);

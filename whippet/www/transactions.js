@@ -18,6 +18,9 @@
   function blob(h){const a=bytes('0x'+h);return concat([vi(a.length),a]);}
   function amount(text){if(typeof text!=='string'||!/^(0|[1-9]\d{0,9})(\.\d{1,8})?$/.test(text))throw Error('Enter a coin amount with at most 8 decimal places.');const [whole,fraction='']=text.split('.');return BigInt(whole)*COIN+BigInt(fraction.padEnd(8,'0'));}
   function format(n){n=BigInt(n);const sign=n<0n?'-':'';if(n<0n)n=-n;const fraction=String(n%COIN).padStart(8,'0').replace(/0+$/,'');return sign+String(n/COIN)+(fraction?'.'+fraction:'');}
+  // Display only: group the integer part without converting exact base units
+  // to floating point. Editable amounts and transaction serialization use format.
+  function formatDisplay(n){const [whole,fraction]=format(n).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(fraction?'.'+fraction:'');}
   function script(coin,address){
     if(!E.NETWORKS[coin]||typeof address!=='string'||address.length<25||address.length>40)throw Error('Use a plain receiving address for the selected coin.');
     let a;try{a=U.base58.decode(address);}catch(_){throw Error('Invalid address.');}
@@ -164,5 +167,5 @@
     if(p.destination!==owned||p.changeAddress!==owned||key.address===owned)throw Error('Sweep destination must be a different address in your wallet.');
     return signWith(p,()=>key,{inputs:p.inputs.length,bytes:size,fee});
   }
-  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,SWEEP_FEE_POLICY,amount,format,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
+  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,SWEEP_FEE_POLICY,amount,format,formatDisplay,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
 });

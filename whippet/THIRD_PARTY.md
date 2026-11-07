@@ -1,5 +1,9 @@
 # Existing project assets and libraries
 
+Original SafeCore code is MIT-licensed. The root license is also bundled as
+`www/assets/safecore.LICENSE` in the APK; the package audit verifies exact parity.
+This does not change the following third-party licenses or artwork rights.
+
 Copied without modifying their contents:
 
 - `www/assets/pepecoin.png`: this project's `static_root/assets/P_logo.png`.

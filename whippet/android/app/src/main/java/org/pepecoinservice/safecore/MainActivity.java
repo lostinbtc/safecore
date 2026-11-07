@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
@@ -45,6 +46,33 @@ public final class MainActivity extends Activity {
     private String importedBackup;
     private PermissionRequest cameraRequest;
     private boolean cameraPrompt, cameraResultReady;
+    private AlertDialog screenProtectionDialog;
+    private static final String SCREEN_PREFS = "screen_privacy", SCREEN_PROTECTED = "protected";
+
+    private boolean screenProtected() {
+        return getSharedPreferences(SCREEN_PREFS, MODE_PRIVATE).getBoolean(SCREEN_PROTECTED, true);
+    }
+    private void applyScreenProtection() {
+        if(!foreground || screenProtected())getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    }
+    private void respondScreenProtection(JavaScriptReplyProxy reply, long id) {
+        try { reply.postMessage(new JSONObject().put("id",id).put("ok",true).put("enabled",screenProtected()).toString()); }
+        catch(Exception ignored) { }
+    }
+    private void saveScreenProtection(boolean enabled, JavaScriptReplyProxy reply, long id) {
+        // The native setting is device-wide, not part of any seed/backup.
+        if(!foreground || web==null || web.getUrl()==null || !localPage(Uri.parse(web.getUrl()))
+            || !"security".equals(Uri.parse(web.getUrl()).getFragment())) {
+            respond(reply,id,false,"Open Settings to change screenshot protection.");return;
+        }
+        boolean previous=screenProtected();
+        if(!getSharedPreferences(SCREEN_PREFS,MODE_PRIVATE).edit().putBoolean(SCREEN_PROTECTED,enabled).commit()) {
+            getSharedPreferences(SCREEN_PREFS,MODE_PRIVATE).edit().putBoolean(SCREEN_PROTECTED,previous).commit();
+            applyScreenProtection();respond(reply,id,false,"Could not save screenshot protection.");return;
+        }
+        applyScreenProtection();respondScreenProtection(reply,id);
+    }
 
     static boolean cameraResources(Uri origin, String[] resources) {
         return origin != null && (ORIGIN.equals(origin.toString()) || (ORIGIN+"/").equals(origin.toString()))
@@ -92,7 +120,9 @@ public final class MainActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        if(!BuildConfig.DEBUG_TOOLS_ENABLED)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        // Secure before the first frame; debugging never changes this preference.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        if(android.os.Build.VERSION.SDK_INT>=33)setRecentsScreenshotEnabled(false);
         web = new WebView(this);
         web.setId(View.generateViewId());
         web.setSaveEnabled(false);
@@ -151,11 +181,12 @@ public final class MainActivity extends Activity {
                 }
                 if ("https".equals(u.getScheme()) && "api.kraken.com".equals(u.getHost()) && u.getPort() == -1
                     && "/0/public/Ticker".equals(u.getPath()) && "pair=PEPUSD,USDTUSD".equals(u.getQuery()) && "GET".equals(request.getMethod())) return null;
-                return blocked(); // WSS destinations are restricted separately by the bundled CSP.
+                return blocked(); // WSS is allowed by CSP; WalletNetwork selects default/user-approved endpoints.
             }
             @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); }
             @Override public void onPageFinished(WebView view, String url) {
                 if (url == null || !localPage(Uri.parse(url))) return;
+                publishSystemTheme();
                 view.evaluateJavascript("Boolean(window.isSecureContext && window.crypto?.subtle && navigator.locks && typeof BigInt === 'function')", value -> {
                     if (!"true".equals(value)) showUnsupported();
                 });
@@ -214,6 +245,24 @@ public final class MainActivity extends Activity {
                         if (!value.matches("[1-9A-HJ-NP-Za-km-z]{26,50}")) throw new IllegalArgumentException();
                         ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("SafeCore receiving address", value));
                         respond(reply, id, true, "");
+                    } else if (action.equals("getScreenProtection")) {
+                        if(!value.isEmpty())throw new IllegalArgumentException();
+                        respondScreenProtection(reply,id);
+                    } else if (action.equals("setScreenProtection")) {
+                        if(!"security".equals(Uri.parse(view.getUrl()).getFragment()) || screenProtectionDialog!=null
+                            || !(value.equals("true")||value.equals("false")))throw new IllegalArgumentException();
+                        if(value.equals("true"))saveScreenProtection(true,reply,id);
+                        else {
+                            final long requestId=id;
+                            screenProtectionDialog=new AlertDialog.Builder(this).setTitle("Allow screenshots?")
+                                .setMessage("Screenshots and recordings may expose balances or recovery phrases. Keep them private.")
+                                .setPositiveButton("Allow",(d,w)->saveScreenProtection(false,reply,requestId))
+                                .setNegativeButton("Cancel",(d,w)->respond(reply,requestId,false,"Screenshot setting unchanged."))
+                                .setOnCancelListener(d->respond(reply,requestId,false,"Screenshot setting unchanged."))
+                                .create();
+                            screenProtectionDialog.setOnDismissListener(d->screenProtectionDialog=null);
+                            screenProtectionDialog.show();
+                        }
                     } else if (action.equals("exportBackup")) {
                         if (exportData != null || value.length() > 65536 || value.isEmpty()) throw new IllegalArgumentException();
                         exportData = value; exportReply = reply; exportId = id;
@@ -280,6 +329,8 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onPause() {
         foreground = false;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        if(screenProtectionDialog!=null)screenProtectionDialog.cancel();
         // The in-app OS permission sheet must not discard the send form. A real
         // background transition still locks in onStop, even with a sheet open.
         if(web != null) { if(!cameraPrompt)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null); web.onPause(); }
@@ -299,7 +350,20 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume(); foreground = true;
+        applyScreenProtection();
+        publishSystemTheme();
         if(web != null) { web.onResume(); web.evaluateJavascript("window.dispatchEvent(new Event('safecore-resume'))",null); }
+    }
+    // WebView's media query can reflect the Activity theme instead of the device.
+    // Send only a light/dark value to our bundled page; never reload wallet state.
+    private void publishSystemTheme() {
+        if(web==null||web.getUrl()==null||!localPage(Uri.parse(web.getUrl())))return;
+        boolean dark=(getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
+        web.evaluateJavascript("window.dispatchEvent(new CustomEvent('safecore-theme',{detail:'"+(dark?"dark":"light")+"'}))",null);
+    }
+    @Override public void onConfigurationChanged(Configuration config) {
+        super.onConfigurationChanged(config);
+        publishSystemTheme();
     }
     @Override protected void onPostResume() {
         super.onPostResume();
@@ -316,6 +380,7 @@ public final class MainActivity extends Activity {
         });
     }
     @Override protected void onDestroy() {
+        if(screenProtectionDialog!=null)screenProtectionDialog.cancel();
         denyCamera();
         if(fileCallback != null) fileCallback.onReceiveValue(null);
         exportData = null; exportReply = null; importedBackup = null;

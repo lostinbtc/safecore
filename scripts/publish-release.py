@@ -80,8 +80,9 @@ def main():
         if error.code != 404:
             raise
         body = (
+            Path('RISK_NOTICE.md').read_text(encoding='utf-8') + '\n\n' +
             'Development prerelease for expendable amounts; not independently audited.\n\n'
-            'Android 8.0+. Debugging and screenshots disabled. Fresh installs contain no wallets.\n\n'
+            'Android 8.0+. Debugging disabled; screenshots blocked by default. Fresh installs contain no wallets.\n\n'
             'Uses the existing development signing identity, not production release signing. '
             'Back up before changing installations; do not uninstall to bypass signature errors.\n\n'
             'APK SHA-256: `' + digest + '`\n\n'

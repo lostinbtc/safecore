@@ -25,6 +25,18 @@
       invalidate(){candidate=null;}
     };
   }
+  // Display estimates only; never used for coin amounts or transaction signing.
+  // Keep the total, each holding and unit price on the same USDT conversion.
+  function valueInUsdt(coin,amount,pepUsd,usdtUsd){
+    if(coin!=='pep'||!Number.isFinite(pepUsd)||pepUsd<=0||!Number.isFinite(usdtUsd)||usdtUsd<=0)return null;
+    const value=Number(amount)/1e8*pepUsd/usdtUsd;
+    return Number.isFinite(value)?value:null;
+  }
+  function formatWorth(value){
+    if(value===null||!Number.isFinite(value))return '*';
+    if(value>0&&value<0.01)return '<0.01';
+    return new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}).format(value);
+  }
   // Include all known coin balances for this wallet, not the selected coin.
   // Unknown positive holdings are not assigned a fabricated zero price.
   function worth(snapshots,pepUsd,usdtUsd){
@@ -35,10 +47,11 @@
       const amount=s.confirmed+s.unconfirmed;
       if(amount<=0n)continue;
       positive=true;
-      if(coin==='pep'&&Number.isFinite(pepUsd)&&pepUsd>0&&Number.isFinite(usdtUsd)&&usdtUsd>0){total+=Number(amount)/1e8*pepUsd/usdtUsd;priced=true;}
+      const value=valueInUsdt(coin,amount,pepUsd,usdtUsd);
+      if(value!==null){total+=value;priced=true;}
       else incomplete=true;
     }
     return {value:priced||(!positive&&!incomplete)?total:null,incomplete};
   }
-  return {POLL_MS,WAIT_MS,create,worth};
+  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,formatWorth};
 });

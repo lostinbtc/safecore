@@ -1,3 +1,42 @@
+## SafeCore Pepecoin fork notice
+
+Notice updated: **2026-11-07**.
+
+This is a modified fork of [Blockbook](https://github.com/trezor/blockbook),
+originally created by SatoshiLabs / Trezor and its contributors. The included
+changes add Pepecoin parser/RPC support, mainnet/testnet coin configurations,
+and a container build/deployment path. It is not an unmodified upstream release
+or a statement of endorsement by the upstream authors. The fork remains under
+[GNU AGPL-3.0](COPYING); original copyright and license notices are retained.
+
+For this checkout, use the [included Dockerfile](Dockerfile) and
+[SafeCore setup instructions](../../docs/SELF_HOSTING.md), with dependency versions
+recorded in [go.mod](go.mod), [go.sum](go.sum) and the Dockerfile. The upstream
+documentation below is retained for reference; its `make`/Debian packaging path
+references a `build/` tooling directory that is not included in this checkout.
+
+### Pepecoin Service deployment source
+
+On 2026-11-07, the 241 selected runtime source, asset, module and license files
+checked against the source bundled in the running Pepecoin Service Blockbook
+container matched this repository byte-for-byte. This was a source comparison,
+not a reproducible-binary or security audit.
+
+[Dockerfile.deployed](Dockerfile.deployed) preserves the build recipe from that
+running container (Go 1.21 / Debian Bullseye / RocksDB v7.7.2). The default
+[Dockerfile](Dockerfile) uses Bookworm and limits parallel build jobs; it is not
+the exact deployed recipe. To select the archived recipe, build from this directory
+with `docker build -f Dockerfile.deployed -t pepecoin-blockbook-deployed .`.
+Production RPC credentials and data are intentionally excluded; configure your
+own node using the [safe deployment templates](../../docs/SELF_HOSTING.md).
+
+Operators of modified network services must prominently offer users free access
+to the corresponding source of the deployed version, including modifications and
+required build/install scripts. An upstream link or private checkout alone does
+not fulfill that source offer. See [AGPL section 13](COPYING).
+
+---
+
 [![Go Report Card](https://goreportcard.com/badge/trezor/blockbook)](https://goreportcard.com/report/trezor/blockbook)
 
 # Blockbook
@@ -21,7 +60,7 @@ recommended.
 
 User installation guide is [here](<https://wiki.trezor.io/User_manual:Running_a_local_instance_of_Trezor_Wallet_backend_(Blockbook)>).
 
-Developer build guide is [here](/docs/build.md).
+Developer build guide is [here](docs/build.md).
 
 Contribution guide is [here](CONTRIBUTING.md).
 
@@ -37,7 +76,7 @@ Testnets for some coins are also supported, for example:
 
 -   Bitcoin Testnet, Bitcoin Cash Testnet, ZCash Testnet, Ethereum Testnets (Sepolia, Holesky)
 
-List of all implemented coins is in [the registry of ports](/docs/ports.md).
+List of all implemented coins is in [the registry of ports](docs/ports.md).
 
 ## Common issues when running Blockbook or implementing additional coins
 
@@ -69,8 +108,8 @@ Your coin's block/transaction data may not be compatible with `BitcoinParser` `P
 
 ## Data storage in RocksDB
 
-Blockbook stores data the key-value store RocksDB. Database format is described [here](/docs/rocksdb.md).
+Blockbook stores data the key-value store RocksDB. Database format is described [here](docs/rocksdb.md).
 
 ## API
 
-Blockbook API is described [here](/docs/api.md).
+Blockbook API is described [here](docs/api.md).

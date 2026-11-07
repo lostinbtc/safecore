@@ -1,6 +1,11 @@
 const assert=require('node:assert/strict'),ethers=require('../www/assets/ethers.umd.min.js');
 const R=require('../www/recovery.js').create(ethers),E=require('../www/engine.js');
 const phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+assert.deepEqual(R.predict('').matches,[],'Never prepopulate suggestions');
+assert.deepEqual(R.predict('tre').matches,['treat','tree','trend']);
+assert.deepEqual(R.predict('tre').letters.sort(),['a','e','n']);
+assert.equal(R.predict('tree').word,true);
+assert.deepEqual(R.predict('zzzz').matches,[]);
 assert.equal(R.inspect(phrase).valid,true);
 assert.equal(R.inspect('  '+phrase.toUpperCase().replaceAll(' ','\n')+' ').valid,true);
 assert.deepEqual(R.inspect(phrase.replace('about','abotu')).invalid,[12]);

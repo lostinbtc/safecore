@@ -72,7 +72,9 @@ const recipe = E.recipe(ethers, 'abandon abandon abandon abandon abandon abandon
           assert.ok(box.y+box.height<=nav.y-8,'Rescan clears navigation');
           assert.ok(Math.abs(box.x+box.width-(nav.x+nav.width-20))<2,'Rescan sits at wallet lower-right');
           assert.ok(box.height>=44);
-          assert.equal(await page.locator('#rescan').evaluate(el=>getComputedStyle(el).backgroundColor), 'rgb(87, 186, 255)');
+          const rescanColor=await page.locator('#rescan').evaluate(el=>getComputedStyle(el).backgroundColor);
+          const light=await page.evaluate(()=>document.documentElement.dataset.theme==='light');
+          assert.equal(rescanColor,light?'rgb(18, 100, 163)':'rgb(87, 186, 255)');
         }
         await page.evaluate(()=>{document.getElementById('toast').textContent='Fixture notice';document.getElementById('toast').classList.add('visible');});
         const notice=await page.locator('#toast').boundingBox(),button=await page.locator('#rescan').boundingBox();

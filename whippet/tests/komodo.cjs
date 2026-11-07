@@ -8,6 +8,7 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  const encrypted=await E.encrypt(crypto.webcrypto,recipe,password);
  for(const vault of [open,encrypted]){
   const fingerprint=await K.verifyDestination(crypto.webcrypto,vault,password,current,recipe.passphrase);
+  assert.equal(K.fingerprint(current),fingerprint,'Unlocked wallet fingerprint preserves the no-reuse check without re-entering its seed');
   await assert.rejects(()=>K.verifyDestination(crypto.webcrypto,vault,password,old,recipe.passphrase),/do not match/);
   await assert.rejects(()=>K.verifyDestination(crypto.webcrypto,vault,password,current,''),/do not match/);
   for(const phrase of [old,old.toUpperCase(),old.replace(' ','  '),old.replace('legal','légal'),Array(24).fill('fixture').join(' ')]){
@@ -24,12 +25,13 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
   assert.notEqual(K.key(old.toUpperCase(),fingerprint).address,K.key(old,fingerprint).address);
   for(const reused of [current,current.toUpperCase(),current.replaceAll(' ','  ')])assert.throws(()=>K.key(reused,fingerprint),/Do not reuse/);
   for(const bad of ['',old.split(' ').slice(1).join(' '),'x'.repeat(2049),null])assert.throws(()=>K.key(bad,fingerprint));
-  assert.throws(()=>K.key(old,''),/Verify/);
+  assert.throws(()=>K.key(old,''),/Open your destination wallet/);
  }
  await assert.rejects(()=>K.verifyDestination(crypto.webcrypto,encrypted,'Wrong-fixture-password',current,recipe.passphrase),/Incorrect password/);
  const normal=R.create(ethers),legacy=R.create(ethers,{mode:'komodo'}),invalidChecksum=Array(12).fill('abandon').join(' ');
  assert.equal(normal.inspect(invalidChecksum).valid,false);assert.equal(legacy.inspect(invalidChecksum).valid,true);
  assert.equal(legacy.inspect(Array(12).fill('legacy-custom').join(' ')).valid,true);
+ assert.equal(legacy.inspect(Array(12).fill('x\u00a8y').join(' ')).valid,true,'Legacy count must not NFKD-normalize characters into whitespace');
  assert.equal(legacy.inspect(Array(15).fill('abandon').join(' ')).valid,false);
  assert.deepEqual(legacy.suggest('aban',4).matches,normal.suggest('aban',4).matches);
  console.log('PASS: isolated legacy Komodo PEP derivation, independent SHA256/secp256k1 checks, exact text semantics, current-wallet backup/password verification, no seed reuse and separate recovery validation.');

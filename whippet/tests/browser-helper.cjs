@@ -10,8 +10,11 @@ exports.chromium = {
     if (process.env.CHROME_BIN) options.executablePath = process.env.CHROME_BIN;
     const browser = await original.launch(options);
     const newContext = browser.newContext.bind(browser);
-    browser.newContext = async (...args) => {
-      const context = await newContext(...args);
+    browser.newContext = async ({acceptRiskNotice = true, ...options} = {}) => {
+      const context = await newContext(options);
+      // Unrelated suites represent returning users. Dedicated disclaimer tests
+      // opt out to exercise the real first-run gate; no production test bypass.
+      if (acceptRiskNotice) await context.addInitScript(() => localStorage.setItem('corevault.risk-ack.v1', 'acknowledged'));
       await context.route('http://localhost:8787/**', async route => {
         const requestPath = decodeURIComponent(new URL(route.request().url()).pathname);
         const target = path.resolve(root, '.' + (requestPath === '/' ? '/index.html' : requestPath));

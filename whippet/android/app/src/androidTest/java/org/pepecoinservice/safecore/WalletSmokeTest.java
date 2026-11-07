@@ -98,7 +98,7 @@ public class WalletSmokeTest extends ActivityInstrumentationTestCase2<MainActivi
         until("window.WalletEngine && document.getElementById('main')?.textContent.length > 0");
         assertEquals("true",js("isSecureContext && !!crypto.subtle && !!navigator.locks && !!SafeCorePlatform"));
         assertEquals("true",js("localStorage.getItem('whippet.dev.encrypted.v1') === null"));
-        assertEquals(!BuildConfig.DEBUG_TOOLS_ENABLED,(activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
+        assertTrue((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
         assertFalse(MainActivity.localPage(Uri.parse("https://example.com/assets/wallet/index.html")));
         assertFalse(MainActivity.localPage(Uri.parse("file:///assets/wallet/index.html")));
         assertTrue(MainActivity.localPage(Uri.parse(MainActivity.START+"#receive")));
@@ -201,5 +201,51 @@ public class WalletSmokeTest extends ActivityInstrumentationTestCase2<MainActivi
         js("window.addEventListener('error',e=>window.__qaError=e.message);window.dispatchEvent(new Event('safecore-pause'));window.dispatchEvent(new Event('safecore-resume'));window.dispatchEvent(new CustomEvent('safecore-import',{detail:localStorage.getItem('whippet.dev.encrypted.v1')}))");
         until("document.getElementById('file-status')?.textContent.includes('Unprotected backup selected')");
         // Deliberately preserve this disposable QA wallet; uninstall only this test app later.
+    }
+    public void testScreenProtectionPreference() throws Exception {
+        MainActivity activity=getActivity();
+        assertTrue("Disposable QA app only",activity.getPackageName().endsWith(".qa"));
+        getInstrumentation().runOnMainSync(()->web=find(activity.getWindow().getDecorView()));
+        until("window.SafeCorePlatform && document.getElementById('main')");
+        js("localStorage.setItem('corevault.risk-ack.v1','acknowledged');location.hash='security';dispatchEvent(new StorageEvent('storage',{key:'corevault.risk-ack.v1'}))");
+        until("document.getElementById('screen-protection') && !document.getElementById('screen-protection').disabled");
+        assertEquals("true",js("document.getElementById('screen-protection').checked"));
+        assertTrue((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
+        try {
+            js("document.getElementById('screen-protection').click()");
+            screenDialogButton(activity,android.content.DialogInterface.BUTTON_NEGATIVE);
+            until("!document.getElementById('screen-protection').disabled");
+            assertEquals("true",js("document.getElementById('screen-protection').checked"));
+            js("document.getElementById('screen-protection').click()");
+            screenDialogButton(activity,android.content.DialogInterface.BUTTON_POSITIVE);
+            until("!document.getElementById('screen-protection').disabled && !document.getElementById('screen-protection').checked");
+            assertFalse((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
+            getInstrumentation().runOnMainSync(()->web.reload());
+            until("document.getElementById('screen-protection') && !document.getElementById('screen-protection').disabled");
+            assertEquals("false",js("document.getElementById('screen-protection').checked"));
+            getInstrumentation().runOnMainSync(()->getInstrumentation().callActivityOnPause(activity));
+            assertTrue((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
+            getInstrumentation().runOnMainSync(()->getInstrumentation().callActivityOnResume(activity));
+            assertFalse((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
+            js("location.hash='wallet'");until("location.hash==='#wallet'");
+            js("window.__screenRejected=false;SafeCorePlatform.setScreenProtection(false).catch(()=>__screenRejected=true)");until("__screenRejected");
+            js("location.hash='security'");until("document.getElementById('screen-protection') && !document.getElementById('screen-protection').disabled");
+            js("document.getElementById('screen-protection').click()");
+            until("!document.getElementById('screen-protection').disabled && document.getElementById('screen-protection').checked");
+            assertTrue((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
+        } finally {
+            activity.getSharedPreferences("screen_privacy",0).edit().putBoolean("protected",true).commit();
+            getInstrumentation().runOnMainSync(()->getInstrumentation().callActivityOnResume(activity));
+        }
+    }
+    private void screenDialogButton(MainActivity activity,int button) throws Exception {
+        java.lang.reflect.Field field=MainActivity.class.getDeclaredField("screenProtectionDialog");field.setAccessible(true);
+        for(int i=0;i<50;i++){
+            android.app.AlertDialog[] dialog={null};
+            getInstrumentation().runOnMainSync(()->{try{dialog[0]=(android.app.AlertDialog)field.get(activity);}catch(Exception e){throw new RuntimeException(e);}});
+            if(dialog[0]!=null){getInstrumentation().runOnMainSync(()->dialog[0].getButton(button).performClick());return;}
+            Thread.sleep(100);
+        }
+        fail("Expected native screenshot confirmation");
     }
 }

@@ -1,11 +1,31 @@
 # APK prereleases
 
+Before installing, read the [wallet risks and liability disclaimer](../RISK_NOTICE.md).
+Funds may be permanently lost. New release descriptions include the full notice;
+this does not retroactively modify existing published releases.
+
 Download an APK only from this repository's Releases page. Compare its SHA-256
 with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
-This prerelease build is SafeCore 0.1.0-test.15, Android 8.0+ (API 26), with
+## Test.16
+
+This update uses Android versionCode 16 and versionName `0.1.0-test.16`, promoting
+the locally tested `test.16-local.6` iteration without skipping a release number.
+The verified APK is published separately through the tagged-release workflow;
+a source pull request alone does not make a new APK available.
+
+This iteration adds compact wallet/navigation screens, collapsible wallet controls,
+streamlined restore entry, system-theme defaults with a manual override, balance
+privacy, local screenshot controls and custom secure Electrum connections. Address
+discovery publishes verified batches, and large Whippet amounts retain exact integer
+precision. Komodo recovery remains Pepecoin-only. See the wallet guide for current
+behavior and the security notes before using live funds.
+
+## Previously published prereleases
+
+The test.15 prerelease is SafeCore 0.1.0-test.15, Android 8.0+ (API 26), with
 `safeCoreDebugTools=false`. USB/WebView debugging and screenshots are disabled.
 It starts without saved wallets on a fresh installation. It contains no desktop
 database, recovery material, RPC credentials or signing private key.
@@ -24,8 +44,7 @@ Activity now reconciles send attempts against all fetched address history before
 limiting the displayed history to 30 entries, so older confirmed sends do not
 reappear as outstanding after a refresh or reload. Existing test.14 send-refresh
 behavior, ordinary-send limits, wallet storage and signing identity are unchanged.
-Earlier prereleases remain available to authorized repository users; releases
-in this private repository require access permission.
+Earlier prereleases remain available from this public repository's Releases page.
 
 Version 0.1.0-test.14 tracks new ordinary sends until their first confirmation,
 then freshly checks the input addresses, wallet change address and any wallet-owned
@@ -49,7 +68,7 @@ transaction; oversized sources are rejected, never partially swept. Full Rescan
 can delay balance publication and Send readiness while it completes. Discovery
 does not extend beyond receiving index 199. See the wallet guide for these limits.
 
-Version 0.1.0-test.12 includes Chromatic's polling optimization and Android URL
+Version 0.1.0-test.12 includes polling optimization and Android URL
 guards from PR #1. Each scan checks Electrum address status and reuses unchanged
 live rows; restored disk-cache rows still require live fetches. Previous
 transactions needed for spending are fetched concurrently. Polling and balance

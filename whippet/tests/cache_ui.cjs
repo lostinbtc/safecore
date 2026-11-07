@@ -23,7 +23,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
     },vault);
     await page.goto('http://localhost:8787/');
     await page.waitForFunction(()=>document.querySelector('[data-overview-coin=pep] .holding-balance')?.textContent==='5 PEP');
-    assert.match(await page.locator('[data-overview-coin=pep] .holding-status').innerText(),/Last known/);
+    assert.doesNotMatch(await page.locator('[data-overview-coin=pep]').innerText(),/Last known|Updated/);
     assert.equal(await page.locator('#send-now').count(),0);
     await page.waitForFunction(()=>document.querySelector('[data-overview-coin=pep] .holding-status').textContent.includes('Unable to refresh'));
     assert.equal(await page.locator('[data-overview-coin=pep] .holding-balance').innerText(),'5 PEP');

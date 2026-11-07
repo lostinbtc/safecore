@@ -8,12 +8,25 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'),accounts=E.accounts(ethers,recipe);
   await context.addInitScript(v=>{if(!localStorage.getItem('whippet.dev.encrypted.v1'))localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));},E.unprotected(webcrypto,recipe));
   const p=await context.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
-  const choose=async coin=>{await p.locator('#receive-coin').click();await p.locator(`[data-coin="${coin}"]`).click();await p.locator('#address').waitFor();};
+  const choose=async coin=>{await p.locator(`[data-coin="${coin}"]`).click();await p.locator('#address').waitFor();};
   const empty=async()=>{assert.match(await p.locator('#receive-coin').innerText(),/Choose an asset/);assert.equal(await p.locator('#address, #qr, #copy-address, #reuse-first').count(),0);};
   await p.goto('http://localhost:8787/');
   await p.locator('[data-nav="receive"]').click();await empty();
   assert.equal(await p.locator('.page-head').innerText(),'Receive');
   assert.equal(await p.locator('[data-coin]').count(),2);
+  assert.equal(await p.locator('details.wallet-coin-switch, .picker-chevron').count(),0);
+  assert.equal(await p.locator('[data-coin=pep]').isVisible(),true);
+  assert.equal(await p.locator('[data-coin=wht]').isVisible(),true);
+  assert.equal(await p.locator('.wallet-coin-switch > p').count(),0,'Redundant Receive helper removed');
+  for(const el of await p.locator('[data-coin]').all()){const box=await el.boundingBox();assert.ok(box.height>=48&&box.height<=54,'Compact asset rows retain touch height');}
+  const first=await p.locator('[data-coin=pep]').boundingBox(),second=await p.locator('[data-coin=wht]').boundingBox();assert.ok(second.y-first.y-first.height<=4,'Asset rows have a compact gap');
+  for(const theme of ['dark','light']){
+   await p.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   await p.locator('[data-coin=wht]').hover();
+   assert.deepEqual(await p.locator('[data-coin=wht]').evaluate(el=>{const s=getComputedStyle(el);return [s.borderTopWidth,s.boxShadow,s.backgroundColor];}),['0px','none','rgba(0, 0, 0, 0)'],'Coin choices remain unboxed, including hover and light theme');
+  }
+  await p.evaluate(()=>document.documentElement.dataset.theme='dark');
+  await p.screenshot({path:'/tmp/safecore-receive-choices.png'});
   await choose('pep');assert.equal(await p.locator('#address').textContent(),accounts.pep.address);await p.locator('#reuse-first').check();
   await choose('wht');assert.equal(await p.locator('#address').textContent(),accounts.wht.address);assert.equal(await p.locator('#reuse-first').isChecked(),false);await p.locator('#reuse-first').check();
   await p.locator('[data-nav="wallet"]').click();await p.locator('.holdings').waitFor();assert.equal(await p.locator('.holding-row').count(),2);

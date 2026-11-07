@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1018">
+  <meta name="color-scheme" content="light dark">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src wss://electrum.pepecoinservice.org:50004 wss://electrum.pepecoinservice.org:50005 https://api.kraken.com/0/public/Ticker; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src wss: https://api.kraken.com/0/public/Ticker; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
   <title>SafeCore · Multi-coin wallet</title>
   <link rel="icon" type="image/svg+xml" href="assets/icons/safecore-26.svg">
   <link rel="stylesheet" href="styles.css">
@@ -33,13 +34,13 @@
       <a href="#receive" data-nav="receive"><span data-icon="receive"></span>Receive</a>
       <a href="#send" data-nav="send"><span data-icon="send"></span>Send</a>
       <a href="#activity" data-nav="activity"><span data-icon="activity"></span>Activity</a>
-      <a href="#security" data-nav="security"><span data-icon="shield"></span>Security</a>
+      <a href="#security" data-nav="security"><span data-icon="settings"></span>Settings</a>
     </nav>
   </aside>
   <div class="app-shell">
     <header class="topbar">
       <div><a class="mobile-brand" href="#wallet"><img src="assets/icons/safecore-26.svg" alt="">SafeCore</a><span id="current-wallet-label">No wallet selected</span><span id="breadcrumb" hidden>Overview</span></div>
-      <div class="header-actions"><button class="icon-button" id="lock" aria-label="Lock wallet" title="Lock wallet"><span data-icon="lock"></span></button><a class="icon-button wallets-shortcut" href="#wallets" aria-label="Manage wallets" title="Manage wallets"><span data-icon="wallet"></span></a></div>
+      <div class="header-actions"><button class="icon-button" id="lock" aria-label="Lock wallet" title="Lock wallet"><span data-icon="lock"></span></button><a id="header-add-coins" class="text-button" href="#coins" hidden>Add coins +</a><a class="icon-button wallets-shortcut" href="#wallets" aria-label="Manage wallets" title="Manage wallets"><span data-icon="wallet"></span></a></div>
     </header>
     <main id="main" tabindex="-1"></main>
     <footer class="app-footer"><span class="footer-right">No tracking</span></footer>

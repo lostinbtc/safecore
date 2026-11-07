@@ -4,26 +4,61 @@
     pep:{url:'wss://electrum.pepecoinservice.org:50004/',genesis:'37981c0c48b8d48965376c8a42ece9a0838daadb93ff975cb091f57f8c2a5faa'},
     wht:{url:'wss://electrum.pepecoinservice.org:50005/whippet',genesis:'863714e1c1a15526a0081a35097c56e28dbd43ef97f76fec0ccd5a7510326292'}
   };
+  for(const config of Object.values(CONFIG))Object.freeze(config);Object.freeze(CONFIG);
+  let endpoints={};
+  function validateEndpoint(value){
+    if(typeof value!=='string'||value.length>2048)throw Error('Enter a secure WebSocket address (wss://).');
+    const raw=value.trim();let url;
+    try{url=new URL(raw);}catch(_){throw Error('Enter a valid wss:// server address.');}
+    if(url.protocol!=='wss:'||!url.hostname||url.username||url.password||raw.includes('?')||raw.includes('#')||/[\s\\\u0000-\u001f\u007f]/.test(raw))throw Error('Use wss:// without a password, query or fragment.');
+    return url.href;
+  }
+  function validateEndpoints(values){
+    if(!values||typeof values!=='object'||Array.isArray(values)||Object.keys(values).some(coin=>!Object.hasOwn(CONFIG,coin)))throw Error('Saved connections are invalid. Restore defaults in Settings.');
+    const result={};
+    for(const coin of Object.keys(values)){const url=validateEndpoint(values[coin]);if(url!==CONFIG[coin].url)result[coin]=url;}
+    return result;
+  }
+  const endpoint=coin=>{if(!Object.hasOwn(CONFIG,coin))throw Error('Unsupported live coin.');return endpoints[coin]||CONFIG[coin].url;};
+  function configure(values){
+    const next=validateEndpoints(values);
+    for(const [coin,c] of Object.entries(clients)){c.retired=true;c.close();delete clients[coin];}
+    endpoints=next;
+  }
   class RPCError extends Error{}
+  // Preserve large JSON integer tokens BEFORE JSON.parse can round them. Leave
+  // quoted strings and ordinary protocol integers untouched. Money is converted
+  // to BigInt only at the validated amount boundary below; never via Number.
+  function parseResponse(text){
+    return JSON.parse(text.replace(/"(?:[^"\\]|\\.)*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g,token=>{
+      if(token[0]==='"')return token;
+      const number=Number(token);
+      // A decimal such as 1.0000000000000000001 must not round into an accepted
+      // integer amount either. Fractional relay-fee values remain ordinary numbers.
+      return !Number.isFinite(number)||Number.isInteger(number)&&(!Number.isSafeInteger(number)||! /^-?\d+$/.test(token))?JSON.stringify(token):token;
+    }));
+  }
   const listeners=new Set();
   const notify=coin=>{for(const listener of listeners)listener(coin);};
   class Client {
-    constructor(coin){if(!CONFIG[coin])throw Error('Unsupported live coin.');this.coin=coin;this.pending=new Map();this.dirty=new Map();this.statuses=new Map();this.subscribed=new Set();this.id=0;this.socket=null;this.ready=null;}
+    constructor(coin,url=endpoint(coin)){if(!Object.hasOwn(CONFIG,coin))throw Error('Unsupported live coin.');this.coin=coin;this.url=url;this.retired=false;this.pending=new Map();this.dirty=new Map();this.statuses=new Map();this.subscribed=new Set();this.id=0;this.socket=null;this.ready=null;}
     close(){const socket=this.socket;this.socket=null;this.ready=null;this.statuses.clear();this.subscribed.clear();this.dirty.clear();if(socket)socket.close();for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('Connection closed.'));}this.pending.clear();}
     async connect(){
+      if(this.retired)throw Error('Connection changed. Retry with the selected server.');
       if(this.ready)return this.ready;
       this.ready=(async()=>{
         await new Promise((resolve,reject)=>{
-          const socket=new WebSocket(CONFIG[this.coin].url);this.socket=socket;
+          const socket=new WebSocket(this.url);this.socket=socket;
           const timer=setTimeout(()=>{socket.close();reject(Error('Electrum connection timed out.'));},12000);
           socket.onopen=()=>{clearTimeout(timer);resolve();};
           socket.onerror=()=>{clearTimeout(timer);reject(Error('Electrum WSS connection failed.'));};
           socket.onclose=()=>{clearTimeout(timer);if(this.socket===socket)this.close();reject(Error('Electrum connection closed.'));};
           socket.onmessage=event=>{
+            if(this.socket!==socket||this.retired)return;
             try {
               if(typeof event.data!=='string'||event.data.length>2000000)throw Error('Invalid Electrum response.');
               for(const line of event.data.trim().split('\n')){
-                const messages=JSON.parse(line);for(const m of Array.isArray(messages)?messages:[messages]){
+                const messages=parseResponse(line);for(const m of Array.isArray(messages)?messages:[messages]){
                   if(m.method==='blockchain.scripthash.subscribe'&&Array.isArray(m.params)&&this.subscribed.has(m.params[0])&&validHash(m.params[0])&&validStatus(m.params[1])){this.statuses.set(m.params[0],{status:m.params[1],at:Date.now()});this.dirty.set(m.params[0],(this.dirty.get(m.params[0])||0)+1);notify(this.coin);continue;}
                   const p=this.pending.get(m.id);if(!p)continue;this.pending.delete(m.id);clearTimeout(p.timer);
                   if(m.error)p.reject(new RPCError(typeof m.error.message==='string'?m.error.message.slice(0,250):'Electrum rejected the request.'));else p.resolve(m.result);
@@ -39,6 +74,7 @@
       try{await this.ready;}catch(e){this.close();throw e;}
     }
     request(method,params){
+      if(this.retired)return Promise.reject(Error('Connection changed. Retry with the selected server.'));
       if(!this.socket||this.socket.readyState!==WebSocket.OPEN)return Promise.reject(Error('Electrum is disconnected.'));
       if(method==='blockchain.scripthash.subscribe')this.subscribed.add(params[0]);
       const id=++this.id;
@@ -47,6 +83,20 @@
     async call(method,params=[]){await this.connect();return this.request(method,params);}
   }
   const clients={};const client=coin=>clients[coin]||(clients[coin]=new Client(coin));
+  async function testConnection(coin,value,{signal}={}){
+    const url=validateEndpoint(value),c=new Client(coin,url);
+    const abort=()=>{c.retired=true;c.close();};
+    if(signal?.aborted)throw Error('Connection test cancelled.');
+    signal?.addEventListener('abort',abort,{once:true});
+    const deadline=setTimeout(abort,45000);
+    try{
+      const tip=await c.call('blockchain.headers.subscribe');
+      if(!Number.isSafeInteger(tip?.height)||tip.height<0)throw Error('Server returned an invalid chain height.');
+      const relay=await c.call('blockchain.relayfee');
+      if(!Number.isFinite(relay)||relay<0||relay>0.1)throw Error('Server returned an unsupported relay fee.');
+      return {url,height:tip.height};
+    }finally{clearTimeout(deadline);signal?.removeEventListener('abort',abort);abort();}
+  }
   const validHash=x=>typeof x==='string'&&/^[0-9a-f]{64}$/i.test(x);
   // Electrum status is null for no history, else a 64-char hex fingerprint of it.
   const validStatus=x=>x===null||validHash(x);
@@ -54,16 +104,23 @@
   // stale row can never be paired with a newer status (e.g. an older snapshot).
   const statusOf=new WeakMap();
   const emptyRow=account=>({account,confirmed:0n,unconfirmed:0n,history:[],utxos:[],checked:false});
-  async function batches(items,fn){for(let i=0;i<items.length;i+=10)await Promise.all(items.slice(i,i+10).map(fn));}
-  function safeInteger(n){if(!Number.isSafeInteger(n))throw Error('Balance exceeds this test client’s safe numeric range.');return BigInt(n);}
+  async function batches(items,fn,afterBatch){for(let i=0;i<items.length;i+=10){await Promise.all(items.slice(i,i+10).map(fn));if(afterBatch)afterBatch();}}
+  function safeInteger(value){
+    if(typeof value==='number'&&!Number.isSafeInteger(value))throw Error('Invalid or imprecise amount.');
+    if(typeof value!=='number'&&(typeof value!=='string'||! /^-?(0|[1-9]\d{0,18})$/.test(value)))throw Error('Invalid amount.');
+    const amount=BigInt(value),limit=0x7fffffffffffffffn;
+    if(amount>limit||amount< -limit)throw Error('Amount exceeds the transaction integer range.');
+    return amount;
+  }
   // Cache is public display/discovery metadata, never authority to spend.
   function encode(snapshot){
+    if(snapshot.complete===false)throw Error('Cannot cache an incomplete discovery.');
     return JSON.stringify({...snapshot,version:1,cached:true,rows:snapshot.rows.map(r=>({...r,utxos:[]}))},(_,v)=>typeof v==='bigint'?v.toString():v);
   }
   function decode(raw,coin,accounts){
     try{
-      const s=JSON.parse(raw),integer=v=>{if(typeof v!=='string'||! /^-?\d{1,17}$/.test(v))throw Error('Invalid amount');return BigInt(v);};
-      if(s.version!==1||s.coin!==coin||!Number.isSafeInteger(s.at)||s.at<0||s.at>Date.now()+60000||!Number.isSafeInteger(s.tip)||s.tip<0||!Array.isArray(s.rows)||!s.rows.length||s.rows.length>accounts.length||!Array.isArray(s.everUsed))return null;
+      const s=JSON.parse(raw),integer=v=>{if(typeof v!=='string')throw Error('Invalid cached amount');return safeInteger(v);};
+      if(s.complete===false||s.version!==1||s.coin!==coin||!Number.isSafeInteger(s.at)||s.at<0||s.at>Date.now()+60000||!Number.isSafeInteger(s.tip)||s.tip<0||!Array.isArray(s.rows)||!s.rows.length||s.rows.length>accounts.length||!Array.isArray(s.everUsed))return null;
       if(s.everUsed.some(i=>!Number.isInteger(i)||i<0||i>=accounts.length))return null;
       s.rows=s.rows.map((r,i)=>{
         if(r.account.address!==accounts[i].address||r.account.index!==i||!Array.isArray(r.history)||r.history.length>1000||r.history.some(h=>!validHash(h.tx_hash)||!Number.isInteger(h.height)||h.height< -1))throw Error('Invalid cached address');
@@ -79,6 +136,8 @@
   }
   async function scan(coin,accounts,previous=null,options={}){
     const c=client(coin),T=root.WalletTransactions;
+    const checkActive=()=>{if(options.isActive&&!options.isActive())throw Error('Wallet scan cancelled.');};
+    checkActive();
     if(!Array.isArray(accounts)||!accounts.length||accounts.length>200||accounts.some((a,i)=>a.index!==i))throw Error('Expected an ordered address pool of up to 200 addresses.');
     const tip=await c.call('blockchain.headers.subscribe');if(!Number.isSafeInteger(tip.height)||tip.height<0)throw Error('Invalid chain height.');
     const query=async account=>{
@@ -114,9 +173,20 @@
     const wanted=targeted?[...new Set(options.indices)]:options.full?accounts.map(a=>a.index):[...new Set([...accounts.slice(0,windowEnd).map(a=>a.index),...used,...probe,...changed])];
     const rows=reusable?previous.rows.slice():accounts.map(emptyRow);
     const queried=new Set(),checked=new Set(),revisions=new Map();
+    // Display-only checkpoints: never cache or spend from an unfinished scan.
+    // Preserve older balances in unvisited rows, but mark their history unchecked.
+    const publishBatch=()=>{
+      checkActive();
+      if(!options.full||!options.onBatch||checked.size%20!==0&&checked.size!==wanted.length)return;
+      options.onBatch({coin,tip:tip.height,complete:false,cached:false,at:Date.now(),
+        rows:rows.map((row,index)=>checked.has(index)?row:{...row,checked:false}),
+        everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,
+        confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n)});
+    };
     // Push notifications update live statuses. Reconcile at least every 30s and
     // after reconnect/cache restore; explicit Rescan always requests fresh status.
     async function refresh(index){
+      checkActive();
       const account=accounts[index],sh=T.scriptHash(coin,account.address),revision=c.dirty.get(sh),known=c.statuses.get(sh);
       const status=known&&reusable&&!previous.cached&&!options.full&&!options.verify&&!targeted&&Date.now()-known.at<30000?known.status:await c.call('blockchain.scripthash.subscribe',[sh]);
       if(!validStatus(status))throw Error('Unexpected address status format.');
@@ -130,22 +200,25 @@
       revisions.set(sh,revision);
       if(row.history.length||row.confirmed||row.unconfirmed||row.utxos.length)used.add(index);
     }
-    await batches(wanted,refresh);
+    await batches(wanted,refresh,publishBatch);
     while(!targeted&&end()>windowEnd){const next=end();await batches(accounts.slice(windowEnd,next).filter(a=>!checked.has(a.index)).map(a=>a.index),refresh);windowEnd=next;}
     // A deposit can unlock another address during this scan. Check it now,
     // rather than displaying an address whose history has not been refreshed.
     frontier=0;while(used.has(frontier))frontier++;
     while(!targeted&&frontier<accounts.length&&!checked.has(frontier)){await refresh(frontier);if(!used.has(frontier))break;while(used.has(frontier))frontier++;}
+    checkActive();
     const relay=await c.call('blockchain.relayfee');
+    checkActive();
     if(!Number.isFinite(relay)||relay<0)throw Error('Could not verify the network relay fee.');
     // Ordinary sends use a flat fee; sweeps scale this per-kB floor by size.
     const rate=Math.max(0.01,relay);
     if(!Number.isFinite(rate)||rate>0.1)throw Error('Fee estimate exceeds development safety limit.');
     // A failed scan must not consume notifications for rows it never published.
     for(const [sh,revision] of revisions)if(c.dirty.get(sh)===revision)c.dirty.delete(sh);
-    return {coin,tip:tip.height,rows,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now(),probedAt:targeted?previous.probedAt||previous.at:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:!targeted&&probeDue?probeCursor+10:probeCursor};
+    return {coin,tip:tip.height,rows,complete:true,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now(),probedAt:targeted?previous.probedAt||previous.at:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:!targeted&&probeDue?probeCursor+10:probeCursor};
   }
   async function spendable(snapshot,{sweep=false,compressed=true}={}){
+    if(snapshot.complete===false)throw Error('Complete wallet discovery before spending.');
     const c=client(snapshot.coin),T=root.WalletTransactions;
     const candidates=snapshot.rows.flatMap(r=>r.utxos).filter(u=>u.height>0);
     if(sweep){if(candidates.length)T.sweepSize(candidates.length,compressed);}
@@ -180,5 +253,5 @@
     if(utxos.length!==snapshot.rows[0].utxos.length)throw Error('Wait for mining rewards to mature before sweeping.');
     return {snapshot,utxos};
   }
-  root.WalletNetwork={CONFIG,RPCError,client,scan,encode,decode,spendable,checkInputs,sweepSource,confirmation,onChange:fn=>{listeners.add(fn);return ()=>listeners.delete(fn);},close:()=>{for(const c of Object.values(clients))c.close();}};
+  root.WalletNetwork={CONFIG,validateEndpoint,validateEndpoints,endpoint,configure,testConnection,RPCError,client,scan,encode,decode,spendable,checkInputs,sweepSource,confirmation,onChange:fn=>{listeners.add(fn);return ()=>listeners.delete(fn);},close:()=>{for(const c of Object.values(clients))c.close();}};
 })(typeof globalThis==='object'?globalThis:this);

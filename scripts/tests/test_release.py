@@ -27,6 +27,7 @@ class ReleaseTests(unittest.TestCase):
         self.release = dict(id=123, draft=True, assets=[],
                             upload_url='https://uploads.github.com/repos/example/safecore/releases/123/assets{?name}')
         self.requests = []
+        self.notice = (Path(__file__).resolve().parents[2] / 'RISK_NOTICE.md').read_text(encoding='utf-8')
 
     def run_publish(self, *, existing=None, bad_bytes=False):
         def request(req, **kwargs):
@@ -44,7 +45,7 @@ class ReleaseTests(unittest.TestCase):
             return io.BytesIO(json.dumps(result).encode())
 
         with patch.dict(os.environ, self.environment, clear=True), \
-             patch.object(publisher.Path, 'read_text', return_value=json.dumps(self.manifest)), \
+             patch.object(publisher.Path, 'read_text', side_effect=[json.dumps(self.manifest), self.notice]), \
              patch.object(publisher.subprocess, 'run') as run, \
              patch.object(publisher.subprocess, 'check_output', side_effect=[
                  'a' * 40 + '\n', b'changed' if bad_bytes else self.apk]), \
@@ -58,6 +59,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('whippet/tests/android_bundle.py', run.call_args_list[1].args[0])
         self.assertEqual([r.method for r in self.requests], ['GET','POST','POST','POST','PATCH'])
         self.assertTrue(json.loads(self.requests[1].data)['draft'])
+        self.assertIn(self.notice, json.loads(self.requests[1].data)['body'])
         self.assertEqual(json.loads(self.requests[-1].data),
                          {'draft':False, 'prerelease':True, 'make_latest':'false'})
 

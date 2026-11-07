@@ -16,7 +16,7 @@
     return fingerprint(mnemonic);
   }
   function key(passphrase,destinationFingerprint){
-    if(typeof passphrase!=='string'||passphrase.length>2048||!/^0x[0-9a-f]{64}$/.test(destinationFingerprint||''))throw Error('Verify your current wallet backup before entering a Komodo phrase.');
+    if(typeof passphrase!=='string'||passphrase.length>2048||!/^0x[0-9a-f]{64}$/.test(destinationFingerprint||''))throw Error('Open your destination wallet before entering a Komodo phrase.');
     // Match the converter UI: trim outer whitespace only. Internal spacing,
     // case and Unicode bytes are key material and must never be normalized.
     const text=passphrase.trim();
@@ -32,5 +32,5 @@
     }catch(_){throw Error('Could not derive the legacy Komodo PEP address. Check the original phrase.');}
     finally{secret?.fill(0);}
   }
-  return Object.freeze({verifyDestination,key});
+  return Object.freeze({verifyDestination,fingerprint,key});
 });
