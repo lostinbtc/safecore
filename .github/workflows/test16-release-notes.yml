@@ -1,0 +1,82 @@
+name: Update test.16 release description
+on:
+  push:
+    branches: [maintenance/test16-release-notes]
+    paths: [.github/workflows/test16-release-notes.yml]
+permissions:
+  contents: read
+concurrency:
+  group: test16-release-description
+  cancel-in-progress: false
+jobs:
+  update-description:
+    if: github.repository == 'lostinbtc/safecore' && github.ref == 'refs/heads/maintenance/test16-release-notes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - name: Replace approved boilerplate only; preserve APK and checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          base = 'https://api.github.com/repos/lostinbtc/safecore/releases'
+          def api(path, body=None):
+              request = urllib.request.Request(
+                  base + path,
+                  data=None if body is None else json.dumps({'body': body}).encode(),
+                  method='GET' if body is None else 'PATCH',
+                  headers={
+                      'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
+                      'Accept': 'application/vnd.github+json',
+                      'Content-Type': 'application/json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                      'User-Agent': 'SafeCore-test16-release-description',
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          def identity(release):
+              fields = ('id', 'tag_name', 'target_commitish', 'name', 'draft', 'prerelease', 'published_at')
+              return ({key: release[key] for key in fields}, sorted(
+                  (a['id'], a['name'], a['size'], a['digest'], a['browser_download_url'])
+                  for a in release['assets']))
+
+          before = api('/tags/v0.1.0-test.16')
+          assert before['id'] == 437759706 and before['tag_name'] == 'v0.1.0-test.16'
+          assert before['draft'] is False and before['prerelease'] is True
+          apk = next(a for a in before['assets'] if a['name'] == 'SafeCore-0.1.0-test.16.apk')
+          assert apk['digest'] == 'sha256:c17a747328199b395394377de9ab6fd0a3c69ee0c20a797d0d7d492c4ca9df1f'
+          old = (
+              'Development prerelease for expendable amounts; not independently audited.\n\n'
+              'Android 8.0+. Debugging disabled; screenshots blocked by default. Fresh installs contain no wallets.\n\n'
+              'Uses the existing development signing identity, not production release signing. '
+              'Back up before changing installations; do not uninstall to bypass signature errors.\n\n'
+          )
+          new = (
+              '## What’s new in test.16\n\n'
+              '- Cleaner layouts and navigation throughout the wallet.\n'
+              '- Smoother restore and recovery screens.\n'
+              '- Easier wallet management, renaming, and backups.\n'
+              '- New appearance, balance-privacy, and screenshot controls.\n'
+              '- Custom Electrum server connections.\n'
+              '- Progressive balance updates and improved large-balance accuracy.\n'
+              '- Better small-screen support and general usability fixes.\n\n'
+          )
+          if new in before['body'] and old not in before['body']:
+              print('Approved release description is already present; no changes made.')
+          else:
+              assert before['body'].count(old) == 1, 'Release copy changed; manual review required'
+              expected = before['body'].replace(old, new, 1)
+              api('/437759706', expected)
+              after = api('/437759706')
+              assert after['body'] == expected, 'Release description verification failed'
+              assert identity(after) == identity(before), 'Release metadata/assets changed; review required'
+              print('Updated test.16 description; release metadata, APK and checksums unchanged.')
+          PY
