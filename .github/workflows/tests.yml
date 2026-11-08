@@ -19,11 +19,15 @@ jobs:
       - name: Check offline recovery and wallet backup compatibility
         run: |
           node recovery/tests.cjs
-          python3 recovery/package.py /tmp/whippet-recovery.zip
+          python3 recovery/package.py /tmp/safecore-recovery.zip
       - run: npx playwright install --with-deps --only-shell chromium
       - run: npm run test:browser
       - run: python3 scripts/check-public-tree.py
       - run: python3 -m unittest discover -s scripts/tests -v
+      - name: Exercise signature gate with disposable APKs and signing keys
+        run: |
+          sdkmanager 'build-tools;35.0.1' 'platforms;android-35'
+          SAFECORE_APK_INTEGRATION=1 python3 -m unittest scripts.tests.test_apk_security_integration -v
       - run: docker compose --env-file infra/.env.example -f infra/compose.yaml config --quiet
       - name: Scan published source for secrets
         run: |

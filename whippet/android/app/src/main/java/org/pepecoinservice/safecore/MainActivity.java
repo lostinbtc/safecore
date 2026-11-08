@@ -20,6 +20,9 @@ import android.webkit.*;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.os.SystemClock;
 import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
@@ -31,6 +34,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Bundled code only; no remote pages, generic JavaScript bridge or analytics. */
 public final class MainActivity extends Activity {
@@ -39,10 +44,147 @@ public final class MainActivity extends Activity {
     private static final int IMPORT = 10, EXPORT = 11, CAMERA = 12;
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+    private boolean importPending;
     private String exportData;
     private JavaScriptReplyProxy exportReply;
     private long exportId;
     private boolean foreground;
+    private final ExecutorService walletIO = Executors.newSingleThreadExecutor();
+    private boolean walletIOPending;
+    private DeviceAuthentication deviceAuthentication;
+    private boolean deviceAuthEnabled, authPrompt, sessionAuthenticated;
+    private long lastAuthentication;
+    private AlertDialog authenticationDialog;
+    private Runnable pendingAuthentication;
+    private long pendingAuthenticationAt;
+
+    private boolean hasWallets(JSONObject state) throws Exception {
+        if(state==null)return false;
+        JSONObject records=state.getJSONObject("records");
+        if(!records.isNull("whippet.dev.encrypted.v1"))return true;
+        return !records.isNull("corevault.wallets.v1") && new JSONObject(records.getString("corevault.wallets.v1")).getJSONArray("wallets").length()>0;
+    }
+    private void rememberAuthenticationChoice() throws Exception {
+        if(getSharedPreferences("device_authentication",MODE_PRIVATE).getBoolean("setup_handled",false))return;
+        if(!getSharedPreferences("device_authentication",MODE_PRIVATE).edit().putBoolean("setup_handled",true).commit())throw new IllegalStateException("Could not save authentication preference");
+    }
+    private boolean firstWalletAuthentication() throws Exception {
+        return !deviceAuthEnabled && deviceAuthentication.available()
+            && !getSharedPreferences("device_authentication",MODE_PRIVATE).getBoolean("setup_handled",false)
+            && !hasWallets(new DeviceWalletStore(this).read());
+    }
+    private boolean authenticationChangeAllowed(WebView view, String value) throws Exception {
+        String route=Uri.parse(view.getUrl()).getFragment();
+        return "security".equals(route) || ("setup".equals(route) && new JSONObject(value).getBoolean("enabled") && firstWalletAuthentication());
+    }
+    private void authenticationStatus(JavaScriptReplyProxy reply,long id) {
+        try { reply.postMessage(new JSONObject().put("id",id).put("ok",true)
+            .put("enabled",deviceAuthEnabled).put("available",deviceAuthentication.available()).put("firstWalletDefault",firstWalletAuthentication()).toString()); }
+        catch(Exception e) { respond(reply,id,false,"Device authentication status is unavailable."); }
+    }
+    private void authenticationCancelled(JavaScriptReplyProxy reply,long id) {
+        try { reply.postMessage(new JSONObject().put("id",id).put("ok",false)
+            .put("code","AUTH_CANCELLED").put("error","Device authentication cancelled. Nothing was changed.").toString()); }
+        catch(Exception ignored) { }
+    }
+    private void authenticate(String title,Runnable success,Runnable cancelled) {
+        if(authPrompt || !foreground || !deviceAuthentication.available()){cancelled.run();return;}
+        authPrompt=true;
+        Runnable launch=()->{
+            if(!foreground){authPrompt=false;cancelled.run();return;}
+            deviceAuthentication.authenticate(title,ok->{
+                Runnable completion=()->{
+                    authPrompt=false;
+                    if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-auth-end'))",null);
+                    // Cancellation can also mean Home was pressed while the OS credential
+                    // activity covered us. Never resume a protected plaintext session then.
+                    if(!ok&&deviceAuthEnabled){cancelled.run();destroyWalletView();if(foreground&&!isDestroyed())showDeviceLock("Authentication cancelled. Your wallets remain protected.");return;}
+                    if(ok && foreground && !isDestroyed()) { lastAuthentication=SystemClock.elapsedRealtime();success.run(); }
+                    else { cancelled.run();if(deviceAuthEnabled && !foreground)destroyWalletView(); }
+                };
+                if(!foreground&&!isDestroyed()){pendingAuthentication=completion;pendingAuthenticationAt=SystemClock.elapsedRealtime();}
+                else completion.run();
+            });
+        };
+        if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-auth-prompt'))",ignored->launch.run());
+        else launch.run();
+    }
+    private void destroyWalletView() {
+        sessionAuthenticated=false;lastAuthentication=0;
+        if(web!=null){
+            WebView previous=web;web=null;
+            if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
+            if(previous.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)previous.getParent()).removeView(previous);
+            previous.stopLoading();previous.destroy();
+        }
+    }
+    private void showDeviceLock(String message) {
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        int padding=(int)(24*getResources().getDisplayMetrics().density);
+        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setGravity(android.view.Gravity.CENTER);panel.setPadding(padding,padding*2,padding,padding*2);
+        panel.setBackgroundColor(Color.rgb(11,16,24));
+        TextView title=new TextView(this);title.setText("SafeCore locked");title.setTextColor(Color.WHITE);title.setTextSize(24);panel.addView(title);
+        TextView notice=new TextView(this);notice.setText(deviceAuthentication.available()?message:"Phone authentication is unavailable. If its screen lock was removed, you will need a separate recovery backup. Do not clear app data unless every wallet is backed up.");notice.setTextColor(Color.LTGRAY);notice.setPadding(0,24,0,24);panel.addView(notice);
+        Button unlock=new Button(this);unlock.setText("Unlock SafeCore");panel.addView(unlock);setContentView(panel);
+        unlock.setEnabled(deviceAuthentication.available());
+        unlock.setOnClickListener(v->{unlock.setEnabled(false);authenticate("Unlock SafeCore",()->{
+            walletIO.execute(()->{
+                try { new DeviceWalletStore(this).read(); }
+                catch(Exception e){runOnUiThread(()->showDeviceLock("Wallet storage could not be unlocked. Do not clear app data. Keep your separate recovery backup."));return;}
+                runOnUiThread(()->{if(foreground&&!isDestroyed()){sessionAuthenticated=true;buildWalletView();}});
+            });
+        },()->{if(foreground)showDeviceLock("Confirm your fingerprint or phone screen lock to open your wallets.");});});
+    }
+    private void walletRequest(String action,String value,WebView view,JavaScriptReplyProxy reply,long id) {
+        if(walletIOPending || authPrompt){respond(reply,id,false,"Wallet storage is busy. Try again.");return;}
+        walletIOPending=true;
+        Runnable operation=()->{
+            boolean allowed=false;
+            try {allowed=foreground&&view==web&&view.getUrl()!=null&&localPage(Uri.parse(view.getUrl()))
+                && (!action.equals("setDeviceAuthentication")||authenticationChangeAllowed(view,value));}catch(Exception ignored){}
+            if(!allowed){
+                walletIOPending=false;authenticationCancelled(reply,id);return;
+            }
+            walletIO.execute(()->{
+            JSONObject result=new JSONObject();
+            try {
+                DeviceWalletStore store=new DeviceWalletStore(this);
+                result.put("id",id).put("ok",true);
+                if(action.equals("readWalletStore")) {
+                    if(!value.isEmpty())throw new IllegalArgumentException();
+                    JSONObject saved=store.read();if(hasWallets(saved))rememberAuthenticationChoice();result.put("state",saved==null?JSONObject.NULL:saved);
+                } else if(action.equals("writeWalletStore")) {
+                    JSONObject request=new JSONObject(value);
+                    if(!request.has("revision")||(!request.isNull("revision")&&!(request.get("revision") instanceof String)))throw new IllegalArgumentException();
+                    result.put("revision",store.write(request.isNull("revision")?null:request.getString("revision"),request.getJSONObject("records")));
+                    if(hasWallets(store.read()))rememberAuthenticationChoice();
+                } else if(action.equals("setDeviceAuthentication")) {
+                    JSONObject request=new JSONObject(value);
+                    result.put("revision",store.setAuthentication(request.getString("revision"),request.getBoolean("enabled")));
+                    rememberAuthenticationChoice();
+                } else { store.read(); } // Confirm that the authentication really authorizes the Keystore key.
+            } catch(Exception e) {
+                runOnUiThread(()->{walletIOPending=false;respond(reply,id,false,"Device wallet storage is unavailable. Reopen the app; do not clear its data.");});return;
+            }
+            runOnUiThread(()->{
+                walletIOPending=false;
+                if(action.equals("setDeviceAuthentication")) {
+                    try {deviceAuthEnabled=new DeviceWalletStore(this).authenticationRequired();sessionAuthenticated=foreground&&view==web;if(deviceAuthEnabled&&!foreground)destroyWalletView();}
+                    catch(Exception e){destroyWalletView();showDeviceLock("Wallet storage needs attention. Do not clear app data.");return;}
+                }
+                if(!foreground||isDestroyed()||view!=web||view.getUrl()==null||!localPage(Uri.parse(view.getUrl()))) {
+                    respond(reply,id,false,"Wallet storage operation interrupted. Reopen the app.");return;
+                }
+                try {reply.postMessage(result.toString());}catch(Exception ignored){}
+            });
+            });
+        };
+        boolean fresh=action.equals("authenticateWalletAction")||action.equals("setDeviceAuthentication");
+        if(fresh || (deviceAuthEnabled && SystemClock.elapsedRealtime()-lastAuthentication>45000)) {
+            walletIOPending=false; // The modal prompt itself serializes requests.
+            authenticate(fresh?"Confirm wallet action":"Unlock wallet storage",()->{walletIOPending=true;operation.run();},()->authenticationCancelled(reply,id));
+        } else operation.run();
+    }
     private String importedBackup;
     private PermissionRequest cameraRequest;
     private boolean cameraPrompt, cameraResultReady;
@@ -120,6 +262,13 @@ public final class MainActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        deviceAuthentication=new DeviceAuthentication(this);
+        try {deviceAuthEnabled=new DeviceWalletStore(this).authenticationRequired();}
+        catch(Exception e){showDeviceLock("Wallet storage needs attention. Do not clear app data.");return;}
+        if(deviceAuthEnabled){showDeviceLock("Confirm your fingerprint or phone screen lock to open your wallets.");return;}
+        buildWalletView();
+    }
+    private void buildWalletView() {
         // Secure before the first frame; debugging never changes this preference.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         if(android.os.Build.VERSION.SDK_INT>=33)setRecentsScreenshotEnabled(false);
@@ -187,6 +336,7 @@ public final class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 if (url == null || !localPage(Uri.parse(url))) return;
                 publishSystemTheme();
+                deliverImportedBackup(100);
                 view.evaluateJavascript("Boolean(window.isSecureContext && window.crypto?.subtle && navigator.locks && typeof BigInt === 'function')", value -> {
                     if (!"true".equals(value)) showUnsupported();
                 });
@@ -225,8 +375,9 @@ public final class MainActivity extends Activity {
                 fileCallback = callback;
                 try {
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json");
+                    importPending = true;
                     startActivityForResult(intent, IMPORT);
-                } catch (Exception e) { fileCallback.onReceiveValue(null); fileCallback = null; }
+                } catch (Exception e) { importPending=false;fileCallback.onReceiveValue(null); fileCallback = null; }
                 return true;
             }
         });
@@ -237,11 +388,38 @@ public final class MainActivity extends Activity {
                 long id = 0;
                 try {
                     String raw = message.getData();
-                    if (raw == null || raw.length() > 100000) return;
+                    if (raw == null || raw.length() > DeviceWalletStore.MAX_BYTES * 2) return;
                     JSONObject payload = new JSONObject(raw);
                     id = payload.getLong("id");
                     String action = payload.getString("action"), value = payload.getString("value");
-                    if (action.equals("copyAddress")) {
+                    if (action.equals("readWalletStore") || action.equals("writeWalletStore")) {
+                        walletRequest(action,value,view,reply,id);
+                    } else if(action.equals("getDeviceAuthentication")) {
+                        if(!value.isEmpty())throw new IllegalArgumentException();
+                        authenticationStatus(reply,id);
+                    } else if(action.equals("authenticateWalletAction")) {
+                        String route=Uri.parse(view.getUrl()).getFragment();
+                        if(!(value.equals("reveal")&&"reveal".equals(route)) && !(value.equals("send")&&("send".equals(route)||"sweep".equals(route)||"komodo-sweep".equals(route))))throw new IllegalArgumentException();
+                        if(!deviceAuthEnabled)respond(reply,id,true,"");else walletRequest(action,value,view,reply,id);
+                    } else if(action.equals("setDeviceAuthentication")) {
+                        if(!authenticationChangeAllowed(view,value) || authenticationDialog!=null || walletIOPending || authPrompt)throw new IllegalArgumentException();
+                        JSONObject request=new JSONObject(value);
+                        if(!(request.get("enabled") instanceof Boolean)||!(request.get("revision") instanceof String)||!deviceAuthentication.available())throw new IllegalArgumentException();
+                        boolean enabled=request.getBoolean("enabled");final long requestId=id;
+                        authenticationDialog=new AlertDialog.Builder(this).setTitle(enabled?"Use device authentication?":"Turn off device authentication?")
+                            .setMessage(enabled?"Keep a separate backup for every wallet. Removing your phone screen lock can make this device's wallet data inaccessible. Your recovery phrases and exported backups will still work.":"Anyone using your unlocked phone could open password-free wallets. Local storage will remain encrypted.")
+                            .setPositiveButton(enabled?"Enable":"Turn off",(d,w)->{
+                                authenticationDialog=null;
+                                if(!foreground||view!=web)return;
+                                if(enabled) {
+                                    try {new DeviceWalletStore(this).prepareAuthenticationKey();}
+                                    catch(Exception e){respond(reply,requestId,false,"Could not prepare device authentication. Your current storage is unchanged.");return;}
+                                }
+                                walletRequest(action,value,view,reply,requestId);
+                            }).setNegativeButton("Cancel",(d,w)->authenticationCancelled(reply,requestId))
+                            .setOnCancelListener(d->authenticationCancelled(reply,requestId)).create();
+                        authenticationDialog.setOnDismissListener(d->authenticationDialog=null);authenticationDialog.show();
+                    } else if (action.equals("copyAddress")) {
                         if (!value.matches("[1-9A-HJ-NP-Za-km-z]{26,50}")) throw new IllegalArgumentException();
                         ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("SafeCore receiving address", value));
                         respond(reply, id, true, "");
@@ -265,28 +443,37 @@ public final class MainActivity extends Activity {
                         }
                     } else if (action.equals("exportBackup")) {
                         if (exportData != null || value.length() > 65536 || value.isEmpty()) throw new IllegalArgumentException();
-                        exportData = value; exportReply = reply; exportId = id;
-                        // A native confirmation ensures JavaScript cannot silently write backup files.
-                        new AlertDialog.Builder(this).setTitle("Save wallet backup?")
-                            .setMessage("This file may contain an unencrypted recovery phrase. Choose a private location; avoid shared or cloud folders.")
-                            .setPositiveButton("Choose location", (d,w) -> {
-                                try {
-                                    startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
-                                        .addCategory(Intent.CATEGORY_OPENABLE).setType("application/json")
-                                        .putExtra(Intent.EXTRA_TITLE,"safecore-backup.json"), EXPORT);
-                                } catch(Exception e) { finishExport(false, "Could not open the file picker."); }
-                            }).setNegativeButton("Cancel", (d,w) -> finishExport(false,"Backup cancelled."))
-                            .setOnCancelListener(d -> finishExport(false,"Backup cancelled.")).show();
+                        final long requestId=id;
+                        if(deviceAuthEnabled)authenticate("Export wallet backup",()->walletIO.execute(()->{
+                            try {new DeviceWalletStore(this).read();}
+                            catch(Exception e){runOnUiThread(()->respond(reply,requestId,false,"Wallet storage could not be unlocked."));return;}
+                            runOnUiThread(()->{if(foreground&&view==web)beginNativeExport(value,reply,requestId);});
+                        }),()->authenticationCancelled(reply,requestId));
+                        else beginNativeExport(value,reply,id);
                     } else respond(reply,id,false,"Unsupported Android action.");
                 } catch (Exception e) { respond(reply,id,false,"Android action could not be completed."); }
             });
         // Never restore WebView state/bundles that might contain displayed recovery words.
         web.loadUrl(START);
+        if(foreground)web.onResume();
+        applyScreenProtection();
     }
     private void showUnsupported() {
         TextView notice = new TextView(this);
         notice.setText("Update Android System WebView / Chrome, then reopen SafeCore. This WebView lacks required wallet security features.");
         notice.setTextColor(Color.WHITE); notice.setPadding(24,48,24,24); setContentView(notice);
+    }
+    private void beginNativeExport(String value,JavaScriptReplyProxy reply,long id) {
+        if(exportData!=null){respond(reply,id,false,"A backup export is already open.");return;}
+        exportData=value;exportReply=reply;exportId=id;
+        new AlertDialog.Builder(this).setTitle("Save wallet backup?")
+            .setMessage("This file may contain an unencrypted recovery phrase. Choose a private location; avoid shared or cloud folders.")
+            .setPositiveButton("Choose location",(d,w)->{
+                try {startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("application/json").putExtra(Intent.EXTRA_TITLE,"safecore-backup.json"),EXPORT);}
+                catch(Exception e){finishExport(false,"Could not open the file picker.");}
+            }).setNegativeButton("Cancel",(d,w)->finishExport(false,"Backup cancelled."))
+            .setOnCancelListener(d->finishExport(false,"Backup cancelled.")).show();
     }
     private void respond(JavaScriptReplyProxy reply, long id, boolean ok, String error) {
         try { reply.postMessage(new JSONObject().put("id",id).put("ok",ok).put("error",error).toString()); }
@@ -299,11 +486,13 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
-        if(request == IMPORT && fileCallback != null) {
+        if(request==DeviceAuthentication.REQUEST){deviceAuthentication.result(result);return;}
+        if(request == IMPORT && importPending) {
+            importPending=false;
             Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
             // Backgrounding intentionally discarded the old input DOM and any seed text.
             // Deliver a bounded, explicitly chosen backup to the new form on resume.
-            fileCallback.onReceiveValue(null);
+            if(fileCallback!=null)fileCallback.onReceiveValue(null);
             fileCallback = null;
             if(uri != null && "content".equals(uri.getScheme())) {
                 try(InputStream in = getContentResolver().openInputStream(uri); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -331,14 +520,19 @@ public final class MainActivity extends Activity {
         foreground = false;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         if(screenProtectionDialog!=null)screenProtectionDialog.cancel();
+        if(authenticationDialog!=null)authenticationDialog.cancel();
         // The in-app OS permission sheet must not discard the send form. A real
         // background transition still locks in onStop, even with a sheet open.
-        if(web != null) { if(!cameraPrompt)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null); web.onPause(); }
+        if(web != null) { if(!cameraPrompt&&!authPrompt)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null); web.onPause(); }
+        if(deviceAuthEnabled&&!authPrompt&&!cameraPrompt)destroyWalletView();
         super.onPause();
     }
     @Override protected void onStop() {
         denyCamera();
-        if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null);
+        if(!authPrompt) {
+            if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null);
+            if(deviceAuthEnabled)destroyWalletView();
+        }
         super.onStop();
     }
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results) {
@@ -350,9 +544,21 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume(); foreground = true;
+        try {
+            boolean required=new DeviceWalletStore(this).authenticationRequired();
+            if(required!=deviceAuthEnabled){deviceAuthEnabled=required;destroyWalletView();}
+        } catch(Exception e){destroyWalletView();showDeviceLock("Wallet storage needs attention. Do not clear app data.");return;}
+        deviceAuthentication.resume();
+        if(pendingAuthentication!=null){
+            Runnable completion=pendingAuthentication;pendingAuthentication=null;
+            if(SystemClock.elapsedRealtime()-pendingAuthenticationAt<5000)completion.run();
+            else {authPrompt=false;destroyWalletView();}
+        }
+        if(deviceAuthEnabled&&!sessionAuthenticated&&web==null&&!authPrompt)showDeviceLock("Confirm your fingerprint or phone screen lock to open your wallets.");
+        else if(!deviceAuthEnabled&&web==null&&!authPrompt)buildWalletView();
         applyScreenProtection();
         publishSystemTheme();
-        if(web != null) { web.onResume(); web.evaluateJavascript("window.dispatchEvent(new Event('safecore-resume'))",null); }
+        if(web != null) { web.onResume(); if(!authPrompt)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-resume'))",null); }
     }
     // WebView's media query can reflect the Activity theme instead of the device.
     // Send only a light/dark value to our bundled page; never reload wallet state.
@@ -368,18 +574,28 @@ public final class MainActivity extends Activity {
     @Override protected void onPostResume() {
         super.onPostResume();
         if(cameraResultReady){cameraPrompt=false;grantCameraIfActive();}
-        if(importedBackup != null && web != null) {
-            String raw = importedBackup; importedBackup = null;
-            web.evaluateJavascript("window.dispatchEvent(new CustomEvent('safecore-import',{detail:"+JSONObject.quote(raw)+"}))",null);
-        }
+        deliverImportedBackup(100);
+    }
+    private void deliverImportedBackup(int remaining) {
+        if(importedBackup==null||web==null||!foreground||remaining<=0)return;
+        WebView target=web;
+        target.evaluateJavascript("Boolean(document.documentElement.dataset.walletState)",ready->{
+            if(target!=web||!foreground||importedBackup==null)return;
+            if(!"true".equals(ready)){target.postDelayed(()->deliverImportedBackup(remaining-1),100);return;}
+            String raw=importedBackup;importedBackup=null;
+            target.evaluateJavascript("window.dispatchEvent(new CustomEvent('safecore-import',{detail:"+JSONObject.quote(raw)+"}))",null);
+        });
     }
     @Override public void onBackPressed() {
+        if(web==null){moveTaskToBack(true);return;}
         if(web != null) web.evaluateJavascript("location.hash === '#wallet' || !location.hash", value -> {
             if("true".equals(value)) moveTaskToBack(true);
             else web.evaluateJavascript("location.hash='wallet'",null);
         });
     }
     @Override protected void onDestroy() {
+        if(deviceAuthentication!=null)deviceAuthentication.cancel();
+        walletIO.shutdown(); // Finish an accepted atomic save; never interrupt it halfway.
         if(screenProtectionDialog!=null)screenProtectionDialog.cancel();
         denyCamera();
         if(fileCallback != null) fileCallback.onReceiveValue(null);

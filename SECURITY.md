@@ -27,8 +27,27 @@ invalidates pending transaction reviews and restarts live discovery. Failed cust
 connections do not silently fall back. The content policy permits arbitrary secure
 WebSocket hosts for this feature; remote scripts remain disallowed.
 
-Password protection is optional. Without it, the seed recipe is stored in
-plaintext locally and in backups. Debugging is disabled in the published prerelease.
+Password protection is optional. In this source version, Android encrypts all saved
+wallet records using AES-256-GCM and a non-exportable Android Keystore key, even
+without a wallet password starting in test.17. Browsers still store password-free recipes in plaintext, and
+unprotected exports remain plaintext on every platform. Public caches/preferences
+are not encrypted. The optional **Use device authentication** setting re-encrypts
+the store with an authentication-required Keystore key. Both enabling and disabling
+require OS authentication. First-wallet creation or restore defaults to enabling
+it when a secure phone screen lock exists; cancellation stops setup before saving
+the wallet. Existing installations and later opt-outs are preserved. Without a
+screen lock, device encryption remains available without authentication.
+With it off, encryption alone does not block someone
+using an unlocked app. With it on, returning from the background requires a fresh
+OS prompt; the old WebView is destroyed to discard its in-memory wallet state.
+Reveal, export and send confirmation also request fresh OS authentication.
+The timed Keystore authorization lasts 60 seconds; cryptographic operations can
+require another prompt after that interval. This is not hardware transaction
+signing or protection against a compromised running process. Hardware backing
+depends on the device; no hardware-wallet claim is made. Removing the phone screen
+lock can invalidate the key; keep separate recovery backups and disable this
+setting before removing the phone lock. Cancellation never disables protection.
+Debugging is disabled in the published prerelease.
 Screenshot blocking defaults on; the local Android settings control can allow
 captures after confirmation. Neither screenshot blocking nor hidden balances is
 a substitute for encryption. Uninstalling may
@@ -38,6 +57,18 @@ The prerelease APK uses a development signing identity, not a production release
 key. Check release hashes and the signing-certificate fingerprint before install.
 Do not uninstall a funded wallet merely to bypass an Android signature mismatch.
 Review dependencies and upstream security updates before public server deployment.
+
+The local release-verification change checks the APK signature against the public
+certificate pin in `release/signing-policy.json`, plus actual package/version,
+Android debuggable/test-only flags, backup restrictions and cleartext policy.
+Publication must pass this check before any release API call; manifest claims alone
+are insufficient. Missing tools or failed checks stop publication. This does not
+replace independent review, protect against a compromised approved signing key,
+or establish reproducible native builds. Temporary storage diagnostic codes and
+logging have been removed; Android/WebView debugging remains disabled.
+No production key has been created or rotated by this change. See
+[release signing and migration](docs/RELEASES.md#signing-key-custody-and-migration)
+before selecting a production identity.
 
 Maintainers: keep operational values in ignored local files; review the staged
 tree and artifact contents before every push. Ignore rules do not scrub existing

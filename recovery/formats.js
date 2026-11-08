@@ -7,14 +7,17 @@
   'use strict';
   function exportJSON(ethers, walletEngine, crypto, bundle) {
     const recipe = walletEngine.recipe(ethers, bundle.mnemonic, bundle.passphrase);
-    return { ...walletEngine.unprotected(crypto, recipe), whippetGenerator: bundle };
+    const key = bundle.format === 'whippet-seed-v1' ? 'whippetGenerator' : 'recoveryGenerator';
+    return { ...walletEngine.unprotected(crypto, recipe), [key]: bundle };
   }
   async function importJSON(ethers, generator, walletEngine, crypto, backup, options = {}) {
-    if (backup?.format === 'whippet-seed-v1') return generator.restoreAsync(ethers, backup, options);
+    if (['whippet-seed-v1', 'pepecoin-seed-v1'].includes(backup?.format)) return generator.restoreAsync(ethers, backup, options);
     walletEngine.validateEnvelope(backup);
     const recipe = walletEngine.validateRecipe(ethers, await walletEngine.decrypt(crypto, backup, options.password || ''));
-    if (backup.whippetGenerator) {
-      const bundle = await generator.restoreAsync(ethers, backup.whippetGenerator, options);
+    if (backup.whippetGenerator && backup.recoveryGenerator) throw new Error('Ambiguous saved generator bundle.');
+    if (backup.whippetGenerator || backup.recoveryGenerator) {
+      if (backup.whippetGenerator && backup.whippetGenerator.format !== 'whippet-seed-v1') throw new Error('Invalid Whippet generator bundle.');
+      const bundle = await generator.restoreAsync(ethers, backup.whippetGenerator || backup.recoveryGenerator, options);
       if (bundle.mnemonic !== recipe.mnemonic || bundle.passphrase !== recipe.passphrase) {
         throw new Error('The wallet recipe and saved generator keys do not match.');
       }

@@ -9,7 +9,7 @@
     byId('status').dataset.error = String(error);
   }
   function setBusy(busy) {
-    for (const id of ['words', 'count', 'generate', 'phrase', 'passphrase', 'derive', 'restore', 'backup-password', 'unlock-backup']) byId(id).disabled = busy;
+    for (const id of ['coin', 'words', 'count', 'generate', 'phrase', 'passphrase', 'derive', 'restore', 'backup-password', 'unlock-backup']) byId(id).disabled = busy;
     byId('cancel-generation').hidden = !busy;
     if (busy) {
       byId('phrase-suggestions').hidden = true;
@@ -27,6 +27,9 @@
   }
   function render(bundle) {
     forgetResults(); current = bundle;
+    byId('coin').value = engine.backupCoin(bundle);
+    byId('results-heading').textContent = bundle.network.name.replace(' mainnet', '') + ' addresses';
+    byId('result-path').textContent = bundle.derivation.pathTemplate;
     const fragment = document.createDocumentFragment();
     for (const wallet of bundle.wallets) {
       const article = document.createElement('article'); article.className = 'wallet';
@@ -52,7 +55,7 @@
       byId('count').value = String(bundle.wallets.length);
       const length = bundle.mnemonic.split(' ').length;
       if ([12, 24].includes(length)) byId('words').value = String(length);
-      render(bundle); status('Whippet keys derived locally. Download a private backup to keep the recovery recipe.');
+      render(bundle); status(bundle.network.name + ' keys derived locally. Keep a private backup.');
       return true;
     } catch (error) {
       if (token === operation) { forgetResults(); status(error.message, true); }
@@ -61,7 +64,7 @@
   }
   function derive(options) {
     return engine.deriveAsync(window.ethers, byId('phrase').value, {
-      ...options, count: Number(byId('count').value), passphrase: byId('passphrase').value,
+      ...options, coin: byId('coin').value, count: Number(byId('count').value), passphrase: byId('passphrase').value,
     });
   }
   byId('generate').addEventListener('click', () => action(options => {
@@ -69,7 +72,7 @@
     return derive(options);
   }));
   byId('derive').addEventListener('click', () => action(derive));
-  for (const id of ['phrase', 'passphrase', 'count']) byId(id).addEventListener('input', () => {
+  for (const id of ['coin', 'phrase', 'passphrase', 'count']) byId(id).addEventListener('input', () => {
     fileSelection++; cancelOperation(); forgetResults(); status('Inputs changed. Derive keys to update the address list.');
   });
   byId('cancel-generation').addEventListener('click', () => { cancelOperation(); forgetResults(); status('Generation cancelled.'); });
@@ -83,18 +86,19 @@
     const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  const filename = suffix => (engine.backupCoin(current) === 'pep' ? 'pepecoin' : 'whippet') + suffix;
   byId('download').addEventListener('click', () => {
     if (!current) return;
-    try { download(JSON.stringify(formats.exportJSON(window.ethers, window.WalletEngine, window.crypto, current), null, 2) + '\n', 'application/json', 'whippet-private-backup.json'); }
+    try { download(JSON.stringify(formats.exportJSON(window.ethers, window.WalletEngine, window.crypto, current), null, 2) + '\n', 'application/json', filename('-private-backup.json')); }
     catch (error) { status(error.message, true); }
   });
-  byId('download-text').addEventListener('click', () => { if (current) download(formats.exportText(current), 'text/plain;charset=utf-8', 'whippet-private-keys.txt'); });
-  byId('download-address-text').addEventListener('click', () => { if (current) download(formats.exportAddressText(current), 'text/plain;charset=utf-8', 'whippet-addresses-and-private-keys.txt'); });
-  byId('download-csv').addEventListener('click', () => { if (current) download(formats.exportCSV(current), 'text/csv;charset=utf-8', 'whippet-addresses-and-private-keys.csv'); });
+  byId('download-text').addEventListener('click', () => { if (current) download(formats.exportText(current), 'text/plain;charset=utf-8', filename('-private-keys.txt')); });
+  byId('download-address-text').addEventListener('click', () => { if (current) download(formats.exportAddressText(current), 'text/plain;charset=utf-8', filename('-addresses-and-private-keys.txt')); });
+  byId('download-csv').addEventListener('click', () => { if (current) download(formats.exportCSV(current), 'text/csv;charset=utf-8', filename('-addresses-and-private-keys.csv')); });
   async function importBackup(backup, password = '') {
-    const count = Number(byId('count').value);
+    const count = Number(byId('count').value), coin = byId('coin').value;
     const restored = await action(options => formats.importJSON(window.ethers, engine, window.WalletEngine,
-      window.crypto, backup, { ...options, count, password }), 'Restoring and verifying the private backup locally…');
+      window.crypto, backup, { ...options, coin, count, password }), 'Restoring and verifying the private backup locally…');
     if (restored) status('Private backup restored and every displayed address and key verified.');
     return restored;
   }

@@ -1,0 +1,8 @@
+{
+  "channel": "development",
+  "application_id": "org.pepecoinservice.safecore.testing",
+  "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
+  "min_sdk": 26,
+  "target_sdk": 35,
+  "build_tools": "35.0.1"
+}
