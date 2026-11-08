@@ -8,6 +8,7 @@ const generator = require('./wallet.js');
 const formats = require('./formats.js');
 const backupEngine = require('./wallet-format.js');
 const walletEngine = require('../whippet/www/engine.js');
+const bitcore = require('bitcore-lib-doge');
 
 // Published BIP39 vector. No user recovery material belongs in these tests.
 const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -47,6 +48,38 @@ async function main() {
   const native = await walletEngine.encrypt(crypto.webcrypto, recipe, password);
   assert.deepEqual(await formats.importJSON(ethers, generator, backupEngine, crypto.webcrypto, native,
     {count: 3, password}), small);
+  const pep = await generator.deriveAsync(ethers, phrase, {coin:'pep', count:1000, passphrase:'TREZOR'});
+  const independentMaster=bitcore.HDPrivateKey.fromSeed(Buffer.from(ethers.utils.mnemonicToSeed(phrase,'TREZOR').slice(2),'hex'));
+  assert.equal(new Set(pep.wallets.map(row=>row.address)).size,1000);
+  assert.equal(generator.derive(ethers,phrase,{coin:'pep'}).wallets.length,200);
+  for(const index of [0,19,199,999]){
+    const row=pep.wallets[index];
+    assert.equal(row.address,walletEngine.accounts(ethers,recipe,index).pep.address);
+    const privateKey=ethers.utils.HDNode.fromMnemonic(phrase,'TREZOR').derivePath(row.path).privateKey;
+    assert.equal(independentMaster.deriveChild(row.path).privateKey.toBuffer().toString('hex'),privateKey.slice(2));
+    assert.equal(ethers.utils.hexlify(ethers.utils.base58.decode(row.wif).slice(1,33)),privateKey);
+    const payload=Buffer.from(ethers.utils.base58.decode(row.wif));
+    assert.equal(payload[0],158);assert.equal(payload[payload.length-5],1);
+    assert.deepEqual(payload.subarray(-4),crypto.createHash('sha256').update(crypto.createHash('sha256').update(payload.subarray(0,-4)).digest()).digest().subarray(0,4));
+    assert.notEqual(row.address,bundle.wallets[index].address);
+    assert.notEqual(row.wif,bundle.wallets[index].wif);
+  }
+  const pepJSON=formats.exportJSON(ethers,backupEngine,crypto.webcrypto,pep);
+  assert.ok(pepJSON.recoveryGenerator);assert.equal(pepJSON.whippetGenerator,undefined);
+  assert.deepEqual(walletEngine.validateRecipe(ethers,await walletEngine.decrypt(crypto.webcrypto,pepJSON,'')),recipe);
+  assert.deepEqual(await formats.importJSON(ethers,generator,backupEngine,crypto.webcrypto,pepJSON,{coin:'wht'}),pep);
+  const pepSmall=generator.derive(ethers,phrase,{coin:'pep',count:3,passphrase:'TREZOR'});
+  assert.deepEqual(await formats.importJSON(ethers,generator,backupEngine,crypto.webcrypto,native,{coin:'pep',count:3,password}),pepSmall);
+  assert.deepEqual(generator.restore(ethers,pepSmall),pepSmall);
+  assert.deepEqual(await generator.restoreAsync(ethers,pepSmall),pepSmall);
+  for(const mutate of [b=>b.network.pubKeyHash=73,b=>b.derivation.pathTemplate=generator.PATH_TEMPLATE,b=>b.wallets[0].wif=small.wallets[0].wif,b=>b.wallets[0]=null]){
+    const bad=structuredClone(pepSmall);mutate(bad);
+    assert.throws(()=>generator.restore(ethers,bad));await assert.rejects(generator.restoreAsync(ethers,bad));
+  }
+  assert.throws(()=>generator.derive(ethers,phrase,{coin:'btc'}),/Choose/);
+  assert.equal(formats.exportText(pep).trim().split('\n').length,1000);
+  assert.ok(formats.exportAddressText(pep).includes(pep.wallets[999].path));
+  assert.ok(formats.exportCSV(pep).includes(pep.wallets[999].address));
   await assert.rejects(formats.importJSON(ethers, generator, backupEngine, crypto.webcrypto, native,
     {count: 3, password: 'Incorrect-fixture-password'}), /Incorrect password/);
   const altered = formats.exportJSON(ethers, backupEngine, crypto.webcrypto, small);

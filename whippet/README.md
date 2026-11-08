@@ -182,9 +182,10 @@ Protected vaults use AES-256-GCM with PBKDF2-HMAC-SHA256 at 600,000 iterations,
 a random 16-byte salt and a random 12-byte nonce. The password is not stored.
 The encrypted payload includes the phrase, BIP39 passphrase and derivation paths.
 
-With protection off, the recovery recipe is **plaintext** in local storage and
-unprotected exports. An app sandbox is not encryption. Public balance/history
-metadata is plaintext even when the seed is encrypted.
+With password protection off, the recovery recipe is **plaintext** in browser
+local storage and in unprotected exports. Starting in test.17, Android adds
+device-bound encryption for every saved wallet, including password-free wallets.
+Public balance/history metadata remains plaintext. Export formats are unchanged.
 
 Protected wallets require their password to unlock, reveal their seed again,
 or confirm a send. Each saved wallet retains its own protection choice.
@@ -524,9 +525,58 @@ a real native background transition still locks and cancels capture.
 
 ## Local storage, backup and deletion
 
-The implementation uses localStorage, not a separate SQL database. Android
-WebView storage is separate from desktop browser storage. Another browser
-profile or origin is another storage location.
+Browsers use localStorage. Android stores the two secret-bearing records below
+in one atomic encrypted file in its no-backup directory; only preferences and
+public caches remain in WebView localStorage. Another browser profile or origin
+is another storage location.
+
+Android storage uses AES-256-GCM with a fresh 12-byte IV per write and authenticated
+format metadata. Its 256-bit key is generated inside Android Keystore and cannot
+be exported. Hardware backing varies by device. Wallet passwords remain optional
+and provide a separate encryption layer.
+This is at-rest protection, not hardware signing: decrypted recipes still enter
+application/JavaScript memory, and an unlocked or compromised app can access them.
+
+**Settings → Use device authentication** is optional and installation-wide.
+Enabling or disabling it requires fresh OS authentication and an atomic,
+read-back-verified re-encryption of the existing store. Android 11+ supports strong
+biometrics or the phone's PIN/pattern/password; Android 8–10 uses the system device
+credential screen. Without a configured screen lock, the switch is unavailable;
+wallet creation still does not require a wallet password.
+First-wallet creation or restore defaults to enabling device authentication when
+a phone screen lock is configured. Setup asks for OS confirmation before saving
+the wallet; cancellation saves no wallet. Existing installations keep their choice,
+and disabling the setting is remembered even if all wallets are later deleted.
+
+When enabled, the Keystore key requires recent user authentication (60 seconds).
+Opening after backgrounding always requests authentication, even during that
+interval, and the previous WebView is destroyed to discard its decrypted state.
+Revealing existing recovery words, exporting a backup and confirming a send also
+request fresh authentication. Long-running storage operations can request it again.
+This is not a hardware-isolated signing policy: signing still happens in the
+unlocked app. The OS owns credential entry; SafeCore never reads the phone PIN.
+
+Cancel leaves protection unchanged. Cancelling an OS prompt while protection is on
+returns to the native lock screen and discards the previous unlocked view.
+Removing the phone's screen lock may invalidate
+its authentication key: disable device authentication first, and keep independent
+backups for every wallet. Lost/invalidated keys never trigger plaintext fallback.
+Recovery phrases and exported JSON remain portable; the destination phone uses its
+own key and authentication settings. Neither the old PIN nor fingerprint is needed
+to restore a separate backup. Unprotected exports still contain readable words.
+
+Migration validates all wallets, saves and reads back the encrypted snapshot, then
+removes the old localStorage records. Interrupted cleanup is retried only when the
+remaining records match. Conflicting copies, unavailable keys, and authentication
+failures stop wallet access without plaintext fallback or automatic replacement.
+Browser record removal cannot guarantee forensic erasure of old database pages or
+previous device snapshots. Missing device keys require an independent recovery
+backup; do not uninstall or clear app data to troubleshoot a storage error.
+
+Native changes use revision checks and atomic, verified commits before the UI
+reports success. An interrupted response requires reopening the app to determine
+the committed state. An older APK cannot read this device store; do not downgrade
+or assume copying app files to another device is a recovery backup.
 
 | Storage family | Purpose |
 | --- | --- |
@@ -629,6 +679,12 @@ The current sideload build uses the local debug signing certificate even with
 debugging disabled. This is **not production release signing**. Keep the same
 signing key for upgrades. Do not uninstall a funded app to work around a signing
 mismatch. Treat signing-key management as a separate release requirement.
+The publication gate now verifies the actual APK against a pinned public signing
+certificate and rejects debugging-enabled, wrong-package, wrong-version, unsigned
+or tampered artifacts. For local test builds use
+`python3 scripts/verify-apk.py PATH_TO_APK --local` from the repository root with
+`ANDROID_HOME` set. This is not production-key migration; see the
+[signing custody and migration plan](../docs/RELEASES.md#signing-key-custody-and-migration).
 
 From the containing checkout, replace `YOUR_DEVICE_SERIAL` with the intended
 device from `adb devices`:
@@ -719,6 +775,23 @@ read-only live chain-identity checks as well as local UI tests, permission-dialo
 handling, a simulated camera, keyboard input, backup handling and lifecycle
 protection. Therefore it is not a fully offline test. The public-endpoint probe
 is also explicitly network-dependent.
+
+Device-authentication instrumentation is phased, not an all-methods-at-once suite.
+Use only a dedicated emulator and the `.qa` package. Start with a fresh QA install;
+`DeviceStorageUiTest.testMigrationCreateReloadAndProtection` populates disposable
+wallets. Run these `DeviceAuthenticationTest` methods individually, in order:
+
+1. `testNoScreenLock`, with no emulator screen lock.
+2. Set the **emulator only** PIN to the public fixture `24682468`.
+3. `testAuthenticationLifecycle`, then `testProtectedExportAndImportReturn`.
+4. `testExpiredAuthorizationCannotDecrypt` (waits past the key's 60-second window).
+5. Remove the **emulator only** screen lock using that fixture PIN, then run
+   `testCredentialRemovedFailsClosed`.
+
+These tests deliberately exercise credential loss and must never target a personal
+phone or funded QA installation. They use their own UI automation connection; do
+not run a second UIAutomator session concurrently. `DeviceWalletStoreTest` uses
+isolated fixture files/aliases for ciphertext tampering, atomic writes and key loss.
 
 The isolated Core regtest harness needs separately installed node binaries. Set
 `PEP_CORE_BIN` and `WHT_CORE_BIN`, or put `pepecoind` and `whippetd` on PATH. It creates

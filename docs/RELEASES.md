@@ -9,6 +9,21 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.17
+
+Android versionCode 17 / versionName `0.1.0-test.17`, using the same development
+signing identity for in-place updates. This release adds device-encrypted Android
+wallet storage, installation-wide device authentication with first-wallet defaults,
+and offline recovery for both Pepecoin and Whippet. Existing authentication choices
+are preserved. The Settings control sits below Appearance. Release checks now
+verify the actual APK signature, approved certificate and manifest safety settings.
+Temporary storage diagnostics are removed; app/WebView debugging stays disabled.
+
+Keep independent recovery backups. Device-bound storage cannot be copied between
+phones; recovery phrases and exported JSON remain portable. Removing the phone's
+screen lock can invalidate an authentication-protected key: disable that setting
+first. This is still a development prerelease, not independently audited.
+
 ## Test.16
 
 This update uses Android versionCode 16 and versionName `0.1.0-test.16`, promoting
@@ -97,8 +112,10 @@ Your own build generally has a different signing key. Back up first.
 
 1. Build from the reviewed source tree with debugging disabled; run wallet tests,
    Android lint and `python3 whippet/tests/android_bundle.py` on that exact APK.
-2. Verify the Android manifest, signature, version, certificate fingerprint and
-   SHA-256 locally. Signing keys stay outside Git and GitHub Actions.
+2. Run `python3 scripts/verify-apk.py PATH_TO_APK` with `ANDROID_HOME` set.
+   It checks the actual signature, pinned certificate, package/version, SDK range,
+   Android debugging/test-only flags, disabled backups/cleartext, and SHA-256.
+   Signing keys stay outside Git and GitHub Actions.
 3. Store the APK in an isolated `release-artifacts/<tag>` branch, not the `main`
    source history. Record the immutable artifact commit and hash in
    `release/manifest.json`. That transport branch contains only the deliberately
@@ -106,7 +123,8 @@ Your own build generally has a different signing key. Back up first.
 4. Submit source plus manifest through a pull request targeting protected `main`.
    After required checks pass and the PR is merged, tag the merged source commit.
    The release workflow fetches the pinned artifact commit, verifies hash and exact bundled
-   source, and attaches APK/checksum to a GitHub prerelease using its short-lived
+   source, independently verifies the signed APK against `release/signing-policy.json`,
+   and attaches APK/checksum to a GitHub prerelease using its short-lived
    repository token. It never receives the signing key.
 5. Verify the published download hash independently. Source archives correspond
    to the tagged source commit. Do not overwrite a published version's APK;
@@ -125,3 +143,64 @@ installs the app on a phone. Review workflow changes like any privileged code.
 If Actions is disabled, enable it for this repository or upload the verified APK
 and checksum manually through the Releases interface. An upload is not complete
 until the release asset is visible and its downloaded checksum matches.
+
+## Signing-key custody and migration
+
+The approved certificate is pinned separately from per-release metadata in
+`release/signing-policy.json`. Its current channel is **development**, not
+production. The file contains only public certificate metadata, never a private
+key or password. Changing this trust pin is a security decision, not a routine
+version bump. Never change it just to get a failed build through verification.
+
+The verifier requires Android build-tools **35.0.1** and fails closed if they are
+missing. The workflow installs that version and does not receive signing keys.
+Local iteration builds can be checked without falsely claiming publication approval:
+
+```sh
+python3 scripts/verify-apk.py whippet/android/app/build/outputs/apk/liveTest/app-liveTest.apk --local
+```
+
+`--local` permits a local suffix and skips matching the already-published APK's
+hash; all signer, package, version-code and manifest safety checks still apply.
+The publisher never passes this option. App/WebView remote debugging is not
+permitted in published builds. An unsigned release build,
+QA package, unexpected signer, tampered APK or debugging-enabled APK must not ship.
+The asset audit remains a separate mandatory check. These checks do not prove
+that the signed native code was reproducibly built or that it is vulnerability-free.
+
+Before creating or adopting a production signing identity:
+
+1. Choose key custody deliberately: an offline signing machine/removable encrypted
+   storage, or a managed signing service. Keep the private key out of the source
+   tree, artifact branches, shell history, chat, logs and general-purpose CI.
+2. Use a dedicated, strong, unique keystore password; keep it separately. Restrict
+   filesystem access and keep at least two encrypted offline backups in separate
+   places. Test recovery using a copy on an isolated machine. Never paste the key
+   or password into a request for assistance.
+3. Record and independently verify the **public certificate fingerprint** before
+   adopting the key. Preserve the current development identity securely until
+   the migration and compatibility plan is proven; do not delete or overwrite it.
+4. Test upgrades with unfunded fixture wallets across the supported Android range,
+   including encrypted wallet storage, device authentication and JSON recovery.
+   A different signer is not automatically an in-place upgrade. Android key
+   rotation support varies by version; Android 8 requires particular care.
+5. Approve the package identity, signing lineage or explicit backup/restore
+   migration, and user instructions before changing policy or publishing.
+   Never instruct users to uninstall a funded wallet to bypass a signature error.
+
+No production key is generated, copied, uploaded or rotated by the verification
+scripts. The phone's current signing identity is unchanged. Android's official
+[app-signing guide](https://developer.android.com/studio/publish/app-signing) and
+[apksigner reference](https://developer.android.com/tools/apksigner) describe
+certificate continuity and version-dependent rotation options.
+
+Verification tests (no GitHub requests or phone access):
+
+```sh
+python3 -m unittest discover -s scripts/tests -v
+SAFECORE_APK_INTEGRATION=1 python3 -m unittest scripts.tests.test_apk_security_integration -v
+```
+
+The opt-in integration suite needs the SDK tools above, Android 35's platform
+and Java `keytool`. It generates and discards its own temporary signing key and
+unsigned/signed/tampered APK fixtures; it never uses an operator's signing key.

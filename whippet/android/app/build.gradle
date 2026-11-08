@@ -1,5 +1,7 @@
 plugins { id 'com.android.application' }
 def debugTools = providers.gradleProperty('safeCoreDebugTools').map { it.toBoolean() }.orElse(false).get()
+def localBuild = providers.gradleProperty('safeCoreLocalBuild').orElse('').get()
+if (localBuild && !(localBuild ==~ /[a-z0-9-]{1,32}/)) throw new GradleException('Invalid local build label')
 
 android {
     namespace 'org.pepecoinservice.safecore'
@@ -12,8 +14,8 @@ android {
         applicationId 'org.pepecoinservice.safecore.testing'
         minSdk 26
         targetSdk 35
-        versionCode 16
-        versionName '0.1.0-test.16'
+        versionCode 17
+        versionName '0.1.0-test.17' + (localBuild ? '-local.' + localBuild : '')
         buildConfigField 'boolean', 'DEBUG_TOOLS_ENABLED', debugTools.toString()
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
@@ -38,7 +40,7 @@ android {
 tasks.register('bundleWallet', Sync) {
     from('../../www') {
         include 'index.html', 'styles.css', 'engine.js', 'viewport.js', 'recovery.js', 'receive.js', 'library.js',
-                'transactions.js', 'komodo.js', 'scanner.js', 'network.js', 'reporting.js', 'app.js', 'native.js',
+                'transactions.js', 'komodo.js', 'scanner.js', 'network.js', 'reporting.js', 'app.js', 'native.js', 'storage.js',
                 'assets/pepecoin.png', 'assets/whippet.png', 'assets/corevault.svg', 'assets/safecore.LICENSE',
                 'assets/ethers.umd.min.js', 'assets/ethers.LICENSE', 'assets/qrcode.min.js', 'assets/qrcode.LICENSE', 'assets/whippet-legacy.js', 'assets/jsQR.js', 'assets/jsQR.LICENSE'
         (1..30).each { include String.format('assets/icons/safecore-%02d.svg', it) }

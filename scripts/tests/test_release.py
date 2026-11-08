@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -21,7 +22,8 @@ class ReleaseTests(unittest.TestCase):
         self.apk = b'public fake APK fixture'
         self.manifest = dict(tag='v0.1.0-test.9', filename='SafeCore-0.1.0-test.9.apk',
                              artifact_commit='a' * 40, sha256=hashlib.sha256(self.apk).hexdigest(),
-                             certificate_sha256='b' * 64, debug_tools=False)
+                             certificate_sha256='b' * 64, debug_tools=False, version_code=9,
+                             changes=['Public fixture change summary.'])
         self.environment = dict(GITHUB_REPOSITORY='example/safecore',
                                 GITHUB_REF='refs/tags/v0.1.0-test.9', GITHUB_TOKEN='public-test-token')
         self.release = dict(id=123, draft=True, assets=[],
@@ -29,7 +31,7 @@ class ReleaseTests(unittest.TestCase):
         self.requests = []
         self.notice = (Path(__file__).resolve().parents[2] / 'RISK_NOTICE.md').read_text(encoding='utf-8')
 
-    def run_publish(self, *, existing=None, bad_bytes=False):
+    def run_publish(self, *, existing=None, bad_bytes=False, verification_failure=False):
         def request(req, **kwargs):
             self.requests.append(req)
             if '/releases/tags/' in req.full_url:
@@ -44,9 +46,13 @@ class ReleaseTests(unittest.TestCase):
                 result = {'state':'uploaded'}
             return io.BytesIO(json.dumps(result).encode())
 
+        def run_command(args, **kwargs):
+            if verification_failure and 'scripts/verify-apk.py' in args:
+                raise subprocess.CalledProcessError(1, args)
+
         with patch.dict(os.environ, self.environment, clear=True), \
              patch.object(publisher.Path, 'read_text', side_effect=[json.dumps(self.manifest), self.notice]), \
-             patch.object(publisher.subprocess, 'run') as run, \
+             patch.object(publisher.subprocess, 'run', side_effect=run_command) as run, \
              patch.object(publisher.subprocess, 'check_output', side_effect=[
                  'a' * 40 + '\n', b'changed' if bad_bytes else self.apk]), \
              patch.object(publisher.urllib.request, 'urlopen', side_effect=request), \
@@ -56,16 +62,24 @@ class ReleaseTests(unittest.TestCase):
 
     def test_draft_upload_then_publish(self):
         run = self.run_publish()
-        self.assertIn('whippet/tests/android_bundle.py', run.call_args_list[1].args[0])
+        self.assertIn('scripts/verify-apk.py', run.call_args_list[1].args[0])
+        self.assertNotIn('--local', run.call_args_list[1].args[0])
+        self.assertIn('whippet/tests/android_bundle.py', run.call_args_list[2].args[0])
         self.assertEqual([r.method for r in self.requests], ['GET','POST','POST','POST','PATCH'])
         self.assertTrue(json.loads(self.requests[1].data)['draft'])
         self.assertIn(self.notice, json.loads(self.requests[1].data)['body'])
+        self.assertIn('Public fixture change summary.', json.loads(self.requests[1].data)['body'])
         self.assertEqual(json.loads(self.requests[-1].data),
                          {'draft':False, 'prerelease':True, 'make_latest':'false'})
 
     def test_bad_hash_stops_before_network(self):
         with self.assertRaisesRegex(ValueError, 'checksum'):
             self.run_publish(bad_bytes=True)
+        self.assertEqual(self.requests, [])
+
+    def test_binary_verification_failure_stops_before_any_release_api(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_publish(verification_failure=True)
         self.assertEqual(self.requests, [])
 
     def test_private_artifact_fetch_uses_ephemeral_scoped_credentials(self):

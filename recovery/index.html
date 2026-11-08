@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Whippet Seed Wallet</title>
+  <title>SafeCore · Offline recovery</title>
   <link rel="stylesheet" href="styles.css?v=20261105-bulk-export">
   <script defer src="assets/ethers.umd.min.js"></script>
   <script defer src="wallet-format.js?v=20261105-bulk-export"></script>
@@ -16,11 +16,12 @@
 </head>
 <body>
   <main>
-    <header><span class="mark" aria-hidden="true">W</span><div><p class="eyebrow">WHIPPET · WHT</p><h1>Your phrase. Your keys.</h1><p>Generate or restore Whippet keys locally in your browser.</p></div></header>
+    <header><span class="mark" aria-hidden="true">S</span><div><p class="eyebrow">SAFECORE · PEPECOIN + WHIPPET</p><h1>Offline recovery</h1><p>Your phrase. Your keys. No connection needed.</p></div></header>
     <section class="panel" aria-labelledby="seed-heading">
       <h2 id="seed-heading">Recovery phrase</h2>
       <p class="muted">This phrase and its optional passphrase recover every key below. Keep the private backup private.</p>
       <div class="controls">
+        <label>Asset<select id="coin"><option value="pep">Pepecoin</option><option value="wht">Whippet</option></select></label>
         <label>Phrase length<select id="words"><option value="12">12 words</option><option value="24">24 words</option></select></label>
         <label>Addresses<input id="count" type="number" min="1" max="1000" value="200" inputmode="numeric"></label>
         <button id="generate" type="button">Generate new phrase</button>
@@ -31,24 +32,24 @@
       <p id="phrase-help" class="muted">Type a word and choose a suggestion. Arrow keys select; Tab or Enter completes the word.</p>
       <label for="passphrase">Optional BIP39 passphrase · required again for recovery</label>
       <input id="passphrase" type="password" autocomplete="off" spellcheck="false" maxlength="1000">
-      <div class="actions"><button id="derive" type="button">Derive Whippet keys</button><label class="file-button">Import wallet JSON<input id="restore" type="file" accept=".json,application/json"></label><button id="cancel-generation" type="button" class="secondary" hidden>Cancel</button></div>
+      <div class="actions"><button id="derive" type="button">Derive keys</button><label class="file-button">Import wallet JSON<input id="restore" type="file" accept=".json,application/json"></label><button id="cancel-generation" type="button" class="secondary" hidden>Cancel</button></div>
       <p id="status" role="status" aria-live="polite">No keys generated.</p>
     </section>
     <section id="results" class="panel" hidden aria-labelledby="results-heading">
-      <div class="result-heading"><h2 id="results-heading">Whippet addresses</h2><span id="total" class="badge"></span></div>
-      <p class="muted">Recovery recipe: BIP39 + BIP32, <code>m/0'/3'/index'</code>, compressed keys. Save the recipe with the phrase.</p>
-      <p class="muted">Recover with this tool, or import individual WIF keys into Whippet Core. This page does not add Whippet support to the Coinomi app or add mnemonic import to Core.</p>
+      <div class="result-heading"><h2 id="results-heading">Addresses</h2><span id="total" class="badge"></span></div>
+      <p class="muted">BIP39 + BIP32 · <code id="result-path"></code> · compressed keys</p>
+      <p class="muted">SafeCore receiving addresses, account 0. Other wallets may use different paths. Not for legacy Komodo recovery.</p>
       <div class="actions"><button id="download" type="button">Download private JSON</button><button id="download-text" type="button" class="secondary">Export keys · TXT</button><button id="download-address-text" type="button" class="secondary">Export addresses + keys · TXT</button><button id="download-csv" type="button" class="secondary">Export addresses + keys · CSV</button><button id="reveal" type="button" class="secondary" aria-pressed="false">Show private keys</button><button id="clear" type="button" class="secondary">Clear keys</button></div>
-      <p class="muted">Downloads are unencrypted. JSON includes the phrase, optional passphrase, recipe, and every displayed key, and can be imported into the Whippet wallet. TXT can contain one WIF key per line or address/key pairs with their paths. CSV also pairs addresses with their keys and paths.</p>
+      <p class="muted">Exports are unencrypted. JSON restores in SafeCore. Import WIF keys only into the matching coin’s wallet. Keep every export private.</p>
       <div id="wallets"></div>
     </section>
-    <footer>Whippet mainnet · keys stay in this page’s memory · no balance checks or transaction submissions</footer>
+    <footer>Mainnet only · no balance checks · no transactions · nothing saved in browser storage</footer>
     <noscript>JavaScript is required for local key generation.</noscript>
   </main>
   <dialog id="backup-password-dialog" aria-labelledby="backup-password-title">
     <form id="backup-password-form">
       <h2 id="backup-password-title">Unlock wallet backup</h2>
-      <p>Enter the password used by your Whippet wallet. Decryption happens locally in this browser.</p>
+      <p>Enter your wallet backup password. Decryption stays on this device.</p>
       <label for="backup-password">Wallet backup password</label>
       <input id="backup-password" type="password" autocomplete="off" required>
       <p id="backup-error" role="alert"></p>

@@ -17,7 +17,7 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name in FILES:
-            archive.write(root / name, 'whippet-recovery/' + name)
+            archive.write(root / name, 'safecore-recovery/' + name)
     print(args.output.resolve())
 
 

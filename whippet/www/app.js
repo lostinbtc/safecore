@@ -1,5 +1,5 @@
 /* Local seed custody. Default or explicitly selected Electrum WSS endpoints. */
-(() => {
+(async () => {
   'use strict';
   const E = window.WalletEngine;
   const T = window.WalletTransactions, N = window.WalletNetwork;
@@ -47,9 +47,28 @@
       $('risk-notice').showModal(); $('risk-title').focus();
     }
   }
-  const library = WalletLibrary.create(localStorage);
+  const nativeStorage = location.origin === 'https://appassets.androidplatform.net';
+  let walletStorage;
+  function deviceStorageError() {
+    $('main').innerHTML = '<h1>Wallet storage unavailable</h1><p>Close and reopen the app to retry. Do not uninstall or clear app data. If the device key is lost, you will need your separate recovery backup.</p>';
+    $('lock').hidden = true;
+    $('header-add-coins').hidden = true;
+  }
+  try {
+    if (nativeStorage) $('main').textContent = 'Opening protected wallet storage…';
+    if(!window.WalletStorage)throw Error('Storage script unavailable');
+    walletStorage = await WalletStorage.open(localStorage, window.SafeCorePlatform, nativeStorage);
+  } catch (_) { deviceStorageError(); return; }
+  const library = WalletLibrary.create(walletStorage);
   const protectedWallet = vault => vault?.format === E.FORMAT;
   const withWalletLock = task => navigator.locks.request('corevault-wallet-storage', task);
+  const changeWallet = (task, published = () => {}) => withWalletLock(async () => {
+    try { const result = await walletStorage.transaction(task); published(result); return result; }
+    catch (e) {
+      if (walletStorage.failed) { envelope = null; mode = 'storage-error'; lock(undefined, false); }
+      throw e;
+    }
+  });
   const COIN_PREFS = 'corevault.hidden-coins.v1';
   const CONNECTION_PREFS='corevault.connections.v1';
   const connectionTests=new Set();
@@ -143,7 +162,7 @@
   let stagedFile = null, setupType = 'create', busy = false;
   let restoreEntry = null;
   try {
-    const saved = localStorage.getItem(STORE);
+    const saved = walletStorage.getItem(STORE);
     if (saved) { envelope = E.validateEnvelope(JSON.parse(saved)); mode = 'locked'; }
   } catch (_) { mode = 'storage-error'; }
   function prepareAddresses(candidate, vault) {
@@ -562,6 +581,8 @@
       try {
         if(draft.komodo&&(p.coin!=='pep'||!komodoVerified()))throw Error('Komodo recovery is disabled or the session expired. Enter the Komodo phrase again.');
         if (draft.walletId !== WalletLibrary.id(source) || Date.now()-p.createdAt > 90000 || !liveEnabled()) throw Error('Review expired or wallet changed. Build a fresh transaction.');
+        if(window.SafeCorePlatform?.authenticateWalletAction)await SafeCorePlatform.authenticateWalletAction('send');
+        if(token!==generation||source!==envelope)return;
         const candidate = E.validateRecipe(ethers,await E.decrypt(crypto,source,password));
         if (token !== generation || source !== envelope) return;
         await N.checkInputs(p.coin,p.inputs);
@@ -592,7 +613,7 @@
         const outpoints = p.inputs.map(i=>i.txid+':'+i.pos);
         await withWalletLock(() => {
           if(draft.komodo&&!komodoVerified())throw Error('Komodo session expired or recovery was disabled.');
-          if (token !== generation || source !== envelope || localStorage.getItem(STORE) !== JSON.stringify(source) || !liveEnabled() || Date.now()-p.createdAt > 90000) throw Error('Wallet changed or review expired. Build a fresh transaction.');
+          if (token !== generation || source !== envelope || walletStorage.getItem(STORE) !== JSON.stringify(source) || !liveEnabled() || Date.now()-p.createdAt > 90000) throw Error('Wallet changed or review expired. Build a fresh transaction.');
           const attempts = sendAttempts();
           if (attempts.some(a=>a.coin===p.coin&&a.outpoints.some(o=>outpoints.includes(o)))) throw Error('These inputs already have a send attempt. Check its transaction ID before retrying.');
           const record = {txid:signed.txid,coin:p.coin,outpoints,at:Date.now(),status:'unknown'};
@@ -794,8 +815,9 @@
     let walletName='this wallet';
     try{walletName=library.list().find(item=>item.id===WalletLibrary.id(envelope))?.name||walletName;}catch(_){}
     $('main').innerHTML = `<div class="page-head settings-heading"><div><h1>Settings</h1><p class="subtle">${exists?escape(walletName):'Appearance and wallet protection'}</p></div>${protectionIcon(protectedMode)}</div>` +
-      `<section id="password-protection" class="panel"><h2>${exists ? protectedMode ? 'Password protection on' : 'Password protection off' : 'No wallet yet'}</h2><p class="subtle">${exists ? protectedMode ? 'Encrypted on this device. Password required to view recovery words.' : 'Not encrypted. Your recovery phrase is stored as readable text.' : 'Create or restore a wallet to get started.'}</p>${protectionAction?`<div class="settings-actions">${protectionAction}</div>`:''}</section>` +
+      `<section id="password-protection" class="panel"><h2>${exists ? protectedMode ? 'Password protection on' : 'Password protection off' : 'No wallet yet'}</h2><p class="subtle">${exists ? protectedMode ? (walletStorage.deviceProtected ? 'Device-encrypted storage. Your wallet password adds another layer.' : 'Encrypted on this device. Password required to view recovery words.') : (walletStorage.deviceProtected ? 'Device-encrypted storage. No separate wallet password.' : 'Not encrypted. Your recovery phrase is stored as readable text.') : 'Create or restore a wallet to get started.'}</p>${protectionAction?`<div class="settings-actions">${protectionAction}</div>`:''}</section>` +
       `<label class="theme-control" for="theme-choice">Appearance<select id="theme-choice"><option value="system">Use device theme</option><option value="dark">Dark</option><option value="light">Light</option></select></label>` +
+      (window.SafeCorePlatform?.getDeviceAuthentication?'<label class="check screenshot-setting"><input id="device-authentication" type="checkbox" disabled><span><strong>Use device authentication</strong><small id="device-authentication-note">Loading…</small></span></label>':'') +
       `<label class="check screenshot-setting"><input id="hide-balances" type="checkbox" ${balancesHidden()?'checked':''}><span><strong>Hide balances</strong><small>Payment amounts stay visible.</small></span></label>` +
       `<label class="check screenshot-setting"><input id="screen-protection" type="checkbox" disabled ${window.SafeCorePlatform?.getScreenProtection?'checked':''}><span><strong>Block screenshots</strong><small id="screen-protection-note">${window.SafeCorePlatform?.getScreenProtection?'Loading…':''}</small></span></label>` +
       `<div id="recovery-preferences"></div><section class="settings-connections">
@@ -815,6 +837,23 @@
     $('theme-choice').value = themePreference();
     $('theme-choice').onchange = event => {try{localStorage.setItem('corevault.theme',event.target.value);applyTheme();}catch(_){error('Could not save your appearance preference.');}};
     const screenControl=$('screen-protection'),screenNote=$('screen-protection-note'),platform=window.SafeCorePlatform;
+    const authControl=$('device-authentication'),authNote=$('device-authentication-note');
+    if(authControl){
+      let authEnabled=false;
+      const load=async()=>{
+        authControl.disabled=true;
+        try {
+          const status=await platform.getDeviceAuthentication();authEnabled=status.enabled;
+          if(authControl.isConnected){authControl.checked=authEnabled;authControl.disabled=!status.available;authNote.textContent=status.available?'Fingerprint or phone screen lock. All wallets.':'Set up a phone screen lock to enable.';}
+        }catch(_){if(authNote.isConnected)authNote.textContent='Device authentication unavailable. Reopen Settings to retry.';}
+      };
+      void load();
+      authControl.onchange=async()=>{
+        const enabled=authControl.checked;authControl.checked=authEnabled;authControl.disabled=true;
+        try{await withWalletLock(()=>walletStorage.setAuthentication(enabled));await load();toast(enabled?'Device authentication enabled.':'Device authentication off. Storage remains encrypted.');}
+        catch(e){if(walletStorage.failed){envelope=null;mode='storage-error';lock(undefined,false);}else if(authControl.isConnected){error(e.message);await load();}}
+      };
+    }
     if(platform?.getScreenProtection&&platform?.setScreenProtection){
       let enabled=true;
       const load=async()=>{
@@ -938,21 +977,22 @@
     document.querySelectorAll('[data-export-wallet]').forEach(el=>el.onclick=()=>beginExport(el.dataset.exportWallet));
     document.querySelectorAll('[data-delete-wallet]').forEach(el=>el.onclick=()=>{deleteTarget=el.dataset.deleteWallet;go('remove');});
     document.querySelectorAll('[data-open-wallet]').forEach(el => el.onclick = async () => {
+      const token = generation;
       try {
-        await withWalletLock(() => {
-          const next = library.activate(el.dataset.openWallet);
+        await changeWallet(() => library.activate(el.dataset.openWallet), next => {
+          const interrupted = token !== generation || document.hidden;
           generation++; pending = null; revealed = false; receiveBooks = null;
           clearReports();
           N.close();networkEpoch++;receivePools=null;snapshots={};networkErrors={};scans={};lastRefresh={};sendDraft=null;
           destinationFingerprint=null;
-          envelope = next; mode = 'locked'; openUnprotected();
+          envelope = next; mode = 'locked'; if (!interrupted) openUnprotected();
         });
         resetIdle(); go(mode === 'locked' ? 'unlock' : 'wallet');
       } catch (e) { error(e.message); }
     });
     if (activeId) {
       $('current-wallet-name').value = entries.find(item => item.id === activeId)?.name || 'My wallet';
-      $('rename-wallet').onsubmit = async event => { event.preventDefault(); const name = $('current-wallet-name').value; try { await withWalletLock(() => library.rename(activeId,name)); render(); $('wallet-rename').closest('.saved-wallet').open = true; $('wallet-rename').querySelector('summary').focus(); toast('Wallet renamed.'); } catch (e) { error(e.message); } };
+      $('rename-wallet').onsubmit = async event => { event.preventDefault(); const name = $('current-wallet-name').value; try { await changeWallet(() => library.rename(activeId,name)); render(); if ($('wallet-rename')) { $('wallet-rename').closest('.saved-wallet').open = true; $('wallet-rename').querySelector('summary').focus(); } toast('Wallet renamed.'); } catch (e) { error(e.message); } };
       $('wallet-seed').onclick = () => go('reveal');
     }
   }
@@ -966,9 +1006,12 @@
     $('reveal-form').onsubmit = async event => {
       event.preventDefault(); if (busy) return;
       const token = generation, source = envelope;
+      const password=needsPassword ? $('seed-password').value : '';
       busy = true; clearError(); $('reveal-seed').disabled = true;
       try {
-        const candidate = E.validateRecipe(ethers, await E.decrypt(crypto, source, needsPassword ? $('seed-password').value : ''));
+        if(window.SafeCorePlatform?.authenticateWalletAction)await SafeCorePlatform.authenticateWalletAction('reveal');
+        if(token!==generation||source!==envelope)return;
+        const candidate = E.validateRecipe(ethers, await E.decrypt(crypto, source, password));
         if (token !== generation || source !== envelope) return;
         revealed = true;
         $('reveal-form').outerHTML = `<section class="seed-display"><div id="revealed-words" class="word-grid">${candidate.mnemonic.split(' ').map((word,i) => `<div class="word"><span>${i+1}</span>${escape(word)}</div>`).join('')}</div>${candidate.passphrase ? `<p class="notice">This wallet also needs its exact BIP39 passphrase:</p><pre id="revealed-passphrase">${escape(candidate.passphrase)}</pre>` : ''}${button('hide-seed','Hide recovery phrase','wide')}</section>`;
@@ -990,7 +1033,7 @@
       ${setupType === 'create' ? '<label for="words">Recovery phrase length</label><select id="words"><option value="12">12 words</option><option value="24">24 words</option></select>' : '<label for="backup-file">Backup file (optional)</label><input id="backup-file" type="file" accept=".json,application/json"><p id="file-status" class="inline-info"></p>'}
       <label class="check"><input id="use-passphrase" type="checkbox"><span>Extra seed passphrase (advanced)</span></label><div id="passphrase-fields" hidden><label for="passphrase">BIP39 passphrase</label><input id="passphrase" type="password" autocomplete="off"><small>This changes your addresses. Losing it can mean losing your coins. It is not the app password.</small></div>
       <label class="check"><input id="password-lock" type="checkbox"><span>Password lock (optional)</span></label><div id="password-fields" hidden><label for="password">Wallet password</label><input id="password" type="password" minlength="12" autocomplete="new-password"><small>At least 12 characters. Required to open this wallet or reveal its recovery phrase.</small><label for="confirm">Confirm password</label><input id="confirm" type="password" minlength="12" autocomplete="new-password"></div>
-      <p id="protection-notice" class="inline-info">Password lock is off. This wallet and its backups will contain an unencrypted recovery phrase. Anyone with access to this browser profile can read it.</p>
+      <p id="protection-notice" class="inline-info"></p>
       ${restoring?'</details>':''}${setupType==='create'?'<label class="check"><input id="ack" type="checkbox" required><span>I understand that losing my recovery phrase may mean losing access to my funds.</span></label>':''}
       <div class="form-actions">${button('cancel-setup','Cancel')}${button('submit-setup',setupType === 'create' ? 'Create wallet' : 'Restore wallet','primary')}</div></form></section>${restoring?'<div id="restore-keyboard" class="restore-keyboard" aria-label="Recovery word keyboard" hidden><div id="phrase-suggestions" class="restore-suggestions" role="group" aria-label="Recovery word suggestions"></div></div>':''}`;
     document.querySelectorAll('[data-setup]').forEach(el => el.onclick = () => { generation++; busy = false; setupType = el.dataset.setup; stagedFile = null; clearError(); setup(); });
@@ -1005,9 +1048,10 @@
       $('password').required = enabled; $('confirm').required = enabled;
       if (!enabled) { $('password').value = ''; $('confirm').value = ''; }
       $('seed-lock').outerHTML = protectionIcon(enabled);
-      $('protection-notice').textContent = enabled ? 'This wallet will be encrypted. Save its recovery phrase separately: the app password cannot recover a lost backup.' : 'Password lock is off. This wallet and its backups will contain an unencrypted recovery phrase. Anyone with access to this browser profile can read it.';
+      $('protection-notice').textContent = enabled ? 'This wallet will be encrypted. Save its recovery phrase separately: the app password cannot recover a lost backup.' : walletStorage.deviceProtected ? 'Device-encrypted storage. No wallet password. Exported backups contain readable recovery words; keep them private.' : 'Password lock is off. This wallet and its backups will contain an unencrypted recovery phrase. Anyone with access to this browser profile can read it.';
     }
     $('password-lock').onchange = syncProtection;
+    syncProtection();
     $('use-passphrase').onchange = () => { $('passphrase-fields').hidden = !$('use-passphrase').checked; if (!$('use-passphrase').checked) $('passphrase').value = ''; };
     if ($('backup-file')) $('backup-file').onchange = async event => {
       const token = ++generation;
@@ -1055,6 +1099,15 @@
         if (setupType==='create'&&!$('ack').checked) throw new Error('Please acknowledge the importance of keeping your recovery phrase safe.');
         if(setupType==='import'&&!stagedFile&&!recovery.valid())throw new Error('Check the spelling, order and number of your recovery words before restoring.');
         busy = true; $('submit-setup').disabled = true; $('submit-setup').textContent = 'Preparing locally…';
+        if(walletStorage.deviceProtected && !library.list().length){
+          const auth=await window.SafeCorePlatform.getDeviceAuthentication();
+          if(token!==generation)return;
+          if(auth.firstWalletDefault){
+            $('submit-setup').textContent='Confirm phone authentication…';
+            await withWalletLock(()=>walletStorage.setAuthentication(true));
+            if(token!==generation)return;
+          }
+        }
         let candidate;
         if (stagedFile) candidate = E.validateRecipe(ethers, await E.decrypt(crypto, stagedFile, password));
         else candidate = E.recipe(ethers, setupType === 'create' ? E.createPhrase(ethers, crypto, Number($('words').value)) : $('phrase').value, $('passphrase').value);
@@ -1066,16 +1119,18 @@
           // Only reveal a generated phrase after its durable wallet record exists.
           // Navigation may discard this temporary display state, not the wallet.
           pending = { candidate, sealed }; location.hash = 'backup'; resetIdle();
-        } else { await persist(candidate, sealed, $('wallet-name').value, token); go('wallet'); toast('Wallet restored.'); }
-      } catch (e) { if (token === generation) error(e.message); }
+        } else { await persist(candidate, sealed, $('wallet-name').value, token); if(token !== generation)return; go('wallet'); toast('Wallet restored.'); }
+      } catch (e) { if(walletStorage.failed){envelope=null;mode='storage-error';lock(undefined,false);}else if (token === generation) error(e.message); }
       finally { busy = false; if ($('submit-setup')) { $('submit-setup').disabled = false; $('submit-setup').textContent = setupType === 'create' ? 'Create wallet' : 'Restore wallet'; recovery?.refresh(); } }
     };
   }
   async function persist(candidate, sealed, name, token = generation) {
-    await withWalletLock(() => {
+    await changeWallet(() => {
       if (token !== generation) throw new Error('Wallet changed or was closed. Please try again.');
       if (JSON.stringify(library.active()) !== JSON.stringify(envelope)) throw new Error('Another tab changed the active wallet. Reload before saving.');
       library.save(sealed, name);
+    }, () => {
+      if (token !== generation || document.hidden) { envelope = sealed; mode = 'locked'; lock(undefined, false); return; }
       envelope = sealed; prepareAddresses(candidate, sealed); pending = null; stagedFile = null; addingWallet = false;
       mode = 'unlocked'; resetIdle();
     });
@@ -1142,14 +1197,17 @@
       const token = generation;
       let cleanupFailed=false;
       try {
-        await withWalletLock(() => {
+        await changeWallet(() => {
           if (token !== generation) throw new Error('The active wallet changed. Review before removing it.');
-          if (storageFailure) localStorage.removeItem(STORE);
+          if (storageFailure) walletStorage.removeItem(STORE);
           else {
             if (JSON.stringify(library.active()) !== JSON.stringify(envelope)) throw new Error('Another tab changed the active wallet. Reload before removing it.');
             const current=library.list().find(w=>w.id===target);
             if(!current||JSON.stringify(current.vault)!==JSON.stringify(item.vault))throw Error('This wallet changed. Review it again before deleting.');
             library.remove(target);
+          }
+        }, () => {
+          if (!storageFailure) {
             try{
               for(const coin of Object.keys(E.NETWORKS))localStorage.removeItem('corevault.balance.'+target+'.'+coin);
               for(const prefix of ['corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.'])localStorage.removeItem(prefix+target);
@@ -1163,9 +1221,10 @@
     };
   }
   function storageError() {
+    if (nativeStorage) { deviceStorageError(); return; }
     $('main').innerHTML = title('Saved wallet needs attention', 'Your existing data has not been overwritten.') + '<section class="panel form-panel"><div class="notice">The saved wallet could not be read. Export the original data before removing or replacing it. An unprotected wallet export contains readable recovery words; keep it private.</div>' + button('export-raw','Export saved data','wide') + button('remove-raw','Remove local copy','danger space-top') + '</section>';
     $('export-raw').onclick = () => {
-      const raw = localStorage.getItem(STORE); if (!raw) return;
+      const raw = walletStorage.getItem(STORE); if (!raw) return;
       if(window.SafeCorePlatform){SafeCorePlatform.exportBackup(raw).then(()=>toast('Backup saved.')).catch(e=>error(e.message));return;}
       const url = URL.createObjectURL(new Blob([raw], {type:'application/json'}));
       const a = document.createElement('a'); a.href = url; a.download = 'safecore-unreadable-vault.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000);
@@ -1173,6 +1232,7 @@
     $('remove-raw').onclick = () => {deleteTarget=null;go('remove');};
   }
   function render() {
+    if (walletStorage.failed || (nativeStorage && mode === 'storage-error')) { deviceStorageError(); return; }
     cancelConnectionTests();
     let route = location.hash.slice(1) || 'wallet';
     if(route!=='export')exportSelection=null;
@@ -1227,13 +1287,15 @@
     }
   }
   document.addEventListener('visibilitychange', () => {
-    if(document.hidden){if(!window.SafeCorePlatform?.cameraPermissionPending)lock();}
+    if(document.hidden){if(!window.SafeCorePlatform?.cameraPermissionPending&&!window.SafeCorePlatform?.deviceAuthenticationPending)lock();}
     else resumeUnprotected();
   });
   window.addEventListener('pagehide', () => lock(undefined, false));
   window.addEventListener('pageshow', resumeUnprotected);
   window.addEventListener('safecore-pause', () => lock(undefined, false));
   window.addEventListener('safecore-resume', resumeUnprotected);
+  window.addEventListener('safecore-auth-prompt',()=>clearTimeout(idleTimer));
+  window.addEventListener('safecore-auth-end',resetIdle);
   window.addEventListener('safecore-import', event => {
     if(!window.SafeCorePlatform||typeof event.detail!=='string'||event.detail.length>65536)return;
     if(!riskAccepted()){
@@ -1264,7 +1326,7 @@
     if(event.key===BRAND_PREF) {applyBrand(savedBrand());if(location.hash==='#icons')iconGallery();}
     if (event.key === 'corevault.theme'||event.key===null) applyTheme();
     if (event.key === COIN_PREFS) { loadCoinPrefs(); if (['', '#wallet', '#coins'].includes(location.hash)) render(); }
-    if (event.key === STORE || event.key === WalletLibrary.COLLECTION || event.key === null) { lock(undefined, false); try { const raw = localStorage.getItem(STORE); envelope = raw ? E.validateEnvelope(JSON.parse(raw)) : null; mode = envelope ? 'locked' : 'demo'; if(!document.hidden)openUnprotected(); } catch (_) { envelope = null; mode = 'storage-error'; } render(); resetIdle(); }
+    if (!nativeStorage && (event.key === STORE || event.key === WalletLibrary.COLLECTION || event.key === null)) { lock(undefined, false); try { const raw = walletStorage.getItem(STORE); envelope = raw ? E.validateEnvelope(JSON.parse(raw)) : null; mode = envelope ? 'locked' : 'demo'; if(!document.hidden)openUnprotected(); } catch (_) { envelope = null; mode = 'storage-error'; } render(); resetIdle(); }
   });
   for (const event of ['pointerdown','keydown']) document.addEventListener(event, resetIdle, {passive:true});
   render();

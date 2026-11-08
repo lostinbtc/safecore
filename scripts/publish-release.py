@@ -56,6 +56,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='safecore-release-') as directory:
         target = Path(directory) / filename
         target.write_bytes(apk)
+        # Check the actual signed binary, not only manifest claims. No local bypass.
+        subprocess.run(['python3', 'scripts/verify-apk.py', str(target)], check=True)
         subprocess.run(['python3', 'whippet/tests/android_bundle.py', str(target)], check=True)
     checksum = (digest + '  ' + filename + '\n').encode()
     base = 'https://api.github.com/repos/' + repository
@@ -87,10 +89,11 @@ def main():
             'Back up before changing installations; do not uninstall to bypass signature errors.\n\n'
             'APK SHA-256: `' + digest + '`\n\n'
             'Signing certificate SHA-256: `' + manifest['certificate_sha256'] + '`\n\n'
+            + ('What changed:\n\n' + '\n'.join('- ' + change for change in manifest.get('changes', [])) + '\n\n' if manifest.get('changes') else '') +
             'See docs/RELEASES.md and whippet/README.md in the tagged source for limitations.'
         )
         release = api(base + '/releases', 'POST', json.dumps({
-            'tag_name': tag, 'name': 'SafeCore ' + tag + ' — base Android prerelease',
+            'tag_name': tag, 'name': 'SafeCore ' + tag + ' — Android prerelease',
             'body': body, 'draft': True, 'prerelease': True,
         }).encode())
     if not release['draft']:

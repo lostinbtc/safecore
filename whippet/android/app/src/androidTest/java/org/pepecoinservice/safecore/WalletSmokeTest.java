@@ -95,7 +95,7 @@ public class WalletSmokeTest extends ActivityInstrumentationTestCase2<MainActivi
         MainActivity activity=getActivity();
         getInstrumentation().runOnMainSync(()->web=find(activity.getWindow().getDecorView()));
         assertNotNull(web);
-        until("window.WalletEngine && document.getElementById('main')?.textContent.length > 0");
+        until("window.WalletEngine && document.documentElement.dataset.walletState");
         assertEquals("true",js("isSecureContext && !!crypto.subtle && !!navigator.locks && !!SafeCorePlatform"));
         assertEquals("true",js("localStorage.getItem('whippet.dev.encrypted.v1') === null"));
         assertTrue((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE)!=0);
@@ -149,7 +149,9 @@ public class WalletSmokeTest extends ActivityInstrumentationTestCase2<MainActivi
         until("document.getElementById('ack')");
         js("document.getElementById('ack').checked=true;document.getElementById('submit-setup').click()");
         until("document.getElementById('recovery-words')");
-        assertEquals("true",js("!!localStorage.getItem('whippet.dev.encrypted.v1')"));
+        assertEquals("true",js("localStorage.getItem('whippet.dev.encrypted.v1')===null && localStorage.getItem('corevault.wallets.v1')===null"));
+        js("window.__nativeSaved=false;SafeCorePlatform.readWalletStore().then(s=>__nativeSaved=!!s.records['whippet.dev.encrypted.v1'])");
+        until("__nativeSaved");
         // Native lifecycle must hide the phrase without deleting the saved wallet.
         getInstrumentation().runOnMainSync(()->getInstrumentation().callActivityOnPause(activity));
         until("!document.getElementById('recovery-words')");
@@ -198,7 +200,7 @@ public class WalletSmokeTest extends ActivityInstrumentationTestCase2<MainActivi
         until("__qaCameraTracks.every(t=>t.readyState==='ended')");
         getInstrumentation().runOnMainSync(()->getInstrumentation().callActivityOnResume(activity));
         // Simulate the native file-picker return with an app-generated backup, never print it.
-        js("window.addEventListener('error',e=>window.__qaError=e.message);window.dispatchEvent(new Event('safecore-pause'));window.dispatchEvent(new Event('safecore-resume'));window.dispatchEvent(new CustomEvent('safecore-import',{detail:localStorage.getItem('whippet.dev.encrypted.v1')}))");
+        js("window.addEventListener('error',e=>window.__qaError=e.message);window.dispatchEvent(new Event('safecore-pause'));window.dispatchEvent(new Event('safecore-resume'));SafeCorePlatform.readWalletStore().then(s=>window.dispatchEvent(new CustomEvent('safecore-import',{detail:s.records['whippet.dev.encrypted.v1']})))");
         until("document.getElementById('file-status')?.textContent.includes('Unprotected backup selected')");
         // Deliberately preserve this disposable QA wallet; uninstall only this test app later.
     }
