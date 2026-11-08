@@ -191,11 +191,24 @@ Protected wallets require their password to unlock, reveal their seed again,
 or confirm a send. Each saved wallet retains its own protection choice.
 Protected wallets lock after two minutes of inactivity and on backgrounding.
 Revealed recovery information hides on backgrounding or inactivity in either mode.
-Unprotected wallets reopen automatically; hiding their screen is not protection.
+Without a wallet password or Android device authentication, wallets reopen
+automatically; hiding their screen is not protection.
+
+Starting in test.17, Android supports optional device authentication using the
+phone's screen-lock credential or a supported strong biometric. It protects all
+saved wallets on that installation, independently of each wallet's password.
+First-wallet setup defaults it on when a secure screen lock exists; later opt-outs
+are preserved. Enabling or disabling it requires OS authentication, as do returning
+from the background, revealing recovery words, exporting and confirming a send
+while it is enabled. Keep a separate recovery backup: removing the phone's screen
+lock can invalidate the device-bound key.
 
 Secrets exist in JavaScript memory during recovery, derivation and signing.
-Garbage collection does not guarantee zeroization. Hardware-backed key custody,
-biometrics and an independent security audit are not implemented.
+Garbage collection does not guarantee zeroization. Android storage encryption uses
+a non-exportable Keystore key; hardware backing depends on the device. Wallet
+private keys still enter app memory for signing: this is not hardware-wallet
+transaction signing or protection against a compromised running process.
+An independent security audit has not been completed.
 
 ## Receiving and address discovery
 
@@ -769,6 +782,31 @@ Android QA uses separate debug and instrumentation packages:
 cd whippet/android
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
 ```
+
+The **Android security checks** GitHub workflow runs on pull requests, pushes to
+`main`, and manual dispatch. It builds only the disposable QA app (not a release)
+and runs `python3 scripts/android_security.py` from the repository root. Locally,
+build the QA APKs above first, set `ANDROID_HOME`, and install
+`system-images;android-35;google_apis;x86_64` using the SDK manager.
+
+The runner creates its own temporary Android 35 emulator on port 5580. It refuses
+an occupied port or a mismatched emulator identity; it never selects a connected
+phone. It covers encrypted storage, tampering/key loss, interrupted writes,
+legacy migration, first-wallet defaults, authentication cancellation, background
+locking, protected export/import return, expiry, and screen-lock removal.
+Only disposable fixtures and a public fake PIN are used. No release credentials,
+real wallets or funded transactions are needed. Raw device logs, screenshots,
+wallet data and emulator snapshots are not uploaded. A failed, missing, timed-out,
+or incomplete instrumentation result fails the job rather than silently passing.
+The temporary emulator is stopped and discarded when the runner exits normally
+or through its error handler. Existing devices and the shared ADB server are left
+alone.
+
+Start with this single API level; emulator success does not establish biometric
+hardware behavior or coverage of every supported Android/OEM version. Live-chain
+smoke tests are deliberately separate. After verifying the workflow in GitHub,
+make **Native storage and authentication (Android 35)** a required branch check;
+adding the workflow alone does not change repository branch protection.
 
 Run the instrumentation only on a disposable emulator. Its smoke test includes
 read-only live chain-identity checks as well as local UI tests, permission-dialog
