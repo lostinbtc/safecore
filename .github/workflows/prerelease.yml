@@ -16,7 +16,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Install pinned Android verification tools (no signing keys)
-        run: sdkmanager 'build-tools;35.0.1'
+        run: |
+          "${ANDROID_HOME:?Android SDK root is required}/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" 'build-tools;35.0.1'
       - name: Verify and publish locally signed APK
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

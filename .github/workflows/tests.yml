@@ -26,7 +26,7 @@ jobs:
       - run: python3 -m unittest discover -s scripts/tests -v
       - name: Exercise signature gate with disposable APKs and signing keys
         run: |
-          sdkmanager 'build-tools;35.0.1' 'platforms;android-35'
+          "${ANDROID_HOME:?Android SDK root is required}/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" 'build-tools;35.0.1' 'platforms;android-35'
           SAFECORE_APK_INTEGRATION=1 python3 -m unittest scripts.tests.test_apk_security_integration -v
       - run: docker compose --env-file infra/.env.example -f infra/compose.yaml config --quiet
       - name: Scan published source for secrets
