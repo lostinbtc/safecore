@@ -23,7 +23,7 @@ class Socket{
   queueMicrotask(()=>this.onmessage({data:JSON.stringify({id:q.id,result})}));
  }
 }
-const ctx={WebSocket:Socket,WalletTransactions:{scriptHash:(_,a)=>a,historyStatus:T.historyStatus},setTimeout,clearTimeout};
+const ctx={WebSocket:Socket,WalletTransactions:{policy:require('../www/transactions.js').policy,scriptHash:(_,a)=>a,historyStatus:T.historyStatus},setTimeout,clearTimeout};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
 (async()=>{try{for(const coin of ['pep','wht']){
  spent=false;let prior=await N.scan(coin,accounts,null,{full:true});assert.equal(prior.confirmed,1500000000n);

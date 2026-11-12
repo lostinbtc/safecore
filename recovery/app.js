@@ -86,7 +86,7 @@
     const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  const filename = suffix => ({pep:'pepecoin',wht:'whippet',shic:'shibacoin'}[engine.backupCoin(current)]) + suffix;
+  const filename = suffix => ({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin'}[engine.backupCoin(current)]) + suffix;
   byId('download').addEventListener('click', () => {
     if (!current) return;
     try { download(JSON.stringify(formats.exportJSON(window.ethers, window.WalletEngine, window.crypto, current), null, 2) + '\n', 'application/json', filename('-private-backup.json')); }

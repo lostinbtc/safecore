@@ -6,6 +6,7 @@
     "test:browser": "node scripts/test-browser.cjs"
   },
   "devDependencies": {
+    "bech32": "2.0.0",
     "bitcore-lib-doge": "10.10.5",
     "playwright": "1.62.1"
   }

@@ -13,7 +13,7 @@ class Socket{static OPEN=1;constructor(){socket=this;this.readyState=1;queueMicr
  else if(q.method.endsWith('listunspent'))result=used.has(i)?[{tx_hash:hash(i),tx_pos:0,height:499,value:100000000}]:[];else result=.01;
  queueMicrotask(()=>{inflight--;this.onmessage({data:JSON.stringify(fail?{id:q.id,error:{message:'offline'}}:{id:q.id,result})});});
  }}
-const ctx={WebSocket:Socket,WalletTransactions:{scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout,Date:{now:()=>now}};
+const ctx={WebSocket:Socket,WalletTransactions:{policy:require('../www/transactions.js').policy,scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout,Date:{now:()=>now}};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
 const checks=()=>calls.filter(c=>c.method==='blockchain.scripthash.subscribe').map(c=>parseInt(c.params[0],16));
 (async()=>{try{

@@ -34,6 +34,14 @@ request contains no wallet identifiers, balances or recovery material. Quotes
 are display-only, expire, and cannot authorize a transaction. The offline
 recovery tool still makes no network requests.
 
+The Litecoin integration also uses an external, genesis-pinned WSS server
+and shares the public CoinGecko request with SHIC. LTC has separate fee/dust and
+maturity rules; the PEP/WHT/SHIC flat fee must never be used for LTC. Only legacy
+wallet keys are signed. Litecoin previous-transaction IDs exclude witness/MWEB
+extension data by Core's definition; only hash-bound transparent outputs are used.
+This does not implement or validate private MWEB transfers. Existing encrypted
+storage and device-authentication boundaries remain unchanged.
+
 Password protection is optional. In this source version, Android encrypts all saved
 wallet records using AES-256-GCM and a non-exportable Android Keystore key, even
 without a wallet password starting in test.17. Browsers still store password-free recipes in plaintext, and

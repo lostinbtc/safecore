@@ -11,7 +11,7 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await context.route(/^https?:/,route=>{network.push(route.request().url());return route.abort();});
   await page.goto(pathToFileURL(path.join(__dirname,'index.html')).href);
   assert.equal(await page.locator('#coin').inputValue(),'pep');
-  assert.deepEqual(await page.locator('#coin option').evaluateAll(options=>options.map(option=>option.value)),['pep','shic','wht']);
+  assert.deepEqual(await page.locator('#coin option').evaluateAll(options=>options.map(option=>option.value)),['pep','ltc','shic','wht']);
   await page.locator('#phrase').fill(phrase);await page.locator('#count').fill('3');
   await page.locator('#derive').click();await page.getByRole('heading',{name:'Pepecoin addresses',exact:true}).waitFor();
   const pep=G.derive(ethers,phrase,{coin:'pep',count:3});
@@ -49,9 +49,18 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await page.locator('#coin').selectOption('pep');
   await page.locator('#restore').setInputFiles({name:'throwaway-shibacoin.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,shic)))});
   await page.getByRole('heading',{name:'Shibacoin addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),'shic');
+  await page.locator('#coin').selectOption('ltc');await page.locator('#derive').click();await page.getByRole('heading',{name:'Litecoin addresses',exact:true}).waitFor();
+  const ltc=G.derive(ethers,phrase,{coin:'ltc',count:3});assert.deepEqual(await page.locator('.address').allTextContents(),ltc.wallets.map(w=>w.address));
+  for(const id of ['download','download-text','download-address-text','download-csv']){
+   const download=page.waitForEvent('download');await page.locator('#'+id).click();const file=await download;
+   assert.ok(file.suggestedFilename().startsWith('litecoin-'));const raw=await fs.readFile(await file.path(),'utf8');
+   if(id==='download')assert.deepEqual(await F.importJSON(ethers,G,E,webcrypto,JSON.parse(raw)),ltc);else assert.ok(raw.includes(ltc.wallets[0].wif));
+  }
+  await page.locator('#coin').selectOption('pep');await page.locator('#restore').setInputFiles({name:'throwaway-litecoin.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,ltc)))});
+  await page.getByRole('heading',{name:'Litecoin addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),'ltc');
   await page.locator('#clear').click();assert.equal(await page.locator('#phrase').inputValue(),'');assert.equal(await page.locator('#results').isHidden(),true);
   await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'/tmp/safecore-recovery-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);assert.deepEqual(network,[]);
-  console.log('PASS: file:// offline UI, all three assets, private exports, plain/encrypted JSON imports, clearing and mobile layout.');
+  console.log('PASS: file:// offline UI, all four assets, private exports, plain/encrypted JSON imports, clearing and mobile layout.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

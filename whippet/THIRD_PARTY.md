@@ -13,6 +13,11 @@ Copied without modifying their contents:
   https://github.com/shibacoinpow/shibacoin at
   `0af632dfa466c62d77a1b9a4358cf4d64d1fbd4b`.
   Its upstream MIT notice is bundled in `www/assets/shibacoin.LICENSE`.
+- `www/assets/litecoin.png`: unchanged Litecoin Core icon from revision
+  `ec1b6489a900d09cf5991e220dce089c77a232a2`. MIT notice/provenance is bundled in
+  `www/assets/litecoin.LICENSE`. Trademark rights remain with their owners.
+- `bech32` 2.0.0 (bitcoinjs, MIT) is a development-only independent address-test
+  encoder. It is not bundled into the wallet or offline recovery tool.
 - `www/assets/whippet-legacy.js`: this project's
   `static_root/whippet/wallet.js`, retained for original backup validation.
 - `www/assets/ethers.umd.min.js`: existing `static_root/paperwallet/assets/`

@@ -6,7 +6,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  try{
   const c=await b.newContext({viewport:{width:390,height:844}});
   const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'),accounts=E.accounts(ethers,recipe),fixtures={};
-  for(const coin of ['pep','wht','shic']){
+  for(const coin of Object.keys(E.NETWORKS)){
    const raw=ethers.utils.hexlify(T.serialize({version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:'',sequence:0xffffffff}],outputs:[{value:T.amount('950'),script:T.script(coin,accounts[coin].address)}],locktime:0})).slice(2);
    fixtures[coin]={raw,txid:T.parse(raw).txid};
   }

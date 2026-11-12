@@ -6,11 +6,11 @@
 })(typeof globalThis==='object'?globalThis:this,function(){
   function address(raw,coin,validate){
     if(typeof raw!=='string'||raw.length>2048)throw Error('This QR code is not a supported payment address.');
-    const text=raw.trim(),scheme={pep:'pepecoin',wht:'whippet',shic:'shibacoin'}[coin];
+    const text=raw.trim(),scheme={pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin'}[coin];
     if(!scheme)throw Error('Select a supported coin first.');
     let result=text;
     if(text.includes(':')){
-      const match=/^([a-z][a-z0-9+.-]*):([1-9A-HJ-NP-Za-km-z]+)(?:\?([^#]*))?$/i.exec(text);
+      const match=/^([a-z][a-z0-9+.-]*):([a-z0-9]+)(?:\?([^#]*))?$/i.exec(text);
       if(!match||match[1].toLowerCase()!==scheme)throw Error('This QR code is not for the selected coin.');
       const query=new URLSearchParams(match[3]||'');
       for(const key of query.keys())if(key.toLowerCase().startsWith('req-'))throw Error('This QR code requires unsupported payment options.');
@@ -40,7 +40,7 @@
       if(video.readyState>=2&&video.videoWidth&&video.videoHeight){
         if(video.dataset.ready!=='true'){
           video.dataset.ready='true';
-          message(`Scanning ${({pep:'PEP',wht:'WHT',shic:'SHIC'})[coin]} QR code… Keep the whole code in view.`);
+          message(`Scanning ${({pep:'PEP',wht:'WHT',shic:'SHIC',ltc:'LTC'})[coin]} QR code… Keep the whole code in view.`);
         }
         // Match the square object-fit:cover preview. Downscaling the entire
         // portrait frame made its visible QR too small and wasted side space.

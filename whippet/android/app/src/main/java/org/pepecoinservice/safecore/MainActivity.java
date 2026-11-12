@@ -241,7 +241,7 @@ public final class MainActivity extends Activity {
         return ("api.kraken.com".equals(uri.getHost()) && "/0/public/Ticker".equals(uri.getEncodedPath())
             && "pair=PEPUSD,USDTUSD".equals(uri.getEncodedQuery()))
             || ("api.coingecko.com".equals(uri.getHost()) && "/api/v3/simple/price".equals(uri.getEncodedPath())
-            && "ids=shibacoin&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
+            && "ids=shibacoin,litecoin&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
     }
     private void denyCamera() {
         PermissionRequest request=cameraRequest;cameraRequest=null;cameraPrompt=false;cameraResultReady=false;

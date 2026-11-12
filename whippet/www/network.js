@@ -3,7 +3,8 @@
   const CONFIG={
     pep:{url:'wss://electrum.pepecoinservice.org:50004/',genesis:'37981c0c48b8d48965376c8a42ece9a0838daadb93ff975cb091f57f8c2a5faa'},
     wht:{url:'wss://electrum.pepecoinservice.org:50005/whippet',genesis:'863714e1c1a15526a0081a35097c56e28dbd43ef97f76fec0ccd5a7510326292'},
-    shic:{url:'wss://electrum.shibacoinshic.org:50002/',genesis:'ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f'}
+    shic:{url:'wss://electrum.shibacoinshic.org:50002/',genesis:'ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f'},
+    ltc:{url:'wss://ltc.electrum1.cipig.net:30063/',genesis:'12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2'}
   };
   for(const config of Object.values(CONFIG))Object.freeze(config);Object.freeze(CONFIG);
   let endpoints={};
@@ -94,7 +95,7 @@
       const tip=await c.call('blockchain.headers.subscribe');
       if(!Number.isSafeInteger(tip?.height)||tip.height<0)throw Error('Server returned an invalid chain height.');
       const relay=await c.call('blockchain.relayfee');
-      if(!Number.isFinite(relay)||relay<0||relay>0.1)throw Error('Server returned an unsupported relay fee.');
+      if(!Number.isFinite(relay)||relay<0||relay>Number(root.WalletTransactions.policy(coin).maxRate)/1e8)throw Error('Server returned an unsupported relay fee.');
       return {url,height:tip.height};
     }finally{clearTimeout(deadline);signal?.removeEventListener('abort',abort);abort();}
   }
@@ -130,7 +131,7 @@
       });
       while(s.rows.length<accounts.length)s.rows.push(emptyRow(accounts[s.rows.length]));
       s.confirmed=s.rows.reduce((n,r)=>n+r.confirmed,0n);s.unconfirmed=s.rows.reduce((n,r)=>n+r.unconfirmed,0n);
-      s.feeRate=1000000n;s.cached=true;
+      s.feeRate=root.WalletTransactions.policy(coin).minRate;s.cached=true;
       s.everUsed=[...new Set([...s.everUsed,...s.rows.filter(r=>r.history.length||r.confirmed||r.unconfirmed).map(r=>r.account.index)])];
       return s;
     }catch(_){return null;}
@@ -212,8 +213,8 @@
     checkActive();
     if(!Number.isFinite(relay)||relay<0)throw Error('Could not verify the network relay fee.');
     // Ordinary sends use a flat fee; sweeps scale this per-kB floor by size.
-    const rate=Math.max(0.01,relay);
-    if(!Number.isFinite(rate)||rate>0.1)throw Error('Fee estimate exceeds development safety limit.');
+    const rules=root.WalletTransactions.policy(coin),rate=Math.max(Number(rules.minRate)/1e8,relay);
+    if(!Number.isFinite(rate)||rate>Number(rules.maxRate)/1e8)throw Error('Fee estimate exceeds development safety limit.');
     // A failed scan must not consume notifications for rows it never published.
     for(const [sh,revision] of revisions)if(c.dirty.get(sh)===revision)c.dirty.delete(sh);
     return {coin,tip:tip.height,rows,complete:true,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate:BigInt(Math.ceil(rate*1e8)),at:Date.now(),probedAt:targeted?previous.probedAt||previous.at:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:!targeted&&probeDue?probeCursor+10:probeCursor};
@@ -226,7 +227,7 @@
     else if(candidates.length>40)throw Error('Too many outputs for this small-value development test.');
     const txids=[...new Set(candidates.map(u=>u.txid))],raws=new Map();
     await batches(txids,async txid=>raws.set(txid,await c.call('blockchain.transaction.get',[txid,false])));
-    return candidates.flatMap(u=>{const raw=raws.get(u.txid),parsed=T.parse(raw);if(parsed.coinbase&&snapshot.tip-u.height+1<240)return [];return [T.verifyUTXO(snapshot.coin,{...u,raw},snapshot.tip)];});
+    return candidates.flatMap(u=>{const raw=raws.get(u.txid),parsed=T.parse(raw,snapshot.coin);if(parsed.coinbase&&snapshot.tip-u.height+1<T.policy(snapshot.coin).maturity||parsed.hogex&&snapshot.tip-u.height+1<6)return [];return [T.verifyUTXO(snapshot.coin,{...u,raw},snapshot.tip)];});
   }
   async function checkInputs(coin,inputs){
     const c=client(coin),T=root.WalletTransactions;

@@ -25,7 +25,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   };
  },vault);
  await page.clock.install();await page.clock.pauseAt(new Date());
- await page.goto('http://localhost:8787/#wallet');await page.waitForFunction(()=>__runs.length===3);
+ await page.goto('http://localhost:8787/#wallet');await page.waitForFunction(()=>__runs.length===4);
  const pep=await page.evaluate(()=>__runs.findIndex(r=>r.coin==='pep')),wht=await page.evaluate(()=>__runs.findIndex(r=>r.coin==='wht'));
  const pepRow=page.locator('[data-overview-coin="pep"]');
  await page.evaluate(i=>__emit(i,20),pep);

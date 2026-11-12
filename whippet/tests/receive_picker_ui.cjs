@@ -13,7 +13,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await p.goto('http://localhost:8787/');
   await p.locator('[data-nav="receive"]').click();await empty();
   assert.equal(await p.locator('.page-head').innerText(),'Receive');
-  assert.equal(await p.locator('[data-coin]').count(),3);
+  assert.equal(await p.locator('[data-coin]').count(),4);
   assert.equal(await p.locator('details.wallet-coin-switch, .picker-chevron').count(),0);
   assert.equal(await p.locator('[data-coin=pep]').isVisible(),true);
   assert.equal(await p.locator('[data-coin=wht]').isVisible(),true);
@@ -29,7 +29,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await p.screenshot({path:'/tmp/safecore-receive-choices.png'});
   await choose('pep');assert.equal(await p.locator('#address').textContent(),accounts.pep.address);await p.locator('#reuse-first').check();
   await choose('wht');assert.equal(await p.locator('#address').textContent(),accounts.wht.address);assert.equal(await p.locator('#reuse-first').isChecked(),false);await p.locator('#reuse-first').check();
-  await p.locator('[data-nav="wallet"]').click();await p.locator('.holdings').waitFor();assert.equal(await p.locator('.holding-row').count(),3);
+  await p.locator('[data-nav="wallet"]').click();await p.locator('.holdings').waitFor();assert.equal(await p.locator('.holding-row').count(),4);
   await p.locator('[data-nav="receive"]').click();await empty();await choose('pep');assert.equal(await p.locator('#reuse-first').isChecked(),true);
   await p.reload();await empty();await choose('wht');assert.equal(await p.locator('#reuse-first').isChecked(),true);
   assert.equal(await p.locator('#previous-address').isDisabled(),true);assert.equal(await p.locator('#next-address').isDisabled(),true);

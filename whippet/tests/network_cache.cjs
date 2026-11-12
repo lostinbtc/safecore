@@ -18,7 +18,7 @@ class Socket{
     queueMicrotask(()=>this.onmessage({data:JSON.stringify(fail?{id:m.id,error:{message:'Fixture outage'}}:{id:m.id,result})}));
   }
 }
-const ctx={WebSocket:Socket,WalletTransactions:{scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout};
+const ctx={WebSocket:Socket,WalletTransactions:{policy:require('../www/transactions.js').policy,scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);
 const N=ctx.WalletNetwork;
 const queried=()=>calls.filter(c=>c.method.endsWith('get_balance')).map(c=>Number(c.params[0].replace('fixture-',''))).sort((a,b)=>a-b);

@@ -24,7 +24,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   };
   await p.evaluate(installHistory);
   await p.clock.runFor(4001);await p.waitForFunction(()=>[...document.querySelectorAll('.live-tx code')].some(el=>el.textContent==='a'.repeat(62)+'00'));
-  assert.equal(await p.locator('.live-tx').count(),92);
+  assert.equal(await p.locator('.live-tx').count(),122);
   for(const txid of ['a'.repeat(62)+'27','b'.repeat(62)+'27','b'.repeat(62)+'26'])assert.equal(await p.getByText(txid,{exact:true}).count(),0,'Confirmed sends outside the newest 30 must not appear as outstanding.');
   assert.equal(await p.getByText('Submission uncertain — do not resend until checked.',{exact:true}).count(),1);
   assert.equal(await p.getByText('Submitted — awaiting appearance in server history.',{exact:true}).count(),1);
@@ -45,7 +45,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await p.screenshot({path:'whippet/test-results/activity-assets.png',fullPage:true});
   await p.reload();await p.locator('.page-head').waitFor();await p.evaluate(installHistory);
   await p.clock.runFor(4001);await p.waitForFunction(()=>[...document.querySelectorAll('.live-tx code')].some(el=>el.textContent==='a'.repeat(62)+'00'));
-  assert.equal(await p.locator('.live-tx').count(),92);
+  assert.equal(await p.locator('.live-tx').count(),122);
   for(const txid of ['a'.repeat(62)+'27','b'.repeat(62)+'27','b'.repeat(62)+'26'])assert.equal(await p.getByText(txid,{exact:true}).count(),0,'Reload must not revive confirmed sends as outstanding.');
   assert.equal(await p.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('corevault.send-attempts.'))[1]).length),5,'Public send records must remain intact.');
   assert.deepEqual(errors,[]);console.log('PASS: Activity checks full server history before limiting display to 30; old confirmed sends stay resolved after reload; unseen submitted/uncertain warnings and send records retained; refresh preserves open/scroll; mobile layouts and PEP-only explorer links.');
