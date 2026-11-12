@@ -131,6 +131,7 @@ class SecurityRun:
             self.owned()
             self.adb('install', '-t', str(ROOT / 'whippet/android/app/build/outputs/apk' / apk), timeout=120)
         self.test('DeviceWalletStoreTest', 3)
+        self.test('NetworkPolicyTest', 2)
         self.reset_qa()
         self.test('DeviceAuthenticationTest#testFirstWalletWithoutScreenLock')
         self.reset_qa()
@@ -153,7 +154,7 @@ class SecurityRun:
         if 'Lock credential cleared' not in result:
             raise RuntimeError('Could not clear disposable emulator PIN')
         self.test('DeviceAuthenticationTest#testCredentialRemovedFailsClosed')
-        print('PASS: all 12 native security test executions', flush=True)
+        print('PASS: all 14 native security test executions', flush=True)
 
     def close(self):
         # Kill only the process group we launched, never adb's shared server/devices.

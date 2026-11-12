@@ -30,5 +30,10 @@ const ctx={WebSocket:Socket,URL,setTimeout,clearTimeout};vm.createContext(ctx);v
  const before=calls.length;await assert.rejects(()=>old.call('blockchain.transaction.broadcast',['forbidden']),/Connection changed/);assert.equal(calls.length,before);
  await N.client('pep').call('blockchain.headers.subscribe');assert.equal(calls.at(-1).url,'wss://selected.example/');
  N.configure({});assert.equal(N.endpoint('pep'),N.CONFIG.pep.url);
+ for(const coin of ['wht','shic']){
+  genesis=N.CONFIG[coin].genesis;mode='ok';assert.equal((await N.testConnection(coin,N.CONFIG[coin].url)).height,500);
+  mode='wrong';await assert.rejects(()=>N.testConnection(coin,N.CONFIG[coin].url),/Wrong blockchain/);
+ }
+ mode='ok';N.configure({shic:'wss://custom-shic.example/'});assert.equal(N.endpoint('shic'),'wss://custom-shic.example/');assert.equal(N.endpoint('pep'),N.CONFIG.pep.url);N.configure({});
  console.log('PASS: WSS validation, isolated read-only probes, chain/height/fee checks, cancellation, atomic configuration, per-coin selection, retired-client rejection and defaults.');
 }finally{N.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

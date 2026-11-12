@@ -9,6 +9,27 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.18
+
+Adds Shibacoin (SHIC) receiving, sending, private-key sweeps and offline recovery.
+Coin lists now show Pepecoin, Shibacoin, then Whippet. SHIC price estimates from
+CoinGecko are included in the USDT wallet value; stale or unavailable quotes do
+not affect coin balances or sending. The offline recovery tool remains offline.
+
+Existing PEP/WHT addresses, backups, storage protection and authentication choices
+are preserved. Old SafeCore backups also derive SHIC addresses without migration.
+SHIC uses an external Electrum server with chain-identity verification. The public
+price request contains no wallet addresses or balances.
+
+Android versionCode 18 / versionName `0.1.0-test.18`, with debugging disabled and
+the existing development signing identity for in-place updates. Local testing
+includes disposable backup round trips, independent address/signature checks,
+browser regressions and Android security tests. The tester also reported confirmed
+incoming and outgoing SHIC transfers. These checks are not an independent audit.
+
+Keep a separate recovery backup before updating. Test.17 remains available;
+do not uninstall or clear wallet data to bypass installation errors.
+
 ## Test.17
 
 Android versionCode 17 / versionName `0.1.0-test.17`, using the same development

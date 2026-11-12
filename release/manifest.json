@@ -1,15 +1,15 @@
 {
-  "tag": "v0.1.0-test.17",
-  "filename": "SafeCore-0.1.0-test.17.apk",
-  "artifact_commit": "0f936a02c2dfddc3bd72e23f113eb33ae55483b6",
-  "sha256": "576f18b264021e82bde539cf725c5b9a4179aa05257c6042d837a78616690b05",
+  "tag": "v0.1.0-test.18",
+  "filename": "SafeCore-0.1.0-test.18.apk",
+  "artifact_commit": "76c191b806476d51f73f99a60ebd2ef133375217",
+  "sha256": "bb5567881ca499047af828f508fb3198d1b38305a8ad481871b49d1e961fd6d4",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
-  "version_code": 17,
+  "version_code": 18,
   "changes": [
-    "Device-encrypted Android wallet storage, including wallets without a separate password.",
-    "Device authentication for all saved wallets, with safer first-wallet defaults and preserved opt-outs.",
-    "Offline Pepecoin and Whippet recovery with wallet-compatible JSON and private-key exports.",
-    "Improved release-signature verification; temporary storage diagnostics removed."
+    "Shibacoin (SHIC) support for receiving, sending and private-key recovery.",
+    "Live SHIC price estimates included in the USDT wallet value.",
+    "Offline SHIC recovery with wallet-compatible JSON and private-key exports.",
+    "Consistent coin order: Pepecoin, Shibacoin, then Whippet; existing backups and protection settings preserved."
   ]
 }

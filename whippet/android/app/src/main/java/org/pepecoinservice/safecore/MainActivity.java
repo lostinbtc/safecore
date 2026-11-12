@@ -230,6 +230,19 @@ public final class MainActivity extends Activity {
         Uri page=Uri.parse(web.getUrl());
         return localPage(page) && ("send".equals(page.getFragment()) || "sweep".equals(page.getFragment()));
     }
+    static boolean priceSourcePage(Uri uri) {
+        return uri != null && "https".equals(uri.getScheme()) && "www.coingecko.com".equals(uri.getHost())
+            && uri.getPort() == -1 && uri.getUserInfo() == null && uri.getQuery() == null && uri.getFragment() == null
+            && "/en/coins/shibacoin".equals(uri.getEncodedPath());
+    }
+    static boolean publicPriceRequest(Uri uri, String method) {
+        if(uri == null || !"GET".equals(method) || !"https".equals(uri.getScheme())
+            || uri.getPort() != -1 || uri.getUserInfo() != null || uri.getFragment() != null)return false;
+        return ("api.kraken.com".equals(uri.getHost()) && "/0/public/Ticker".equals(uri.getEncodedPath())
+            && "pair=PEPUSD,USDTUSD".equals(uri.getEncodedQuery()))
+            || ("api.coingecko.com".equals(uri.getHost()) && "/api/v3/simple/price".equals(uri.getEncodedPath())
+            && "ids=shibacoin&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
+    }
     private void denyCamera() {
         PermissionRequest request=cameraRequest;cameraRequest=null;cameraPrompt=false;cameraResultReady=false;
         if(request!=null)request.deny();
@@ -315,7 +328,7 @@ public final class MainActivity extends Activity {
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if(request.isForMainFrame() && request.hasGesture() && foreground && view.getUrl() != null && localPage(Uri.parse(view.getUrl())) && transactionPage(request.getUrl())) {
+                if(request.isForMainFrame() && request.hasGesture() && foreground && view.getUrl() != null && localPage(Uri.parse(view.getUrl())) && (transactionPage(request.getUrl()) || priceSourcePage(request.getUrl()))) {
                     try { startActivity(new Intent(Intent.ACTION_VIEW,request.getUrl()).addCategory(Intent.CATEGORY_BROWSABLE)); }
                     catch(Exception e) { Toast.makeText(MainActivity.this,"No browser available to open this transaction.",Toast.LENGTH_SHORT).show(); }
                     return true;
@@ -328,8 +341,7 @@ public final class MainActivity extends Activity {
                     WebResourceResponse response = assets.shouldInterceptRequest(u);
                     return response == null ? blocked() : response;
                 }
-                if ("https".equals(u.getScheme()) && "api.kraken.com".equals(u.getHost()) && u.getPort() == -1
-                    && "/0/public/Ticker".equals(u.getPath()) && "pair=PEPUSD,USDTUSD".equals(u.getQuery()) && "GET".equals(request.getMethod())) return null;
+                if (publicPriceRequest(u,request.getMethod())) return null;
                 return blocked(); // WSS is allowed by CSP; WalletNetwork selects default/user-approved endpoints.
             }
             @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); }

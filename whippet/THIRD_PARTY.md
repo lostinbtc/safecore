@@ -9,6 +9,10 @@ Copied without modifying their contents:
 - `www/assets/pepecoin.png`: this project's `static_root/assets/P_logo.png`.
 - `www/assets/whippet.png`: sibling Whippet project's
   `share/pixmaps/whippet256.png`.
+- `www/assets/shibacoin.png`: unchanged `src/qt/res/icons/shibacoin.png` from
+  https://github.com/shibacoinpow/shibacoin at
+  `0af632dfa466c62d77a1b9a4358cf4d64d1fbd4b`.
+  Its upstream MIT notice is bundled in `www/assets/shibacoin.LICENSE`.
 - `www/assets/whippet-legacy.js`: this project's
   `static_root/whippet/wallet.js`, retained for original backup validation.
 - `www/assets/ethers.umd.min.js`: existing `static_root/paperwallet/assets/`

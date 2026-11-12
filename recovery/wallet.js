@@ -9,9 +9,10 @@
   const NETWORKS = Object.freeze({
     wht: Object.freeze({ network: NETWORK, path: PATH_TEMPLATE, format: 'whippet-seed-v1' }),
     pep: Object.freeze({ network: Object.freeze({ name: 'Pepecoin mainnet', pubKeyHash: 56, scriptHash: 22, wif: 158 }), path: "m/44'/3434'/0'/0/{index}", format: 'pepecoin-seed-v1' }),
+    shic: Object.freeze({ network: Object.freeze({ name: 'Shibacoin mainnet', pubKeyHash: 63, scriptHash: 22, wif: 158 }), path: "m/44'/4474'/0'/0/{index}", format: 'shibacoin-seed-v1' }),
   });
   function config(coin = 'wht') {
-    if (!Object.hasOwn(NETWORKS, coin)) throw new Error('Choose Pepecoin or Whippet.');
+    if (!Object.hasOwn(NETWORKS, coin)) throw new Error('Choose Pepecoin, Whippet or Shibacoin.');
     return NETWORKS[coin];
   }
   function backupCoin(backup) {

@@ -27,6 +27,13 @@ invalidates pending transaction reviews and restarts live discovery. Failed cust
 connections do not silently fall back. The content policy permits arbitrary secure
 WebSocket hosts for this feature; remote scripts remain disallowed.
 
+The SHIC integration uses an external Shibacoin Electrum WSS server,
+with certificate validation and a pinned mainnet genesis. SHIC price estimates
+use CoinGecko's public price endpoint; the provider sees IP addresses but the
+request contains no wallet identifiers, balances or recovery material. Quotes
+are display-only, expire, and cannot authorize a transaction. The offline
+recovery tool still makes no network requests.
+
 Password protection is optional. In this source version, Android encrypts all saved
 wallet records using AES-256-GCM and a non-exportable Android Keystore key, even
 without a wallet password starting in test.17. Browsers still store password-free recipes in plaintext, and
