@@ -8,7 +8,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   p.on('pageerror',e=>errors.push(e.message));
   const vault=E.unprotected(webcrypto,E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'));
   await c.addInitScript(v=>{
-   window.__balances={pep:1000,wht:1000};window.__calls={};window.__quotes={pep:'.01',usdt:'.5'};
+   window.__balances={pep:1000,wht:1000,shic:0};window.__calls={};window.__quotes={pep:'.01',usdt:'.5'};
    window.fetch=async(url,options)=>{if(!String(url).endsWith('?pair=PEPUSD,USDTUSD')||options.credentials!=='omit'||options.referrerPolicy!=='no-referrer')throw Error('Unexpected price request');return new Response(JSON.stringify({error:[],result:{PEPUSD:{c:[__quotes.pep]},USDTZUSD:{c:[__quotes.usdt]}}}));};
    window.WebSocket=class{constructor(){throw Error('Real connection prohibited');}};
    Object.defineProperty(window,'WalletNetwork',{configurable:true,set(N){Object.defineProperty(window,'WalletNetwork',{value:N,configurable:true});N.scan=async(coin,accounts)=>{

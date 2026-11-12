@@ -5,7 +5,7 @@ const {chromium}=require('./browser-helper.cjs');
   const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
   try{
     const page=await browser.newPage();await page.goto('http://localhost:8787/');
-    for(const coin of process.argv.slice(2).length?process.argv.slice(2):['pep','wht']){
+    for(const coin of process.argv.slice(2).length?process.argv.slice(2):['pep','wht','shic']){
       const result=await page.evaluate(async coin=>{
         const c=WalletNetwork.client(coin);
         const features=await c.call('server.features'),tip=await c.call('blockchain.headers.subscribe');
@@ -18,7 +18,9 @@ const {chromium}=require('./browser-helper.cjs');
         const snapshot=await WalletNetwork.scan(coin,WalletEngine.receivePool(ethers,recipe)[coin]);
         if(snapshot.rows.length!==20||snapshot.rows.reduce((n,r)=>n+r.confirmed,0n)!==snapshot.confirmed)throw Error('Account aggregation mismatch.');
         const cached=WalletNetwork.decode(WalletNetwork.encode(snapshot),coin,WalletEngine.receivePool(ethers,recipe)[coin]);
-        const incremental=await WalletNetwork.scan(coin,WalletEngine.receivePool(ethers,recipe)[coin],cached);
+        const restored=await WalletNetwork.scan(coin,WalletEngine.receivePool(ethers,recipe)[coin],cached);
+        if(restored.cached||restored.queried!==20)throw Error('Disk cache was not revalidated against live history.');
+        const incremental=await WalletNetwork.scan(coin,WalletEngine.receivePool(ethers,recipe)[coin],restored);
         if(incremental.queried>Math.min(20,incremental.everUsed.length+1)||incremental.cached)throw Error('Incremental scan mismatch.');
         WalletNetwork.close();return {coin,genesis:features.genesis_hash,expected:WalletNetwork.CONFIG[coin].genesis,height:tip.height,balance,history,unspent,relay,scanned:snapshot.rows.length,incremental:incremental.queried};
       },coin);

@@ -52,5 +52,5 @@ const bitcore = require('bitcore-lib-doge');
   assert.throws(() => E.validateEnvelope({...sealed, iterations: 999999999}));
   assert.throws(() => E.validateRecipe(ethers, {...payload, paths: {pep:'m/0',wht:E.NETWORKS.wht.path}}));
   assert.throws(() => E.accounts(ethers, payload, -1));
-  console.log('PASS: both coin paths independently verified, legacy Whippet compatibility, encrypted recovery, wrong-password/tamper rejection.');
+  console.log('PASS: all coin paths independently verified, legacy Whippet compatibility, encrypted recovery, wrong-password/tamper rejection.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

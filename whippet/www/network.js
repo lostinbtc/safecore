@@ -2,7 +2,8 @@
 (function(root){
   const CONFIG={
     pep:{url:'wss://electrum.pepecoinservice.org:50004/',genesis:'37981c0c48b8d48965376c8a42ece9a0838daadb93ff975cb091f57f8c2a5faa'},
-    wht:{url:'wss://electrum.pepecoinservice.org:50005/whippet',genesis:'863714e1c1a15526a0081a35097c56e28dbd43ef97f76fec0ccd5a7510326292'}
+    wht:{url:'wss://electrum.pepecoinservice.org:50005/whippet',genesis:'863714e1c1a15526a0081a35097c56e28dbd43ef97f76fec0ccd5a7510326292'},
+    shic:{url:'wss://electrum.shibacoinshic.org:50002/',genesis:'ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f'}
   };
   for(const config of Object.values(CONFIG))Object.freeze(config);Object.freeze(CONFIG);
   let endpoints={};

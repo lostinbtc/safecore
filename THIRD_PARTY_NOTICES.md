@@ -11,6 +11,7 @@ relicensing of them.
 | ethers.js 5.7.2 | MIT; [wallet license](whippet/www/assets/ethers.LICENSE), [offline recovery license](recovery/assets/ethers.LICENSE); both bundles are identical |
 | QRCode.js | MIT; [full license](whippet/www/assets/qrcode.LICENSE) |
 | jsQR 1.4.0 | Apache-2.0; [full license](whippet/www/assets/jsQR.LICENSE) |
+| Shibacoin logo | Upstream MIT notice and provenance in [bundled license](whippet/www/assets/shibacoin.LICENSE); trademark rights remain with their owners |
 | Android/Gradle dependencies | Their upstream notices/licenses; resolved by the checked-in build configuration |
 | Test-only Bitcore / Playwright dependencies | MIT / Apache-2.0 respectively; installed notices in npm packages, exact dependency graph in package-lock.json |
 

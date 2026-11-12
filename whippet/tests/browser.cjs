@@ -27,7 +27,7 @@ fs.mkdirSync(output, {recursive:true});
       assert.doesNotMatch(await page.locator('.topbar').innerText(),/preview mode|development wallet/i);
       assert.ok(await page.locator('.mobile-brand img').evaluate(el => el.complete && el.naturalWidth > 0));
       await page.locator('.holdings').waitFor();
-      assert.equal(await page.locator('.holding-row').count(),2);
+      assert.equal(await page.locator('.holding-row').count(),3);
       assert.equal(await page.locator('#home-coin, .home-balance, .home-actions').count(),0);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
       assert.ok(await page.locator('.app-shell').evaluate(el=>el.getBoundingClientRect().width<=430));

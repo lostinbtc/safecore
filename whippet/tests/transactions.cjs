@@ -7,7 +7,7 @@ for(const [value,display] of [[0n,'0'],[1n,'0.00000001'],[99999999999n,'999.9999
 }
 assert.equal(T.amount('1939922.001111'),193992200111100n);
 assert.throws(()=>T.amount('1,939,922.001111'));
-for(const coin of ['pep','wht']){
+for(const coin of ['pep','wht','shic']){
   const a=E.accounts(ethers,recipe,0)[coin],dest=E.accounts(ethers,recipe,1)[coin].address;
   const funding={version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:'',sequence:0xffffffff}],outputs:[{value:500000000n,script:T.script(coin,a.address)}],locktime:0};
   const raw=ethers.utils.hexlify(T.serialize(funding)).slice(2),prev=T.parse(raw);

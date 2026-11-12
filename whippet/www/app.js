@@ -87,7 +87,8 @@
   function savedBrand(){try{const raw=localStorage.getItem(BRAND_PREF);if(raw===null)return DEFAULT_BRAND;const id=Number(raw);return Number.isInteger(id)&&id>=0&&id<=BRAND_ICONS.length?id:DEFAULT_BRAND;}catch(_){return DEFAULT_BRAND;}}
   function applyBrand(id){document.querySelector('.mobile-brand img').src=brandPath(id);document.querySelector('link[rel="icon"]').href=brandPath(id);}
   // Display catalog only. Coming-soon entries never enter the key engine.
-  const COINS = { ...E.NETWORKS, doge: { name: 'Dogecoin', ticker: 'DOGE', comingSoon: true } };
+  const COINS = { pep: E.NETWORKS.pep, shic: E.NETWORKS.shic, wht: E.NETWORKS.wht, doge: { name: 'Dogecoin', ticker: 'DOGE', comingSoon: true } };
+  const assetOrder = Object.keys(COINS).filter(coin => Object.hasOwn(E.NETWORKS, coin));
   let hiddenCoins = [];
   function loadCoinPrefs() {
     try {
@@ -114,7 +115,7 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.wallet}</svg>`;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const coinImage = coin => `assets/${coin === 'pep' ? 'pepecoin' : 'whippet'}.png`;
+  const coinImage = coin => `assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin'})[coin]}.png`;
   const coinMark = coin => coin === 'doge' ? '<span class="doge-mark" aria-hidden="true">Ð</span>' : `<img src="${coinImage(coin)}" alt="">`;
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
   let receiveBooks = null, addingWallet = false, revealed = false;
@@ -144,10 +145,23 @@
   function clearReports(){for(const timer of Object.values(reportTimers))clearTimeout(timer);reportTimers={};reports={};}
   const reported=coin=>reports[coin]?.value;
   let pepPrice=null,priceAttempt=0,priceBusy=false;
+  let shicPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
   const priceFresh=()=>pepPrice&&Date.now()-pepPrice.at<300000;
+  async function refreshShicPrice(){
+    if(shicPriceBusy||Date.now()-shicPriceAttempt<300000)return;
+    shicPriceBusy=true;shicPriceAttempt=Date.now();
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    try{
+      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
+      if(!response.ok)throw Error('SHIC price unavailable');
+      shicPrice=WalletReporting.shicQuote(await response.json());
+    }catch(_){/* Optional public price only; never affects wallet keys or spendability. */}
+    finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
+  }
   async function refreshPrice(){
     if(!riskAccepted()||priceBusy||Date.now()-priceAttempt<60000||mode!=='unlocked'||document.hidden)return;
     priceBusy=true;priceAttempt=Date.now();
+    void refreshShicPrice();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
       const response=await fetch('https://api.kraken.com/0/public/Ticker?pair=PEPUSD,USDTUSD',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
@@ -352,7 +366,7 @@
     }catch(_){/* Malformed local records cannot authorize requests or a send. */}
     finally{if(sendRefreshRun===run)sendRefreshRun=null;}
   }
-  const fundedCoins = () => Object.keys(E.NETWORKS).filter(coin => {
+  const fundedCoins = () => assetOrder.filter(coin => {
     const value = reported(coin);
     return value && value.confirmed + value.unconfirmed > 0n;
   });
@@ -654,7 +668,7 @@
       }
     };
   }
-  const title = (name, description, action = '') => `<div class="page-head"><div><p class="eyebrow">PEPECOIN + WHIPPET</p><h1>${name}</h1><p class="subtle">${description}</p></div>${action}</div>`;
+  const title = (name, description, action = '') => `<div class="page-head"><div><p class="eyebrow">SAFECORE · MULTI-COIN</p><h1>${name}</h1><p class="subtle">${description}</p></div>${action}</div>`;
   const protectionIcon = protectedMode => `<span id="seed-lock" class="seed-lock ${protectedMode ? 'protected' : 'unprotected'}" role="img" aria-label="${protectedMode ? 'Password protected' : 'No password protection'}" title="${protectedMode ? 'Password protected' : 'No password protection'}">${icon(protectedMode ? 'lock' : 'unlock')}</span>`;
   const button = (id, text, kind = '', glyph = '') => `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
   const recoveryNotice = '<div class="notice">Your recovery phrase controls your funds. Keep a backup somewhere safe and never share it.</div>';
@@ -666,7 +680,7 @@
   }
   function activityRows(coinFilter = null) {
     if (mode !== 'demo' && liveEnabled()) {
-      const coins = coinFilter ? [coinFilter] : Object.keys(E.NETWORKS);
+      const coins = coinFilter ? [coinFilter] : assetOrder;
       let attempts;
       try { attempts = sendAttempts(); } catch (e) { return `<p class="notice">${escape(e.message)}</p>`; }
       return coins.map(coin => {
@@ -690,16 +704,17 @@
       return;
     }
     const pepUsd=priceFresh()?pepPrice.value:null,usdtUsd=priceFresh()?pepPrice.usdt:null;
-    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd);
+    const shicUsd=WalletReporting.freshShic(shicPrice)?shicPrice.value:null;
+    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd);
     const worth=WalletReporting.formatWorth(valuation.value);
     const hidden=balancesHidden();
     const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section></div>`;
     const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="primary overview-rescan" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
-      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd);
+      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd);
       const price=unitPrice!==null?unitPrice.toFixed(8).replace(/0+$/,'').replace(/\.$/,'')+' USDT':'*';
-      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd):null;
+      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
       const status=connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
       return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${n.comingSoon?n.name+' coming soon':'Receive '+n.name}" ${n.comingSoon?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
@@ -821,7 +836,7 @@
       `<label class="check screenshot-setting"><input id="hide-balances" type="checkbox" ${balancesHidden()?'checked':''}><span><strong>Hide balances</strong><small>Payment amounts stay visible.</small></span></label>` +
       `<label class="check screenshot-setting"><input id="screen-protection" type="checkbox" disabled ${window.SafeCorePlatform?.getScreenProtection?'checked':''}><span><strong>Block screenshots</strong><small id="screen-protection-note">${window.SafeCorePlatform?.getScreenProtection?'Loading…':''}</small></span></label>` +
       `<div id="recovery-preferences"></div><section class="settings-connections">
-      <details id="custom-connections"><summary>Electrum connections</summary><p class="subtle">Use your own server if the default is unavailable. Choose a server you trust: it can see your address queries and IP address.</p><p class="inline-info" id="connection-error" role="status"></p>${Object.keys(E.NETWORKS).map(coin=>`<form class="connection-form" data-connection="${coin}"><label for="endpoint-${coin}">${E.NETWORKS[coin].name}</label><input id="endpoint-${coin}" type="url" required maxlength="2048" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="wss://server:port/path"><small id="endpoint-current-${coin}" class="subtle"></small><div class="connection-actions"><button type="submit" data-test-connection="${coin}">Test connection</button><button type="button" data-use-connection="${coin}" disabled>Use connection</button></div><p class="inline-info" data-connection-status="${coin}" role="status"></p></form>`).join('')}<button id="restore-connections" class="text-button" type="button">Restore default connections</button></details>
+      <details id="custom-connections"><summary>Electrum connections</summary><p class="subtle">Use your own server if the default is unavailable. Choose a server you trust: it can see your address queries and IP address.</p><p class="inline-info" id="connection-error" role="status"></p>${assetOrder.map(coin=>`<form class="connection-form" data-connection="${coin}"><label for="endpoint-${coin}">${E.NETWORKS[coin].name}</label><input id="endpoint-${coin}" type="url" required maxlength="2048" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="wss://server:port/path"><small id="endpoint-current-${coin}" class="subtle"></small><div class="connection-actions"><button type="submit" data-test-connection="${coin}">Test connection</button><button type="button" data-use-connection="${coin}" disabled>Use connection</button></div><p class="inline-info" data-connection-status="${coin}" role="status"></p></form>`).join('')}<button id="restore-connections" class="text-button" type="button">Restore default connections</button></details>
       ${['localhost','127.0.0.1'].includes(location.hostname)&&location.port==='8787'?'<a href="#reset-tests" class="text-button coin-empty-link">Reset all local test data</a>':''}<div class="settings-actions">${button('wallet-information','Information')}</div></section>`;
     bindConnections();
     if (exists) {
@@ -916,6 +931,7 @@
   function information() {
     $('main').innerHTML = title('Information', 'Wallet risks & disclaimer', icon('shield')) +
       `<section class="panel risk-copy">${riskContent()}</section>` +
+      `<p class="subtle">SHIC price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Shibacoin logo: Shibacoin Core contributors (MIT).</p>` +
       button('information-back', 'Back to Settings', 'primary');
     $('information-back').onclick = () => go('security');
   }

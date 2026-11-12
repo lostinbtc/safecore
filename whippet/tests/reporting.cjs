@@ -29,6 +29,13 @@ assert.equal(R.formatWorth(total.value),'0.38');
 assert.equal(R.formatWorth(R.valueInUsdt('pep',boundary.confirmed,.0000796,.9995)),'0.38');
 assert.equal(R.valueInUsdt('pep',100000000n,.01,.5),.02);
 assert.equal(R.valueInUsdt('wht',100000000n,.01,.5),null);
+assert.equal(R.valueInUsdt('shic',100000000n,.01,.5),null);
+assert.equal(R.valueInUsdt('shic',100000000000000n,.01,.5,.000003),6);
+assert.deepEqual(R.worth({pep:snap(5),wht:snap(0),shic:snap(1000000)},.01,.5,.000003),{value:6.1,incomplete:false});
+{const now=1800000000000,q=R.shicQuote({shibacoin:{usd:.000003,last_updated_at:now/1000}},now);
+assert.equal(R.freshShic(q,now+299999),true);assert.equal(R.freshShic(q,now+300000),false);
+for(const bad of [{},{shiba_inu:{usd:1,last_updated_at:now/1000}},...[-1,0,NaN,Infinity,'0.01'].map(usd=>({shibacoin:{usd,last_updated_at:now/1000}})),...[now/1000-601,now/1000+31,null,'1800000000'].map(last_updated_at=>({shibacoin:{usd:1,last_updated_at}}))])assert.throws(()=>R.shicQuote(bad,now));}
+assert.deepEqual(R.worth({pep:snap(1000),wht:snap(0),shic:snap(1)},.001,1),{value:1,incomplete:true});
 for(const rate of [null,0,-1,NaN,Infinity])assert.equal(R.valueInUsdt('pep',100000000n,.01,rate),null);
 assert.equal(R.formatWorth(0),'0.00');assert.equal(R.formatWorth(.009),'<0.01');assert.equal(R.formatWorth(null),'*');
 console.log('PASS: 4-second polling default, immediate first balance including zero, subsequent 4-second fresh-match gate, changed-candidate reset, no timer-only publication, cache continuity, USDT conversion, zero-balance exclusion and unpriced holdings.');

@@ -23,7 +23,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  await p.locator('#hide-balances').check();await p.locator('[data-nav="wallet"]').click();
  const hidden=async()=>{
   await p.locator('#wallet-worth .masked-balance').waitFor();
-  assert.equal(await p.locator('.masked-balance').count(),5);
+  assert.equal(await p.locator('.masked-balance').count(),7);
   assert.doesNotMatch(await p.locator('#main').innerHTML(),/4,710\.2345|1,939,922\.001111|1\.2345|47\.10/,'No actual holdings in text, attributes or accessibility labels');
   assert.equal(await p.locator('[data-overview-coin="pep"] .holding-status').innerText(),'Pending');
  };

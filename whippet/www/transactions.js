@@ -5,7 +5,7 @@
   else root.WalletTransactions=factory(root.WalletEngine,root.ethers);
 })(typeof globalThis==='object'?globalThis:this,function(E,ethers){
   const U=ethers.utils, COIN=100000000n, DUST=1000000n, MAX_FEE=10000000n, FLAT_MAX_INPUTS=6;
-  // Both supported chains reject standard transactions at >= 400,000 weight.
+  // Supported chains reject standard transactions at >= 400,000 weight.
   // These legacy (non-witness) sweeps must therefore stay below 100,000 bytes.
   const SWEEP_MAX_BYTES=100000;
   const SWEEP_FEE_POLICY=Object.freeze({baseRate:COIN/100n,bytesPerUnit:1000,cushionPercent:25,maxRate:10000000n});
@@ -60,7 +60,7 @@
     let value=amount(requested);const budget=value;if(value<DUST)throw Error('Enter enough to cover the fee and at least 0.01 for the recipient.');
     const destinationScript=script(coin,destination),changeScript=script(coin,changeAddress);
     let rate=integer(feeRate);if(rate<1000000n)rate=1000000n;if(rate>MAX_FEE)throw Error('Network fee exceeds this development wallet’s safety limit.');
-    if(flatFee&&(!['pep','wht'].includes(coin)||rate>1000000n))throw Error('The 0.01-coin flat fee does not meet the current relay requirement.');
+    if(flatFee&&(!['pep','wht','shic'].includes(coin)||rate>1000000n))throw Error('The 0.01-coin flat fee does not meet the current relay requirement.');
     if(!Number.isInteger(tip)||tip<0||!Array.isArray(utxos))throw Error('A fresh chain snapshot is required.');
     const seen=new Set();const candidates=utxos.map(u=>verifyUTXO(coin,u,tip)).sort((a,b)=>a.value===b.value?a.txid.localeCompare(b.txid):a.value>b.value?-1:1);
     let total=0n,fee=0n,change=0n;const inputs=[];
@@ -87,7 +87,7 @@
   function signWith(p,keyForInput,limits={inputs:8,bytes:10000,fee:MAX_FEE}){
     if(p.version!==1||p.locktime!==0||p.inputs.length<1||p.inputs.length>limits.inputs||p.amount<DUST||p.fee<0n||p.fee>limits.fee)throw Error('Invalid send review.');
     if(p.feeIncluded&&p.amount+p.fee!==p.budget)throw Error('The reviewed total changed.');
-    if(p.flatFee&&(!['pep','wht'].includes(p.coin)||p.fee!==1000000n))throw Error('The reviewed flat fee changed.');
+    if(p.flatFee&&(!['pep','wht','shic'].includes(p.coin)||p.fee!==1000000n))throw Error('The reviewed flat fee changed.');
     if(p.outputs.length!==(p.change?2:1)||p.outputs[0].value!==p.amount||p.outputs[0].script!==script(p.coin,p.destination)||p.change&&(p.outputs[1].value!==p.change||p.outputs[1].script!==script(p.coin,p.changeAddress)))throw Error('Send review outputs changed.');
     let total=0n;
     const seen=new Set();

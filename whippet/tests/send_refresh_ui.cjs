@@ -34,7 +34,7 @@ const vault=E.unprotected(webcrypto,recipe),sent='cd'.repeat(32),funding='ab'.re
  const balance=p.locator(`[data-overview-coin=${coin}] .holding-balance`);
  await p.waitForFunction(coin=>document.querySelector(`[data-overview-coin=${coin}] .holding-balance`)?.textContent===`15 ${coin.toUpperCase()}`,coin);
  await p.clock.runFor(4001);assert.equal(await p.evaluate(()=>__focused.length),0,'No focused scan before confirmation');
- if(scenario==='reload'){await p.reload();await p.waitForFunction(()=>__full===2);}
+ if(scenario==='reload'){await p.reload();await p.waitForFunction(()=>__full===3);}
  // Leave an old 200-pool routine call in flight. The focused refresh must not queue behind it.
  await p.evaluate(()=>__hold=true);await p.clock.runFor(4001);await p.waitForFunction(()=>typeof __finishOld==='function');
  if(scenario==='offline'){
@@ -47,7 +47,7 @@ const vault=E.unprotected(webcrypto,recipe),sent='cd'.repeat(32),funding='ab'.re
   await p.waitForFunction(()=>typeof __finishFocused==='function');await p.evaluate(()=>window.dispatchEvent(new Event('safecore-pause')));
   await p.evaluate(()=>{__hold=false;__holdFocused=false;__finishFocused();__finishOld();});
   assert.equal(await p.evaluate(()=>document.documentElement.dataset.walletState),'locked');
-  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await p.waitForFunction(()=>__full===4);
+  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await p.waitForFunction(()=>__full===6);
  }else{
   assert.equal(await balance.textContent(),`15 ${coin.toUpperCase()}`,'Changed balances retain the fresh-match delay');
   await p.evaluate(()=>{__hold=false;__finishOld();});
@@ -56,6 +56,7 @@ const vault=E.unprotected(webcrypto,recipe),sent='cd'.repeat(32),funding='ab'.re
  for(let i=0;i<3;i++)await p.clock.runFor(4001);
  await p.waitForFunction(coin=>document.querySelector(`[data-overview-coin=${coin}] .holding-balance`)?.textContent===`13 ${coin.toUpperCase()}`,coin);
  assert.equal(await p.evaluate(coin=>__focused.every(f=>f.coin===coin&&JSON.stringify(f.indices)==='[2,0]'),coin),true);
- assert.equal(await p.evaluate(()=>Object.entries(localStorage).filter(([k])=>k.startsWith('corevault.send-attempts.')).every(([,v])=>JSON.parse(v)[0].balanceRefreshed)),true);
+ // Publishing the balance precedes the serialized send-record write.
+ await p.waitForFunction(()=>Object.entries(localStorage).filter(([k])=>k.startsWith('corevault.send-attempts.')).every(([,v])=>JSON.parse(v)[0].balanceRefreshed));
  assert.equal(await p.evaluate(()=>__broadcasts),0);assert.deepEqual(errors,[]);await context.close();
 }console.log('PASS: PEP/WHT confirmation-triggered source/change refresh, pending/offline retries, stale-scan suppression, restart/background handling and no rebroadcast.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

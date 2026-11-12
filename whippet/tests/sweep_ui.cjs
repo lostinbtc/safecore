@@ -27,8 +27,8 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
   if(scenario==='expiry')await p.clock.install();
   await p.goto('http://localhost:8787/');
   if(scenario==='protected'){await p.locator('#lock').click();await p.locator('#unlock-password').fill(password);await p.locator('#unlock-submit').click();}
-  await p.waitForFunction(()=>__rescan.length===2);
-  await p.locator('#rescan').waitFor();await p.locator('#rescan').click();await p.waitForFunction(()=>__rescan.length===4);
+  await p.waitForFunction(()=>__rescan.length===3);
+  await p.locator('#rescan').waitFor();await p.locator('#rescan').click();await p.waitForFunction(()=>__rescan.length===6);
   assert.equal(await p.evaluate(()=>__rescan.every(c=>c.count===200)),true);
   if(scenario==='full')assert.match(await p.locator('#main').innerText(),/wallet addresses are full \(200 used\)/);
   await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();

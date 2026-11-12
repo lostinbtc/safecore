@@ -12,7 +12,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
    constructor(url){this.url=url;this.readyState=1;queueMicrotask(()=>this.onopen?.());}
    close(){this.readyState=3;queueMicrotask(()=>this.onclose?.());}
    send(raw){const q=JSON.parse(raw);__calls.push(q);if(this.url.includes('slow'))return;
-    const coin=this.url.includes('wht')?'wht':'pep';
+    const coin=this.url.includes('shic')?'shic':this.url.includes('wht')?'wht':'pep';
     const result=q.method==='server.features'?{genesis_hash:this.url.includes('wrong')?'0'.repeat(64):WalletNetwork.CONFIG[coin].genesis}:q.method==='blockchain.headers.subscribe'?{height:500}:q.method==='blockchain.relayfee'?.001:['fixture','1.4'];
     queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({id:q.id,result})}));
    }
@@ -26,7 +26,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
  const stored=await p.evaluate(()=>localStorage.getItem('whippet.dev.encrypted.v1'));
  await p.locator('#custom-connections > summary').click();assert.equal(await use.isDisabled(),true);
  const checkDefaults=async()=>{
-  for(const coin of ['pep','wht']){
+  for(const coin of ['pep','wht','shic']){
    assert.equal(await p.locator('#endpoint-'+coin).inputValue(),'','Built-in addresses are not prefilled');
    assert.equal(await p.locator('#endpoint-current-'+coin).innerText(),'Using default server');
    assert.equal(await p.evaluate(coin=>WalletNetwork.endpoint(coin)===WalletNetwork.CONFIG[coin].url,coin),true,'Built-in connection remains active');

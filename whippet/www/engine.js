@@ -8,6 +8,7 @@
   const NETWORKS = Object.freeze({
     pep: Object.freeze({ name: 'Pepecoin', ticker: 'PEP', prefix: 56, wif: 158, path: "m/44'/3434'/0'/0/{index}" }),
     wht: Object.freeze({ name: 'Whippet', ticker: 'WHT', prefix: 73, wif: 158, path: "m/0'/3'/{index}'" }),
+    shic: Object.freeze({ name: 'Shibacoin', ticker: 'SHIC', prefix: 63, wif: 158, path: "m/44'/4474'/0'/0/{index}" }),
   });
   const ITERATIONS = 600000;
   const FORMAT = 'pepecoin-whippet-encrypted-v1';
@@ -25,15 +26,16 @@
   }
   function validateRecipe(ethers, payload) {
     if (!payload || payload.format !== 'pepecoin-whippet-seed-v1' || typeof payload.passphrase !== 'string'
-        || payload.paths?.pep !== NETWORKS.pep.path || payload.paths?.wht !== NETWORKS.wht.path) {
+        || payload.paths?.pep !== NETWORKS.pep.path || payload.paths?.wht !== NETWORKS.wht.path
+        || payload.paths.shic !== undefined && payload.paths.shic !== NETWORKS.shic.path) {
       throw new Error('Unsupported wallet recovery recipe.');
     }
     return { format: payload.format, mnemonic: normalize(ethers, payload.mnemonic),
-      passphrase: payload.passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path } };
+      passphrase: payload.passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path, shic: NETWORKS.shic.path } };
   }
   function recipe(ethers, mnemonic, passphrase = '') {
     return validateRecipe(ethers, { format: 'pepecoin-whippet-seed-v1', mnemonic,
-      passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path } });
+      passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path, shic: NETWORKS.shic.path } });
   }
   function accounts(ethers, payload, index = 0) {
     const valid = validateRecipe(ethers, payload);
@@ -85,7 +87,8 @@
       const p = envelope.recipe;
       if (!/^[0-9a-f]{32}$/.test(envelope.id) || !p || p.format !== 'pepecoin-whippet-seed-v1'
           || typeof p.mnemonic !== 'string' || p.mnemonic.length > 1000 || typeof p.passphrase !== 'string' || p.passphrase.length > 1000
-          || p.paths?.pep !== NETWORKS.pep.path || p.paths?.wht !== NETWORKS.wht.path) throw new Error('Invalid unprotected wallet backup.');
+          || p.paths?.pep !== NETWORKS.pep.path || p.paths?.wht !== NETWORKS.wht.path
+          || p.paths.shic !== undefined && p.paths.shic !== NETWORKS.shic.path) throw new Error('Invalid unprotected wallet backup.');
       return envelope;
     }
     if (!envelope || envelope.format !== FORMAT || envelope.kdf !== 'PBKDF2-SHA256'

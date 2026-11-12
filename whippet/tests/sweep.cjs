@@ -11,7 +11,7 @@ assert.equal(T.sweepFee(193,1250001n).requiredFee,T.sweepFee(193).fee+1n);
 assert.deepEqual([999,1000,1001].map(size=>T.sweepFee(size).fee),[1248750n,1250000n,1251250n]);
 for(const size of [0,-1,1.5,100000,NaN])assert.throws(()=>T.sweepFee(size),/size/);
 function wif(scalar,compressed=true,prefix=158){const b=U.concat([[prefix],U.zeroPad(U.arrayify(U.hexlify(scalar)),32),compressed?[1]:[]]);return U.base58.encode(U.concat([b,U.arrayify(U.sha256(U.sha256(b))).slice(0,4)]));}
-for(const coin of ['pep','wht'])for(const compressed of [true,false]){
+for(const coin of ['pep','wht','shic'])for(const compressed of [true,false]){
  const encoded=wif(1,compressed),key=T.sweepKey(coin,encoded),dest=E.accounts(ethers,recipe,199)[coin].address;
  assert.equal(key.publicKey.length,compressed?68:132);
  for(const bad of ['',encoded.slice(0,-1)+'0',recipe.mnemonic,wif(0),wif(1,true,128),'https://example.test/'+encoded])assert.throws(()=>T.sweepKey(coin,bad),/valid mainnet WIF/);
@@ -66,4 +66,4 @@ for(const coin of ['pep','wht'])for(const compressed of [true,false]){
  assert.throws(()=>T.sweepPlan({coin,destination:dest,utxos:[{...utxos[0],raw:tinyRaw,txid:T.parse(tinyRaw).txid,value:1100000n}],tip:500,compressed}),/balance must cover/);
  assert.throws(()=>T.sweepPlan({coin,destination:dest,utxos:[utxos[0],{...owned,pos:0,height:1,raw:raw2,txid:T.parse(raw2).txid,value:100000000n}],tip:500,compressed}),/one private key/);
 }
-console.log('PASS: PEP/WHT WIF checks, independently verified compressed/uncompressed sweeps through 253 inputs, 25% fee cushion, full-source/no-change conservation, size boundaries, owned destinations, tamper rejection and unchanged normal-send limits.');
+console.log('PASS: PEP/WHT/SHIC WIF checks, independently verified compressed/uncompressed sweeps through 253 inputs, 25% fee cushion, full-source/no-change conservation, size boundaries, owned destinations, tamper rejection and unchanged normal-send limits.');

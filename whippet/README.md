@@ -1,7 +1,7 @@
 # SafeCore
 
-SafeCore is a local-first, multi-wallet application for Pepecoin (PEP) and Whippet
-(WHT), with a phone-sized browser interface and a bundled Android application.
+SafeCore is a local-first, multi-wallet application for Pepecoin (PEP), Whippet
+(WHT) and Shibacoin (SHIC), with a phone-sized browser interface and a bundled Android application.
 Pepecoin uses green accents; Whippet uses blue. Dogecoin is a **Coming soon**
 catalog entry, not an implemented wallet.
 
@@ -145,7 +145,7 @@ a disabled control is bypassed. Komodo uses the same numbered layout with separa
 legacy validation and exact-text handling.
 
 Unprotected backup recipes are checked before staging. Encrypted recipes are
-checked after decryption. After successful restore, both supported coin scans
+checked after decryption. After successful restore, all supported coin scans
 start on Overview; the first validated balances are displayed without the
 subsequent-change reporting delay.
 
@@ -159,6 +159,36 @@ receiving address after restoration. Core `wallet.dat` files are not supported.
 | --- | --- | --- |
 | Pepecoin | 56 / `0x38` | `m/44'/3434'/0'/0/{index}` |
 | Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
+| Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
+
+### Shibacoin (SHIC)
+
+Shibacoin is the native SHIC proof-of-work chain, not the SHIB token. Its mainnet
+parameters were checked against Shibacoin Core revision
+`0af632dfa466c62d77a1b9a4358cf4d64d1fbd4b` (`src/chainparams.cpp`,
+`src/amount.h`, and `doc/fee-recommendation.md`) and SLIP-0044 coin type 4474.
+The default external server is `wss://electrum.shibacoinshic.org:50002/`.
+Certificate validation and the pinned genesis
+`ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f`
+are mandatory. This server is not operated by SafeCore; availability and chain
+reports remain third-party dependencies. Custom WSS connections remain available.
+No SHIC node/indexer deployment is included in this change.
+
+SHIC uses eight decimal places, compressed P2PKH addresses, WIF version 158 and
+the existing conservative fee/dust/maturity guards. Old SafeCore JSON backups
+without a SHIC path derive this fixed path; an explicitly different SHIC path is
+rejected. PEP/WHT paths, wallet IDs and existing backup format names are unchanged.
+The offline recovery tool supports SHIC JSON, WIF/TXT and CSV without networking.
+
+SHIC USD estimates come from CoinGecko's `shibacoin` ID, no more than once per
+five minutes while the wallet is unlocked/foregrounded. The request contains no
+wallet address, balance, seed or credentials. CoinGecko sees the client's IP.
+Missing, malformed, future-dated or more-than-ten-minute-old provider quotes are
+rejected; fetched quotes expire after five minutes. HTTP failures/rate limits
+leave balances and spending unaffected. USDT conversion uses the same Kraken
+USD/USDT quote as PEP; no 1:1 USD/USDT assumption is made.
+Native HTTP access remains restricted to the exact public quote requests;
+remote scripts remain blocked. SHIC support is included in test.18; earlier APKs remain unchanged.
 
 The displayed Address #1 is derivation index 0. Whippet's hardened receive path
 is intentionally preserved for legacy compatibility. Do not change these paths,
@@ -273,7 +303,7 @@ claim to find every possible balance derived from a seed.
 
 ## Balances, activity and valuation
 
-Visible, unlocked Overview, Send and Activity refresh both supported coins about every
+Visible, unlocked Overview, Send and Activity refresh all supported coins about every
 4 seconds. Receive refreshes its selected coin. Locking or backgrounding stops
 normal scanning; reopening resumes it.
 
@@ -336,7 +366,7 @@ transaction checks.
 
 Recipient validation checks Base58 encoding, payload size, network version byte
 and checksum. Validation runs during planning and again when verifying reviewed
-outputs before signing. PEP and WHT addresses are not interchangeable.
+outputs before signing. PEP, WHT and SHIC addresses are not interchangeable.
 This build supports ordinary P2PKH destinations only, not P2SH, multisig,
 Whippet assets/covenants or Dogecoin sending.
 
@@ -361,7 +391,7 @@ still take longer than four seconds; this change does not remove that work.
 
 Choose an asset in Receive, then **Sweep private key**. Paste or camera-scan a
 standard compressed or uncompressed mainnet WIF. Encrypted/BIP38 keys, raw hex,
-recovery phrases, URLs and payment URIs are not accepted. PEP and WHT both use
+recovery phrases, URLs and payment URIs are not accepted. PEP, WHT and SHIC all use
 WIF prefix 158: the key format cannot distinguish these chains. The selected
 asset, independently checked server genesis and derived source address determine
 which network is queried. No seed, private key or password is sent to a server.
@@ -661,7 +691,7 @@ Choose a trusted operator: it sees your public address queries and IP address.
 Overrides apply to wallets on this device/browser and are not included in backups.
 Tests do not change the active server. Using a connection clears pending transaction
 reviews and refreshes discovery; failures never silently fall back. Restore default
-connections resets both coins, including invalid saved preferences. The content
+connections resets all supported coins, including invalid saved preferences. The content
 policy permits secure WebSocket hosts for user-selected servers, while scripts and
 ordinary HTTP requests retain their restrictions. This distribution retains the
 tested public client defaults. For your own service deployment, see
