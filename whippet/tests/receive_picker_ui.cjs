@@ -19,7 +19,9 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await p.locator('[data-coin=wht]').isVisible(),true);
   assert.equal(await p.locator('.wallet-coin-switch > p').count(),0,'Redundant Receive helper removed');
   for(const el of await p.locator('[data-coin]').all()){const box=await el.boundingBox();assert.ok(box.height>=48&&box.height<=54,'Compact asset rows retain touch height');}
-  const first=await p.locator('[data-coin=pep]').boundingBox(),second=await p.locator('[data-coin=shic]').boundingBox();assert.ok(second.y-first.y-first.height<=4,'Asset rows have a compact gap');
+  assert.deepEqual(await p.locator('[data-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.coin)),['pep','ltc','shic','wht']);
+  const boxes=await Promise.all((await p.locator('[data-coin]').all()).map(row=>row.boundingBox()));
+  for(let i=1;i<boxes.length;i++){const gap=boxes[i].y-boxes[i-1].y-boxes[i-1].height;assert.ok(gap>=0&&gap<=4,'Adjacent asset rows have a compact gap');}
   for(const theme of ['dark','light']){
    await p.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
    await p.locator('[data-coin=wht]').hover();
