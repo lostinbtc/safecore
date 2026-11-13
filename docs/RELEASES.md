@@ -9,6 +9,29 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.19
+
+Adds Litecoin (LTC) receiving, sending, private-key sweeps, live price estimates
+and offline JSON/WIF/TXT/CSV recovery. Coin lists consistently show Pepecoin,
+Litecoin, Shibacoin, then Whippet. Existing backups, coin addresses and protection
+settings are preserved. LTC uses its own size-based fees, dust limits and maturity
+rules, not the other coins' flat fee.
+
+LTC receiving uses legacy BIP44 addresses. Sending accepts standard legacy,
+SegWit and Taproot destinations; MWEB privacy addresses and other wallets'
+BIP49/BIP84 account discovery are not supported. Two external WSS endpoints
+passed read-only chain checks, but share an operator; this is not an uptime
+guarantee. Price requests contain no wallet identifiers and cannot authorize sends.
+
+Android versionCode 19 / versionName `0.1.0-test.19`, with debugging disabled
+and the existing development signing identity. Independent derivation/signature
+tests, disposable JSON recovery, browser regressions and all 14 Android security
+test executions passed locally. Real LTC receive/send testing remains pending;
+this is a development prerelease, not an independent audit.
+
+Keep separate recovery backups. Test.18 remains available; never uninstall or
+clear wallet data to bypass a signing or installation error.
+
 ## Test.18
 
 Adds Shibacoin (SHIC) receiving, sending, private-key sweeps and offline recovery.

@@ -34,7 +34,7 @@ const vault=E.unprotected(webcrypto,recipe),sent='cd'.repeat(32),funding='ab'.re
  const balance=p.locator(`[data-overview-coin=${coin}] .holding-balance`);
  await p.waitForFunction(coin=>document.querySelector(`[data-overview-coin=${coin}] .holding-balance`)?.textContent===`15 ${coin.toUpperCase()}`,coin);
  await p.clock.runFor(4001);assert.equal(await p.evaluate(()=>__focused.length),0,'No focused scan before confirmation');
- if(scenario==='reload'){await p.reload();await p.waitForFunction(()=>__full===3);}
+ if(scenario==='reload'){await p.reload();await p.waitForFunction(()=>__full===4);}
  // Leave an old 200-pool routine call in flight. The focused refresh must not queue behind it.
  await p.evaluate(()=>__hold=true);await p.clock.runFor(4001);await p.waitForFunction(()=>typeof __finishOld==='function');
  if(scenario==='offline'){
@@ -47,7 +47,7 @@ const vault=E.unprotected(webcrypto,recipe),sent='cd'.repeat(32),funding='ab'.re
   await p.waitForFunction(()=>typeof __finishFocused==='function');await p.evaluate(()=>window.dispatchEvent(new Event('safecore-pause')));
   await p.evaluate(()=>{__hold=false;__holdFocused=false;__finishFocused();__finishOld();});
   assert.equal(await p.evaluate(()=>document.documentElement.dataset.walletState),'locked');
-  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await p.waitForFunction(()=>__full===6);
+  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await p.waitForFunction(()=>__full===8);
  }else{
   assert.equal(await balance.textContent(),`15 ${coin.toUpperCase()}`,'Changed balances retain the fresh-match delay');
   await p.evaluate(()=>{__hold=false;__finishOld();});

@@ -11,7 +11,7 @@
     return { ...walletEngine.unprotected(crypto, recipe), [key]: bundle };
   }
   async function importJSON(ethers, generator, walletEngine, crypto, backup, options = {}) {
-    if (['whippet-seed-v1', 'pepecoin-seed-v1', 'shibacoin-seed-v1'].includes(backup?.format)) return generator.restoreAsync(ethers, backup, options);
+    if (['whippet-seed-v1', 'pepecoin-seed-v1', 'shibacoin-seed-v1', 'litecoin-seed-v1'].includes(backup?.format)) return generator.restoreAsync(ethers, backup, options);
     walletEngine.validateEnvelope(backup);
     const recipe = walletEngine.validateRecipe(ethers, await walletEngine.decrypt(crypto, backup, options.password || ''));
     if (backup.whippetGenerator && backup.recoveryGenerator) throw new Error('Ambiguous saved generator bundle.');

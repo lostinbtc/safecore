@@ -12,7 +12,7 @@ class Socket {
   queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({id:q.id,result})}));
  }
 }
-const ctx={WebSocket:Socket,URL,setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
+const ctx={WebSocket:Socket,WalletTransactions:require('../www/transactions.js'),URL,setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
 (async()=>{try{
  genesis=N.CONFIG.pep.genesis;
  for(const value of ['ws://host','https://host','wss://user:pw@host','wss://host?token=x','wss://host#x','wss://ho st','wss://host\\x','wss://ho\nst',null])assert.throws(()=>N.validateEndpoint(value));
@@ -30,7 +30,7 @@ const ctx={WebSocket:Socket,URL,setTimeout,clearTimeout};vm.createContext(ctx);v
  const before=calls.length;await assert.rejects(()=>old.call('blockchain.transaction.broadcast',['forbidden']),/Connection changed/);assert.equal(calls.length,before);
  await N.client('pep').call('blockchain.headers.subscribe');assert.equal(calls.at(-1).url,'wss://selected.example/');
  N.configure({});assert.equal(N.endpoint('pep'),N.CONFIG.pep.url);
- for(const coin of ['wht','shic']){
+ for(const coin of ['wht','shic','ltc']){
   genesis=N.CONFIG[coin].genesis;mode='ok';assert.equal((await N.testConnection(coin,N.CONFIG[coin].url)).height,500);
   mode='wrong';await assert.rejects(()=>N.testConnection(coin,N.CONFIG[coin].url),/Wrong blockchain/);
  }

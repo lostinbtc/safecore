@@ -1,6 +1,6 @@
 // Public fixture balances only. No sockets, signing or broadcasts.
 module.exports = async context => context.addInitScript(() => {
-  window.__balances = {pep:5, wht:50, shic:0};
+  window.__balances = {pep:5, wht:50, shic:0, ltc:0};
   window.fetch = async () => new Response(JSON.stringify({error:[],result:{}}));
   window.WebSocket = class { constructor(){throw Error('Real network forbidden in UI fixture');} };
   Object.defineProperty(window, 'WalletNetwork', {configurable:true, set(N){

@@ -5,7 +5,7 @@ const {chromium}=require('./browser-helper.cjs');
   const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
   try{
     const page=await browser.newPage();await page.goto('http://localhost:8787/');
-    for(const coin of process.argv.slice(2).length?process.argv.slice(2):['pep','wht','shic']){
+    for(const coin of process.argv.slice(2).length?process.argv.slice(2):['pep','wht','shic','ltc']){
       const result=await page.evaluate(async coin=>{
         const c=WalletNetwork.client(coin);
         const features=await c.call('server.features'),tip=await c.call('blockchain.headers.subscribe');

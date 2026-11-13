@@ -1,7 +1,7 @@
 # SafeCore
 
 SafeCore is a local-first, multi-wallet application for Pepecoin (PEP), Whippet
-(WHT) and Shibacoin (SHIC), with a phone-sized browser interface and a bundled Android application.
+(WHT), Shibacoin (SHIC) and Litecoin (LTC), with a phone-sized browser interface and a bundled Android application.
 Pepecoin uses green accents; Whippet uses blue. Dogecoin is a **Coming soon**
 catalog entry, not an implemented wallet.
 
@@ -160,6 +160,45 @@ receiving address after restoration. Core `wallet.dat` files are not supported.
 | Pepecoin | 56 / `0x38` | `m/44'/3434'/0'/0/{index}` |
 | Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
 | Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
+| Litecoin (LTC) | 48 / `0x30` | `m/44'/2'/0'/0/{index}` |
+
+### Litecoin (LTC)
+
+LTC receives to legacy BIP44 `L…` addresses with compressed keys and WIF version
+176. Existing backups without an LTC path use the fixed path above; explicit
+alternate paths are rejected. Existing coin addresses and format names do not change.
+This is not automatic discovery of BIP49/BIP84 accounts or other wallets' change branches.
+
+Sending accepts checksum-validated Litecoin P2PKH, P2SH (`M…` and legacy `3…`),
+native SegWit v0 and Taproot v1 addresses. Legacy `3…` addresses share Bitcoin's
+version byte, so the encoding alone cannot prove the intended chain. Confirm
+the recipient requested Litecoin. Future witness versions and MWEB privacy
+addresses are rejected. No MWEB keys or private balances are generated/scanned.
+When checking a transparent previous output, its Litecoin txid excludes witness
+and MWEB extension data, matching Core's `ComputeHash`; the extension is not
+interpreted or used for signing. Recognized HogEx withdrawals require six
+confirmations; mining rewards require 100. Only legacy wallet inputs are signed.
+
+The default is `wss://ltc.electrum1.cipig.net:30063/`. The operator also lists
+`wss://ltc.electrum2.cipig.net:30063/`; both passed certificate, genesis, height
+and read-only RPC checks during local integration. They share an operator and
+are not independent redundancy or an uptime guarantee. No silent fallback is
+performed. Users can test/select a different WSS server in Settings.
+Provider list: https://github.com/KomodoPlatform/coins/blob/master/electrums/LTC
+
+LTC fees are calculated per byte from at least 1,000 litoshis/kB, with a
+100,000-litoshi/kB rate cap and a 0.001 LTC total-fee cap. The conservative output
+minimum is 5,460 litoshis; small change handling remains explicit. LTC does not
+use the other coins' 0.01 flat fee. Sweeps retain the 25% fee cushion and absolute
+LTC fee cap. Price estimates use CoinGecko's `litecoin` ID in the same five-minute
+public request as SHIC, with per-asset validation and expiry. No wallet data is sent.
+The offline tool supports LTC JSON/WIF/TXT/CSV without network requests.
+
+Parameters and logo source: Litecoin Core revision
+`ec1b6489a900d09cf5991e220dce089c77a232a2`, `src/chainparams.cpp`,
+`src/policy/policy.h`, `src/consensus/consensus.h` and
+`src/primitives/transaction.cpp`. Test.19 promotes the local LTC integration.
+Automated checks passed; real-funds LTC receive/send testing remains pending.
 
 ### Shibacoin (SHIC)
 
@@ -410,7 +449,7 @@ in batches of at most ten, deduplicated, and independently checked before signin
 The fee is based on a conservative signed-size estimate (including compressed or
 uncompressed public keys and CompactSize counts), charged proportionally by byte,
 not rounded to whole kilobytes. The rate is the greater of the live relay floor
-and 0.01 coin/kB, plus a 25% fee cushion applied once. Calculation uses integers:
+and 0.01 coin/kB for PEP/WHT/SHIC (0.00001 LTC/kB for Litecoin), plus a 25% fee cushion applied once. Calculation uses integers:
 `ceil(estimatedBytes * rateInBaseUnitsPerKB * 125 / 100000)`.
 Only the final fractional base unit is rounded up. For example, a one-input
 compressed-key sweep estimated at 193 bytes pays 0.0024125 coin at the default
@@ -422,6 +461,9 @@ acknowledgment followed by **Confirm sweep** before submission.
 The rate remains bounded at 0.1 coin/kB before the cushion; the ordinary-send
 0.1-coin total-fee ceiling does not apply to larger sweeps. Nothing is sent if
 the balance cannot cover the fee plus the minimum 0.01 wallet output.
+Those rate/output limits apply to PEP/WHT/SHIC. Litecoin instead has a
+0.001 LTC/kB rate cap, a 0.001 LTC absolute fee cap (including the cushion),
+and a 0.00005460 LTC minimum output.
 
 The proportional 0.01 coin/kB baseline is documented for both
 [Pepecoin](https://github.com/pepecoinppc/pepecoin/blob/master/doc/fee-recommendation.md)
@@ -431,7 +473,7 @@ the reviewed fee is not silently changed after signing. The pre-broadcast check
 uses the same byte-based calculation without the cushion, requiring a fresh
 review if the current requirement exceeds the already approved buffered fee.
 
-Both supported chains have a 400,000-weight standard-transaction boundary; these
+Supported chains have a 400,000-weight standard-transaction boundary; these
 legacy non-witness sweeps must be below 100,000 bytes. If the conservative estimate
 cannot fit the entire balance, the sweep is rejected with a multi-transaction
 explanation. Automatic multi-transaction sweeping is not implemented. No partial
@@ -513,14 +555,14 @@ never stored in wallet backups, settings, logs or network requests.
 | Rule | Current value |
 | --- | --- |
 | Entered total | Limited by verified, confirmed spendable outputs; no 100-coin cap |
-| Minimum recipient amount | 0.01 coin |
-| Flat fee | 0.01 of the selected supported coin |
-| Flat-fee transaction size | At most 1,000 bytes |
+| Minimum recipient amount | PEP/WHT/SHIC: 0.01 coin; LTC: 0.00005460 |
+| Fee | PEP/WHT/SHIC: 0.01 coin flat; LTC: size-based, at least 0.00001 LTC/kB |
+| Flat-fee transaction size | PEP/WHT/SHIC: at most 1,000 bytes; not used for LTC |
 | Planner input limit | 8; size rules can reject fewer |
-| Max input selection | Conservatively up to 6 |
+| Max input selection | PEP/WHT/SHIC: conservatively up to 6; LTC: up to 8 |
 | Candidate-output scan bound | 40 |
-| General fee ceiling | 0.1 coin; flat-fee path still requires exactly 0.01 |
-| Coinbase maturity | 240 confirmations |
+| General fee ceiling | PEP/WHT/SHIC: 0.1 coin (flat path exactly 0.01); LTC: 0.001 |
+| Coinbase maturity | PEP/WHT/SHIC: 240 confirmations; LTC: 100 (MWEB withdrawal: 6) |
 | Review expiry | 90 seconds |
 
 Only confirmed, mature outputs are spendable. Raw previous transactions must
@@ -528,7 +570,7 @@ match their transaction IDs, claimed values and wallet-owned scripts.
 The live relay minimum is checked. A higher required fee or oversized transaction
 is rejected rather than silently underpaying.
 
-For a total of 5 coins, a 0.01 fee leaves 4.99 for the recipient. Tiny change below
+For PEP/WHT/SHIC, a total of 5 coins and a 0.01 fee leaves 4.99 for the recipient. Tiny change below
 0.01 is rejected in the fee-inclusive flow with guidance to use Max; it is not
 silently added to the fee. Change returns to the first receiving address.
 

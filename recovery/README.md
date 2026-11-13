@@ -1,6 +1,6 @@
-# Offline Pepecoin, Whippet and Shibacoin recovery
+# Offline Pepecoin, Whippet, Shibacoin and Litecoin recovery
 
-Generate or recover Pepecoin, Whippet or Shibacoin addresses and their matching private keys entirely
+Generate or recover Pepecoin, Whippet, Shibacoin or Litecoin addresses and their matching private keys entirely
 inside your browser. The folder is self-contained: it needs no server, package
 installation, blockchain connection, or internet access.
 
@@ -8,7 +8,7 @@ installation, blockchain connection, or internet access.
 
 1. Download this repository as a ZIP and extract it.
 2. Open `recovery/index.html` in a current Chrome, Edge, or Firefox browser.
-3. Choose **Pepecoin**, **Whippet** or **Shibacoin (SHIC)**, then generate a new phrase, enter an existing English BIP39 phrase, or choose
+3. Choose **Pepecoin**, **Litecoin (LTC)**, **Shibacoin (SHIC)** or **Whippet**, then generate a new phrase, enter an existing English BIP39 phrase, or choose
    **Import wallet JSON**.
 4. Select an address count and derive the keys for that asset. The default is **200**, with a
    supported range of **1–1,000**.
@@ -67,7 +67,13 @@ encrypted-export screens with all 1,000 Whippet addresses matching afterward.
 - Whippet P2PKH version: 73 (`0x49`); script version: 22 (`0x16`).
 - Shibacoin path: `m/44'/4474'/0'/0/index`, starting at index 0.
 - Shibacoin P2PKH version: 63 (`0x3f`); script version: 22 (`0x16`).
-- WIF version: 158 (`0x9e`), with compressed public keys.
+- Litecoin path: `m/44'/2'/0'/0/index`, starting at index 0 (legacy P2PKH).
+- Litecoin P2PKH version: 48 (`0x30`); script version: 50 (`0x32`).
+- WIF version: 158 (`0x9e`) for PEP/WHT/SHIC; 176 (`0xb0`) for LTC, with compressed public keys.
+
+Litecoin backups use `litecoin-seed-v1` generator bundles and the existing SafeCore
+wallet JSON formats. Older SafeCore recipes without `paths.ltc` derive the fixed
+path above. MWEB, BIP49/BIP84 and other accounts/change branches are not scanned.
 
 SHIC is the Shibacoin proof-of-work chain, not the SHIB token. Older SafeCore
 backups without a SHIC path use this fixed path; an explicitly different SHIC
@@ -114,7 +120,7 @@ and Playwright Chromium (`npm ci`, then `npx playwright install chromium`):
 node recovery/ui-tests.cjs
 ```
 
-The checks use a published BIP39 test vector for all three assets. They cover the 200/1,000 address
+The checks use a published BIP39 test vector for all four assets. They cover the 200/1,000 address
 bounds, exact key pairs, wallet-compatible JSON, encrypted wallet import,
 wrong-password rejection, TXT/CSV exports and cancellation. No funded wallet
 or network connection is used.

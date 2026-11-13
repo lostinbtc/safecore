@@ -6,7 +6,7 @@ import android.test.AndroidTestCase;
 /** Pure URL policy checks; no network or wallet data. */
 public class NetworkPolicyTest extends AndroidTestCase {
     public void testPublicPriceAllowlist() {
-        String quote="https://api.coingecko.com/api/v3/simple/price?ids=shibacoin&vs_currencies=usd&include_last_updated_at=true";
+        String quote="https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin&vs_currencies=usd&include_last_updated_at=true";
         assertTrue(MainActivity.publicPriceRequest(Uri.parse(quote),"GET"));
         assertTrue(MainActivity.publicPriceRequest(Uri.parse("https://api.kraken.com/0/public/Ticker?pair=PEPUSD,USDTUSD"),"GET"));
         assertFalse(MainActivity.publicPriceRequest(Uri.parse(quote),"POST"));

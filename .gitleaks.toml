@@ -3,6 +3,13 @@ title = "SafeCore publication scan"
 useDefault = true
 
 [[allowlists]]
+description = "Exact Litecoin test success message, not an API credential"
+condition = "AND"
+paths = ['''^whippet/tests/litecoin\.cjs$''']
+regexTarget = "line"
+regexes = ['''^\s*console\.log\('PASS: LTC independent HD/WIF, 1000-key offline restore, legacy/SegWit/Taproot destinations, signatures, coin-specific fees/dust/maturity, stale-safe pricing and old-backup compatibility\.'\);$''']
+
+[[allowlists]]
 description = "Upstream NULS parser test keys, matched to public Trezor tests"
 condition = "AND"
 paths = ['''^services/blockbook/bchain/coins/nuls/nulsparser_test\.go$''']

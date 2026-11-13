@@ -13,7 +13,7 @@ class Socket{static OPEN=1;constructor(){this.readyState=1;queueMicrotask(()=>th
   else result=.01;
   queueMicrotask(()=>this.onmessage({data:JSON.stringify({id:q.id,result})}));
  }}
-const ctx={WebSocket:Socket,WalletTransactions:{scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
+const ctx={WebSocket:Socket,WalletTransactions:{policy:require('../www/transactions.js').policy,scriptHash:(_,a)=>a,historyStatus:require('../www/transactions.js').historyStatus},setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);const N=ctx.WalletNetwork;
 (async()=>{try{const s=await N.scan('wht',accounts);assert.equal(s.confirmed+s.unconfirmed,100000000000n);
  for(mode of ['duplicate-history','duplicate-output','mismatched-total'])await assert.rejects(()=>N.scan('wht',accounts,s,{verify:true}),/Inconsistent|do not agree/);
  assert.equal(s.confirmed+s.unconfirmed,100000000000n);mode='confirmed';const next=await N.scan('wht',accounts,s,{verify:true});assert.equal(next.confirmed,100000000000n);assert.equal(next.unconfirmed,0n);

@@ -87,7 +87,7 @@
   function savedBrand(){try{const raw=localStorage.getItem(BRAND_PREF);if(raw===null)return DEFAULT_BRAND;const id=Number(raw);return Number.isInteger(id)&&id>=0&&id<=BRAND_ICONS.length?id:DEFAULT_BRAND;}catch(_){return DEFAULT_BRAND;}}
   function applyBrand(id){document.querySelector('.mobile-brand img').src=brandPath(id);document.querySelector('link[rel="icon"]').href=brandPath(id);}
   // Display catalog only. Coming-soon entries never enter the key engine.
-  const COINS = { pep: E.NETWORKS.pep, shic: E.NETWORKS.shic, wht: E.NETWORKS.wht, doge: { name: 'Dogecoin', ticker: 'DOGE', comingSoon: true } };
+  const COINS = { pep: E.NETWORKS.pep, ltc: E.NETWORKS.ltc, shic: E.NETWORKS.shic, wht: E.NETWORKS.wht, doge: { name: 'Dogecoin', ticker: 'DOGE', comingSoon: true } };
   const assetOrder = Object.keys(COINS).filter(coin => Object.hasOwn(E.NETWORKS, coin));
   let hiddenCoins = [];
   function loadCoinPrefs() {
@@ -115,7 +115,7 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.wallet}</svg>`;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const coinImage = coin => `assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin'})[coin]}.png`;
+  const coinImage = coin => `assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin'})[coin]}.png`;
   const coinMark = coin => coin === 'doge' ? '<span class="doge-mark" aria-hidden="true">Ð</span>' : `<img src="${coinImage(coin)}" alt="">`;
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
   let receiveBooks = null, addingWallet = false, revealed = false;
@@ -145,16 +145,18 @@
   function clearReports(){for(const timer of Object.values(reportTimers))clearTimeout(timer);reportTimers={};reports={};}
   const reported=coin=>reports[coin]?.value;
   let pepPrice=null,priceAttempt=0,priceBusy=false;
-  let shicPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
+  let shicPrice=null,ltcPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
   const priceFresh=()=>pepPrice&&Date.now()-pepPrice.at<300000;
   async function refreshShicPrice(){
     if(shicPriceBusy||Date.now()-shicPriceAttempt<300000)return;
     shicPriceBusy=true;shicPriceAttempt=Date.now();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
-      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
+      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('SHIC price unavailable');
-      shicPrice=WalletReporting.shicQuote(await response.json());
+      const quotes=await response.json();
+      try{shicPrice=WalletReporting.shicQuote(quotes);}catch(_){shicPrice=null;}
+      try{ltcPrice=WalletReporting.ltcQuote(quotes);}catch(_){ltcPrice=null;}
     }catch(_){/* Optional public price only; never affects wallet keys or spendability. */}
     finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
   }
@@ -396,7 +398,7 @@
     if (!sendCoin) { $('main').innerHTML = header; updateSendPicker(); return; }
     const coin = sendCoin, network = E.NETWORKS[coin];
     $('main').innerHTML = header +
-      `<form id="send-form" class="form-panel"><label for="send-address">Receiving address</label><div class="send-address-row"><input id="send-address" autocomplete="off" spellcheck="false" required maxlength="40"><button id="scan-address" type="button" class="icon-button" aria-label="Scan address QR code" title="Scan address QR code">${icon('camera')}</button></div><section id="scan-panel" aria-label="Scan receiving address" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" class="inline-info" role="status" hidden></p><label for="send-amount">Total including fee (${network.ticker})</label><input id="send-amount" inputmode="decimal" autocomplete="off" required placeholder="0.00"><button id="send-max" type="button" class="text-button" disabled>Max</button><p class="subtle">Network fee: 0.01 ${network.ticker} for small transactions.</p><div id="send-estimate" aria-live="polite" class="subtle">Checking available balance…</div><div class="form-actions">${button('review-send','Review transaction','primary')}<a href="#wallet" class="text-button">Cancel</a></div></form>`;
+      `<form id="send-form" class="form-panel"><label for="send-address">Receiving address</label><div class="send-address-row"><input id="send-address" autocomplete="off" spellcheck="false" required maxlength="90"><button id="scan-address" type="button" class="icon-button" aria-label="Scan address QR code" title="Scan address QR code">${icon('camera')}</button></div><section id="scan-panel" aria-label="Scan receiving address" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" class="inline-info" role="status" hidden></p><label for="send-amount">Total including fee (${network.ticker})</label><input id="send-amount" inputmode="decimal" autocomplete="off" required placeholder="0.00"><button id="send-max" type="button" class="text-button" disabled>Max</button><p class="subtle">${coin==='ltc'?'Fee based on transaction size; shown before confirmation. Standard Litecoin only; no MWEB.':`Network fee: 0.01 ${network.ticker} for small transactions.`}</p><div id="send-estimate" aria-live="polite" class="subtle">Checking available balance…</div><div class="form-actions">${button('review-send','Review transaction','primary')}<a href="#wallet" class="text-button">Cancel</a></div></form>`;
     updateSendPicker();
     $('review-send').type = 'submit';
     const viewToken=generation,viewWallet=envelope;
@@ -431,7 +433,7 @@
       if(utxos.length&&utxos.every(u=>blocked.has(u.txid+':'+u.pos)))throw Error('These coins have a previous send attempt. Check its transaction ID in Activity before trying another payment.');
       return {snapshot,utxos:utxos.filter(u=>!blocked.has(u.txid+':'+u.pos))};
     }
-    function build(data,destination,requested){return T.plan({coin,destination,amount:requested,utxos:data.utxos,changeAddress:receivePools[coin][0].address,feeRate:data.snapshot.feeRate,tip:data.snapshot.tip,feeIncluded:true,flatFee:true});}
+    function build(data,destination,requested){return T.plan({coin,destination,amount:requested,utxos:data.utxos,changeAddress:receivePools[coin][0].address,feeRate:data.snapshot.feeRate,tip:data.snapshot.tip,feeIncluded:true,flatFee:T.policy(coin).flatFee});}
     function estimate(){
       if(!activeView()||!quote)return;
       if(!$('send-amount').value){$('send-estimate').textContent='Enter a total to see what the recipient receives.';return;}
@@ -443,7 +445,7 @@
     $('send-address').oninput=estimate;$('send-amount').oninput=estimate;
     $('send-max').onclick=()=>{
       if(!quote)return;
-      const total=quote.utxos.slice().sort((a,b)=>a.value>b.value?-1:a.value<b.value?1:0).slice(0,T.FLAT_MAX_INPUTS).reduce((n,u)=>n+u.value,0n);
+      const total=quote.utxos.slice().sort((a,b)=>a.value>b.value?-1:a.value<b.value?1:0).slice(0,coin==='ltc'?8:T.FLAT_MAX_INPUTS).reduce((n,u)=>n+u.value,0n);
       $('send-amount').value=T.format(total);estimate();
     };
     void available().then(data=>{if(data&&activeView()){quote=data;$('send-max').disabled=false;estimate();}}).catch(e=>{if(activeView())$('send-estimate').textContent=e.message;});
@@ -609,7 +611,7 @@
           if(token!==generation||source!==envelope||sweepState!==state||!state.key)return;
           const identity=items=>items.map(u=>u.txid+':'+u.pos+':'+u.value).sort().join('|');
           if(identity(current.utxos)!==identity(p.inputs))throw Error('Source outputs changed. Build a fresh sweep review.');
-          if(T.sweepFee(p.estimatedBytes,current.snapshot.feeRate).requiredFee>p.fee)throw Error('The required network fee increased beyond the reviewed cushion. Build a fresh sweep review.');
+          if(T.sweepFee(p.estimatedBytes,current.snapshot.feeRate,p.coin).requiredFee>p.fee)throw Error('The required network fee increased beyond the reviewed cushion. Build a fresh sweep review.');
           if(!receiveBooks[p.coin].view().pinned){
             sweepProgress('Verifying your receiving address. Please keep this page open…');
             await refreshLive(p.coin);
@@ -705,16 +707,17 @@
     }
     const pepUsd=priceFresh()?pepPrice.value:null,usdtUsd=priceFresh()?pepPrice.usdt:null;
     const shicUsd=WalletReporting.freshShic(shicPrice)?shicPrice.value:null;
-    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd);
+    const ltcUsd=WalletReporting.freshShic(ltcPrice)?ltcPrice.value:null;
+    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd);
     const worth=WalletReporting.formatWorth(valuation.value);
     const hidden=balancesHidden();
     const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section></div>`;
     const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="primary overview-rescan" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
-      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd);
+      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd);
       const price=unitPrice!==null?unitPrice.toFixed(8).replace(/0+$/,'').replace(/\.$/,'')+' USDT':'*';
-      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd):null;
+      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
       const status=connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
       return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${n.comingSoon?n.name+' coming soon':'Receive '+n.name}" ${n.comingSoon?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
@@ -931,7 +934,7 @@
   function information() {
     $('main').innerHTML = title('Information', 'Wallet risks & disclaimer', icon('shield')) +
       `<section class="panel risk-copy">${riskContent()}</section>` +
-      `<p class="subtle">SHIC price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Shibacoin logo: Shibacoin Core contributors (MIT).</p>` +
+      `<p class="subtle">SHIC and LTC price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Logos: Shibacoin Core and Litecoin Core contributors (MIT).</p>` +
       button('information-back', 'Back to Settings', 'primary');
     $('information-back').onclick = () => go('security');
   }

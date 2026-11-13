@@ -12,8 +12,10 @@ relicensing of them.
 | QRCode.js | MIT; [full license](whippet/www/assets/qrcode.LICENSE) |
 | jsQR 1.4.0 | Apache-2.0; [full license](whippet/www/assets/jsQR.LICENSE) |
 | Shibacoin logo | Upstream MIT notice and provenance in [bundled license](whippet/www/assets/shibacoin.LICENSE); trademark rights remain with their owners |
+| Litecoin logo | Upstream MIT notice and provenance in [bundled license](whippet/www/assets/litecoin.LICENSE); trademark rights remain with their owners |
 | Android/Gradle dependencies | Their upstream notices/licenses; resolved by the checked-in build configuration |
 | Test-only Bitcore / Playwright dependencies | MIT / Apache-2.0 respectively; installed notices in npm packages, exact dependency graph in package-lock.json |
+| Test-only bech32 2.0.0 | MIT; independent Litecoin address-test encoder, not bundled into either application |
 
 See [wallet asset provenance](whippet/THIRD_PARTY.md). Coin logos and marks remain
 with their respective owners; code licenses do not grant trademark rights.

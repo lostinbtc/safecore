@@ -1,15 +1,16 @@
 {
-  "tag": "v0.1.0-test.18",
-  "filename": "SafeCore-0.1.0-test.18.apk",
-  "artifact_commit": "76c191b806476d51f73f99a60ebd2ef133375217",
-  "sha256": "bb5567881ca499047af828f508fb3198d1b38305a8ad481871b49d1e961fd6d4",
+  "tag": "v0.1.0-test.19",
+  "filename": "SafeCore-0.1.0-test.19.apk",
+  "artifact_commit": "8a109210c6ac6dfc0d153d7b88d41cc9085b6b92",
+  "sha256": "425823935ff1672daab7f3b2ba8dbe03251231d6fe27835f5d5444b403e49dab",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
-  "version_code": 18,
+  "version_code": 19,
   "changes": [
-    "Shibacoin (SHIC) support for receiving, sending and private-key recovery.",
-    "Live SHIC price estimates included in the USDT wallet value.",
-    "Offline SHIC recovery with wallet-compatible JSON and private-key exports.",
-    "Consistent coin order: Pepecoin, Shibacoin, then Whippet; existing backups and protection settings preserved."
+    "Litecoin (LTC) receiving, sending and private-key sweeps with LTC-specific size-based fees.",
+    "Live LTC price estimates included in the USDT wallet value alongside SHIC and PEP.",
+    "Offline LTC recovery with wallet-compatible JSON, WIF, TXT and CSV exports; existing backups remain compatible.",
+    "Consistent coin order: Pepecoin, Litecoin, Shibacoin, then Whippet; existing addresses and protection settings preserved.",
+    "Standard Litecoin only: no MWEB privacy addresses or BIP49/BIP84 account discovery. Automated checks passed; real LTC receive/send testing remains pending."
   ]
 }

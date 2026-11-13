@@ -1,8 +1,8 @@
 # SafeCore
 
 An extensible, self-custodial Android wallet for Layer-1 coins, launching with
-Pepecoin, Whippet and Shibacoin (SHIC), with self-hostable Pepecoin/Whippet backends
-and an external Shibacoin Electrum connection.
+Pepecoin, Whippet, Shibacoin (SHIC) and Litecoin (LTC), with self-hostable Pepecoin/Whippet backends
+and external Shibacoin/Litecoin Electrum connections.
 
 This is a development prerelease, not an audited production wallet. Use small,
 expendable amounts and keep an independent recovery backup.
@@ -37,7 +37,7 @@ Open `http://localhost:8787`. See the wallet guide before importing recovery
 material. Use an independent offline backup; browser storage is not a backup.
 
 **Settings → Electrum connections** lets you test and select your own secure
-`wss://` server separately for Pepecoin, Whippet and Shibacoin if the defaults are unavailable.
+`wss://` server separately for Pepecoin, Whippet, Shibacoin and Litecoin if the defaults are unavailable.
 Choose a trusted operator: servers see your public address queries and IP address.
 Connection preferences stay on this device, not in wallet backups. Restore default
 connections is always available; the app does not silently switch servers.
@@ -126,7 +126,7 @@ for operator-specific settings.
 
 Download and extract this repository, then open **`recovery/index.html`**
 directly in your browser. It runs without a server, installation, or network
-connection. Choose **Pepecoin, Whippet or Shibacoin** to generate 200 address/key pairs
+connection. Choose **Pepecoin, Whippet, Shibacoin or Litecoin** to generate 200 address/key pairs
 for that asset by default, adjustable from 1 to 1,000. Local recovery-word
 suggestions are included. It uses SafeCore’s receiving-address paths, not
 legacy Komodo derivation.
@@ -153,6 +153,6 @@ backend is usable. Starting containers is not proof of readiness. This repositor
 contains source and templates, not blockchain databases, wallets, TLS private
 keys, RPC credentials or Android signing keys.
 
-Currently implemented assets are PEP, WHT and SHIC. Dogecoin is a disabled coming-soon
+Currently implemented assets are PEP, WHT, SHIC and LTC. Dogecoin is a disabled coming-soon
 entry. Adding another asset requires protocol, derivation, address-validation,
 indexer and transaction tests; it is not just an icon or configuration change.
