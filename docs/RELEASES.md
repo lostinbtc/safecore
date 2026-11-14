@@ -9,6 +9,38 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.20
+
+Adds Bitcoin and Dogecoin, bringing the wallet and offline recovery tool to six
+coins: Pepecoin, Dogecoin, Litecoin, Shibacoin, Whippet and Bitcoin. Legacy Komodo
+recovery supports PEP/SHIC only. New wallets start with no coins selected;
+existing wallets keep their selections.
+
+BTC/LTC fees are automatic and read-only, based on estimated transaction size
+(inputs, outputs and overhead). The network rate is held for up to five minutes,
+not the total fee; reviews expire after 90 seconds. A fresh USD quote is required:
+fees above $5 require a warning and above $100 are blocked without an override.
+PEP/DOGE/SHIC/WHT retain the default 0.01-coin fee within size limits, with an
+optional 1-coin total fee for larger input sets. Every send requires review.
+
+Adds verified server failover where available, authenticated public-address
+caching, and optional password-encrypted local recovery copies. Recovery copies
+must be restored manually and do not replace a separate backup. Wallets with
+many outputs can send within the existing per-transaction input limits.
+
+Refreshes branding, the 2.3-second splash screen, compact asset lists, Send and
+Receive controls, light mode, activity pagination and explorer links. Documentation
+now explains the fee and recovery limits with a shorter getting-started section.
+
+Android versionCode 20 / versionName `0.1.0-test.20`, debugging disabled, using
+the existing development signing identity. The underlying update passed local
+unit/browser suites, all 25 Android test executions, and independent Bitcoin Core
+regtest checks with disposable coins. This remains an unaudited development
+prerelease; Bitcoin testing did not use real BTC.
+
+Keep separate recovery backups. Test.19 remains available; update in place and
+never uninstall or clear wallet data to bypass a signing error.
+
 ## Test.19
 
 Adds Litecoin (LTC) receiving, sending, private-key sweeps, live price estimates
