@@ -14,6 +14,11 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
   assert.equal(await page.locator('[data-brand]').first().getAttribute('data-brand'),'31');
   await page.waitForFunction(()=>[...document.querySelectorAll('.brand-grid img')].every(i=>i.complete&&i.naturalWidth>0));
   assert.equal(await page.locator('link[rel="icon"]').getAttribute('type'),'image/png');
+  for(const selector of ['.mobile-brand img','.brand-preview > img','[data-brand="31"] > img']){
+    assert.deepEqual(await page.locator(selector).evaluate(el=>{
+      const style=getComputedStyle(el);return [style.objectFit,style.borderRadius,style.flexShrink];
+    }),['contain','0px','0'],'The complete sphere must fit without CSS cropping or shrinking');
+  }
   await page.locator('[data-brand="31"]').click();assert.equal(await page.locator('.mobile-brand img').getAttribute('src'),'assets/safecore.png');
   for(let i=1;i<=30;i++){
     await page.locator(`[data-brand="${i}"]`).click();

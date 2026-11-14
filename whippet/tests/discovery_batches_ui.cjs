@@ -10,10 +10,11 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(vault));
   window.fetch=async()=>new Response(JSON.stringify({error:[],result:{}}));
   window.WebSocket=class{constructor(){throw Error('Real network forbidden');}};
-  window.__runs=[];
+  window.__runs=[];window.__spendChecks=0;
   Object.defineProperty(window,'WalletNetwork',{configurable:true,set(N){
    Object.defineProperty(window,'WalletNetwork',{value:N});
    N.scan=(coin,accounts,previous,options)=>new Promise((resolve,reject)=>__runs.push({coin,accounts,previous,options,resolve,reject}));
+   N.spendable=async snapshot=>{if(snapshot.complete!==true)throw Error('Partial discovery reached spending');__spendChecks++;return [];};
   }});
   window.__emit=(index,count,finish=false)=>{
    const run=__runs[index],used=[0,35].filter(i=>i<count);
@@ -33,7 +34,12 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  assert.equal(await pepRow.locator('.holding-status').innerText(),'','No progress alert or status clutter');
  assert.equal(await page.locator('#toast').innerText(),'');
  assert.equal(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('corevault.balance.'))),false,'Partial scans are not cached');
- await page.locator('[data-nav="send"]').click();assert.equal(await page.locator('[data-send-coin="pep"]').isDisabled(),true);
+ await page.locator('[data-nav="send"]').click();assert.equal(await page.locator('[data-send-coin="pep"]').isDisabled(),false,'Discovery must not disable coin navigation');
+ await page.locator('[data-send-coin="pep"]').click();
+ assert.equal(await page.locator('#send-selected-coin').getAttribute('data-coin'),'pep');
+ assert.equal(await page.locator('#send-max').isDisabled(),true,'Spending data still waits for discovery');
+ assert.equal(await page.evaluate(()=>__spendChecks),0,'Selecting a partial balance never authorizes spending');
+ for(let i=0;i<3;i++){await page.locator('#change-send-coin').click();await page.locator('[data-send-coin="pep"]').click();assert.equal(await page.locator('#send-selected-coin').getAttribute('data-coin'),'pep');}
  await page.locator('[data-nav="receive"]').click();await page.locator('[data-coin="pep"]').click();
  await page.locator('#address').waitFor();assert.equal(await page.locator('#address-number').innerText(),'Address #2','Receive uses checked unused address while discovery continues');
  await page.locator('[data-nav="wallet"]').click();await page.evaluate(i=>__emit(i,40),pep);
@@ -51,6 +57,12 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  await page.evaluate(i=>{__emit(i,200);__emit(i,200,true);},retry);
  await page.waitForFunction(()=>Object.keys(localStorage).some(k=>k.endsWith('.pep')&&k.startsWith('corevault.balance.')));
  await page.locator('[data-nav="send"]').click();assert.equal(await page.locator('[data-send-coin="pep"]').isDisabled(),false);
+ await page.locator('[data-send-coin="pep"]').click();
+ await page.waitForFunction(()=>__runs.at(-1).coin==='pep');
+ const sendRefresh=await page.evaluate(()=>__runs.findLastIndex(r=>r.coin==='pep'));
+ await page.evaluate(i=>__emit(i,200,true),sendRefresh);
+ await page.locator('#send-max:not([disabled])').waitFor();
+ assert.ok(await page.evaluate(()=>__spendChecks)>0,'Only completed discovery reaches spendable-output checks');
  await page.locator('[data-nav="security"]').click();assert.equal(await page.locator('#show-seed').count(),0);
  // New wallet starts independently; a late old-wallet batch cannot populate it.
  await page.evaluate(v=>{localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));dispatchEvent(new StorageEvent('storage',{key:'whippet.dev.encrypted.v1'}));},other);

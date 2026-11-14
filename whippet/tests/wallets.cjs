@@ -94,7 +94,7 @@ const store = 'whippet.dev.encrypted.v1';
     assert.equal(await page.locator('#unlock-security').count(),0);
     assert.equal(await page.locator('.settings-heading .subtle').innerText(),'Open fixture');
     assert.match(await page.locator('#main').innerText(),/Not encrypted\./);
-    await page.locator('#theme-choice').selectOption('light'); await page.reload();
+    await page.locator('[data-theme-choice=light]').click(); await page.reload();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     assert.equal(await page.locator('#show-seed').count(),0);
     await openRecovery();

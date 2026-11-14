@@ -293,12 +293,12 @@
     const relay=await c.call('blockchain.relayfee');
     checkActive();
     if(!Number.isFinite(relay)||relay<0)throw Error('Could not verify the network relay fee.');
-    // BTC uses a six-block estimate, not just the relay minimum. A failed
+    // BTC/LTC use a six-block estimate, not just the relay minimum. A failed
     // estimate must not hide balances or silently authorize a floor-fee spend.
     const rules=root.WalletTransactions.policy(coin),rate=Math.max(Number(rules.minRate)/1e8,relay);
     if(!Number.isFinite(rate)||rate>Number(rules.maxRate)/1e8)throw Error('Fee estimate exceeds development safety limit.');
     let feeRate=BigInt(Math.ceil(rate*1e8));
-    if(coin==='btc'){
+    if(coin==='btc'||coin==='ltc'){
       try{
         const estimate=await c.call('blockchain.estimatefee',[6]);
         if(!Number.isFinite(estimate)||estimate<=0||estimate>Number(rules.maxRate)/1e8)throw Error('Fee estimate unavailable or above limit.');
@@ -314,11 +314,12 @@
   async function spendable(snapshot,{sweep=false,compressed=true}={}){
     if(snapshot.complete===false)throw Error('Complete wallet discovery before spending.');
     if(snapshot.cached||!isCurrent(snapshot))throw Error('Connection changed. Refresh wallet data before spending.');
-    if(snapshot.coin==='btc'&&(snapshot.cached||typeof snapshot.feeRate!=='bigint'||snapshot.feeRate<=0n))throw Error('Bitcoin fee estimate unavailable. Refresh or choose another connection before spending.');
+    if(['btc','ltc'].includes(snapshot.coin)&&(typeof snapshot.feeRate!=='bigint'||snapshot.feeRate<=0n))throw Error(`${snapshot.coin==='btc'?'Bitcoin':'Litecoin'} fee estimate unavailable. Refresh or choose another connection before spending.`);
     const c=client(snapshot.coin),T=root.WalletTransactions;
     const candidates=snapshot.rows.flatMap(r=>r.utxos).filter(u=>u.height>0);
     if(sweep){if(candidates.length)T.sweepSize(candidates.length,compressed);}
-    else if(candidates.length>40)throw Error('Too many outputs for this small-value development test.');
+    // A wallet may hold more outputs than one transaction can spend. Verify
+    // candidates here; plan/sign enforce limits on the inputs actually selected.
     const txids=[...new Set(candidates.map(u=>u.txid))],raws=new Map();
     await batches(txids,async txid=>raws.set(txid,await c.call('blockchain.transaction.get',[txid,false])));
     if(!isCurrent(snapshot))throw Error('Connection changed. Refresh wallet data before spending.');

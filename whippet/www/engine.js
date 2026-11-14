@@ -6,12 +6,12 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const NETWORKS = Object.freeze({
-    pep: Object.freeze({ name: 'Pepecoin', ticker: 'PEP', prefix: 56, wif: 158, path: "m/44'/3434'/0'/0/{index}" }),
-    wht: Object.freeze({ name: 'Whippet', ticker: 'WHT', prefix: 73, wif: 158, path: "m/0'/3'/{index}'" }),
-    shic: Object.freeze({ name: 'Shibacoin', ticker: 'SHIC', prefix: 63, wif: 158, path: "m/44'/4474'/0'/0/{index}" }),
-    doge: Object.freeze({ name: 'Dogecoin', ticker: 'DOGE', prefix: 30, wif: 158, path: "m/44'/3'/0'/0/{index}" }),
-    btc: Object.freeze({ name: 'Bitcoin', ticker: 'BTC', prefix: 0, wif: 128, path: "m/44'/0'/0'/0/{index}" }),
-    ltc: Object.freeze({ name: 'Litecoin', ticker: 'LTC', prefix: 48, wif: 176, path: "m/44'/2'/0'/0/{index}" }),
+    pep: Object.freeze({ name: 'Pepecoin', ticker: 'PEP', decimals: 8, prefix: 56, wif: 158, path: "m/44'/3434'/0'/0/{index}" }),
+    wht: Object.freeze({ name: 'Whippet', ticker: 'WHT', decimals: 8, prefix: 73, wif: 158, path: "m/0'/3'/{index}'" }),
+    shic: Object.freeze({ name: 'Shibacoin', ticker: 'SHIC', decimals: 8, prefix: 63, wif: 158, path: "m/44'/4474'/0'/0/{index}" }),
+    doge: Object.freeze({ name: 'Dogecoin', ticker: 'DOGE', decimals: 8, prefix: 30, wif: 158, path: "m/44'/3'/0'/0/{index}" }),
+    btc: Object.freeze({ name: 'Bitcoin', ticker: 'BTC', decimals: 8, prefix: 0, wif: 128, path: "m/44'/0'/0'/0/{index}" }),
+    ltc: Object.freeze({ name: 'Litecoin', ticker: 'LTC', decimals: 8, prefix: 48, wif: 176, path: "m/44'/2'/0'/0/{index}" }),
   });
   const ITERATIONS = 600000;
   const FORMAT = 'pepecoin-whippet-encrypted-v1';
@@ -61,18 +61,70 @@
     if (!Number.isSafeInteger(count) || count < 1 || count > 200) throw new Error('Invalid receive pool size.');
     const valid = validateRecipe(ethers, payload);
     const master = ethers.utils.HDNode.fromMnemonic(valid.mnemonic, valid.passphrase);
+    return deriveReceivePool(ethers, master, count);
+  }
+  function publicAddress(ethers, publicKey, prefix) {
+    const hash = ethers.utils.ripemd160(ethers.utils.sha256(publicKey));
+    const bytes = ethers.utils.concat([[prefix], hash]);
+    const checksum = ethers.utils.arrayify(ethers.utils.sha256(ethers.utils.sha256(bytes))).slice(0, 4);
+    return ethers.utils.base58.encode(ethers.utils.concat([bytes, checksum]));
+  }
+  function deriveReceivePool(ethers, master, count, includePublicKey = false) {
     return Object.fromEntries(Object.entries(NETWORKS).map(([coin, network]) => {
       const [prefix, suffix] = network.path.split('{index}');
       const branch = master.derivePath(prefix.replace(/\/$/, ''));
       return [coin, Array.from({length: count}, (_, index) => {
         const node = branch.derivePath(String(index) + suffix);
-        const hash = ethers.utils.ripemd160(ethers.utils.sha256(node.publicKey));
-        const bytes = ethers.utils.concat([[network.prefix], hash]);
-        const checksum = ethers.utils.arrayify(ethers.utils.sha256(ethers.utils.sha256(bytes))).slice(0, 4);
         return {coin, index, path: network.path.replace('{index}', String(index)),
-          address: ethers.utils.base58.encode(ethers.utils.concat([bytes, checksum]))};
+          address: publicAddress(ethers, node.publicKey, network.prefix),
+          ...(includePublicKey ? {publicKey:node.publicKey} : {})};
       })];
     }));
+  }
+  const PUBLIC_CACHE_PREFIX = 'corevault.public-addresses.';
+  function cachedReceivePool(ethers, payload, storage, walletId, count = 200) {
+    if (!Number.isSafeInteger(count) || count < 1 || count > 200 || !/^(?:[a-f0-9]{32}|[a-f0-9]{56})$/.test(walletId)) throw new Error('Invalid public address cache scope.');
+    const valid = validateRecipe(ethers, payload);
+    const master = ethers.utils.HDNode.fromMnemonic(valid.mnemonic, valid.passphrase);
+    // Domain-separated authentication key exists only while the wallet is open.
+    // Never persist it, a seed, private key, chain code or extended public key.
+    const key = ethers.utils.computeHmac('sha256', master.privateKey, ethers.utils.toUtf8Bytes('SafeCore public receive cache authentication v1'));
+    const metadata = {version:1,walletId,count,networks:Object.entries(NETWORKS).map(([coin,n])=>[coin,n.prefix,n.path,n.decimals])};
+    const authenticate = body => ethers.utils.computeHmac('sha256', key, ethers.utils.toUtf8Bytes(JSON.stringify(body)));
+    const sameMac = (a,b) => {
+      if (typeof b!=='string' || !/^0x[0-9a-f]{64}$/.test(b)) return false;
+      let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0;
+    };
+    const checkedPools = body => {
+      if (JSON.stringify(body.metadata)!==JSON.stringify(metadata) || !body.pools || Object.keys(body.pools).length!==Object.keys(NETWORKS).length) throw new Error('Cache scope changed.');
+      return Object.fromEntries(Object.entries(NETWORKS).map(([coin,n])=>{
+        const pool=body.pools[coin];
+        if(!Array.isArray(pool)||pool.length!==count)throw new Error('Invalid cached pool.');
+        return [coin,pool.map((a,index)=>{
+          const path=n.path.replace('{index}',String(index));
+          if(!a||a.coin!==coin||a.index!==index||a.path!==path||!/^0x0[23][0-9a-f]{64}$/.test(a.publicKey)||a.address!==publicAddress(ethers,a.publicKey,n.prefix))throw new Error('Invalid cached address.');
+          return {coin,index,path,address:a.address};
+        })];
+      }));
+    };
+    const cacheId=PUBLIC_CACHE_PREFIX+walletId;
+    try {
+      const raw=storage.getItem(cacheId);
+      if(raw&&raw.length<=524288){
+        const cache=JSON.parse(raw);
+        if(sameMac(authenticate(cache.body),cache.mac))return checkedPools(cache.body);
+      }
+    } catch (_) { /* Corrupt/untrusted/unavailable caches never supply an address. */ }
+    const body={metadata,pools:deriveReceivePool(ethers,master,count,true)};
+    const pools=checkedPools(body);
+    try {
+      // Bound this optional cache to three wallets, leaving room for wallet data.
+      const older=[];
+      for(let i=0;i<storage.length;i++){const k=storage.key(i);if(k?.startsWith(PUBLIC_CACHE_PREFIX)&&k!==cacheId)older.push(k);}
+      while(older.length>=3)storage.removeItem(older.shift());
+      storage.setItem(cacheId,JSON.stringify({body,mac:authenticate(body)}));
+    } catch (_) { /* Quota/private-mode failures fall back to freshly derived data. */ }
+    return pools;
   }
   function unprotected(crypto, payload) {
     return validateEnvelope({format: OPEN_FORMAT, id: hex(crypto.getRandomValues(new Uint8Array(16))), recipe: JSON.parse(JSON.stringify(payload))});
@@ -127,5 +179,5 @@
     } catch (_) { throw new Error('Incorrect password or damaged backup.'); }
   }
   return Object.freeze({ NETWORKS, FORMAT, OPEN_FORMAT, ITERATIONS, normalize, createPhrase, recipe,
-    validateRecipe, accounts, receivePool, unprotected, encrypt, decrypt, validateEnvelope });
+    validateRecipe, accounts, receivePool, cachedReceivePool, PUBLIC_CACHE_PREFIX, unprotected, encrypt, decrypt, validateEnvelope });
 });

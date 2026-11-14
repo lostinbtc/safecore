@@ -8,7 +8,7 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
   const context=await browser.newContext({viewport:{width:390,height:844}});await require('./funded_network.cjs')(context);
   await context.addInitScript(v=>localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v)),E.unprotected(webcrypto,recipe));
   const p=await context.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
-  const choose=async coin=>{await p.locator('#send-coin').click();await p.locator(`[data-send-coin="${coin}"]`).click();};
+  const choose=async coin=>{if(await p.locator('#change-send-coin').isVisible()&&await p.locator('#send-coin-options').isHidden())await p.locator('#change-send-coin').click();await p.locator(`[data-send-coin="${coin}"]`).click();};
   await p.goto('http://localhost:8787/#send');await choose('pep');await p.locator('#scan-address').waitFor();
   assert.deepEqual(await p.locator('.bottom-navigation [data-nav]').evaluateAll(links=>links.map(a=>a.dataset.nav)),['wallet','receive','send','activity','security']);
   assert.equal(await p.locator('[data-nav="send"]').getAttribute('aria-current'),'page');

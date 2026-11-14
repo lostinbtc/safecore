@@ -9,7 +9,15 @@ module.exports=async context=>context.addInitScript(()=>{
       const m=JSON.parse(raw),coin=Object.keys(WalletNetwork.CONFIG).find(c=>WalletNetwork.CONFIG[c].url===this.url);
       if(!coin)throw Error('Unknown fixture endpoint');
       if(m.method==='blockchain.transaction.broadcast')throw Error('Broadcast forbidden in UI fixture');
-      const result=m.method==='server.version'?['fixture','1.4']:m.method==='server.features'?{genesis_hash:WalletNetwork.CONFIG[coin].genesis}:m.method==='blockchain.headers.subscribe'?{height:500}:m.method==='blockchain.scripthash.subscribe'?null:m.method.endsWith('get_balance')?{confirmed:0,unconfirmed:0}:m.method.endsWith('get_history')||m.method.endsWith('listunspent')?[]:0.01;
+      let result;
+      if(m.method==='server.version')result=['fixture','1.4'];
+      else if(m.method==='server.features')result={genesis_hash:WalletNetwork.CONFIG[coin].genesis};
+      else if(m.method==='blockchain.headers.subscribe')result={height:500};
+      else if(m.method==='blockchain.scripthash.subscribe')result=null;
+      else if(m.method.endsWith('get_balance'))result={confirmed:0,unconfirmed:0};
+      else if(m.method.endsWith('get_history')||m.method.endsWith('listunspent'))result=[];
+      else if(m.method==='blockchain.relayfee'||m.method==='blockchain.estimatefee')result=['btc','ltc'].includes(coin)?0.00001:0.01;
+      else throw Error('Unexpected empty-chain fixture method');
       setTimeout(()=>this.onmessage?.({data:JSON.stringify({id:m.id,result})}),0);
     }
   };

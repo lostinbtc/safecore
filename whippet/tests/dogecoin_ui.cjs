@@ -28,7 +28,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.locator('[data-nav=send]').click();await p.locator('[data-send-coin=doge]').click();await p.locator('#send-address').waitFor();
  const destination=E.accounts(ethers,recipe,1).doge.address;await p.locator('#send-address').fill(destination);await p.locator('#send-max').click();
  assert.equal(await p.locator('#send-address').getAttribute('maxlength'),'90');assert.equal(await p.locator('#send-amount').inputValue(),'1');
- assert.match(await p.locator('#main').innerText(),/Network fee: 0\.01 DOGE/);
+ assert.match(await p.locator('#main').innerText(),/Default network fee: 0\.01 DOGE/);
  await p.locator('#review-send').click();await p.locator('#broadcast-send').waitFor();
  assert.match(await p.locator('.send-review').innerText(),/0\.99/);assert.match(await p.locator('.send-review').innerText(),/0\.01/);
  await p.locator('[data-nav=wallet]').click();await p.evaluate(()=>__stale=true);await p.clock.runFor(305000);

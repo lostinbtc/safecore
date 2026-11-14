@@ -50,6 +50,8 @@ public final class MainActivity extends Activity {
     private JavaScriptReplyProxy exportReply;
     private long exportId;
     private boolean foreground;
+    private AppSplash appSplash;
+    private boolean splashOnResume = true;
     private final ExecutorService walletIO = Executors.newSingleThreadExecutor();
     private boolean walletIOPending;
     private DeviceAuthentication deviceAuthentication;
@@ -281,6 +283,9 @@ public final class MainActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        appSplash = new AppSplash(this);
+        // The system's cold-start icon hands off to the same unmasked branding.
+        if(android.os.Build.VERSION.SDK_INT>=31)getSplashScreen().setOnExitAnimationListener(view->view.remove());
         deviceAuthentication=new DeviceAuthentication(this);
         try {deviceAuthEnabled=new DeviceWalletStore(this).authenticationRequired();}
         catch(Exception e){showDeviceLock("Wallet storage needs attention. Do not clear app data.");return;}
@@ -559,9 +564,13 @@ public final class MainActivity extends Activity {
         // background transition still locks in onStop, even with a sheet open.
         if(web != null) { if(!cameraPrompt&&!authPrompt)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null); web.onPause(); }
         if(deviceAuthEnabled&&!authPrompt&&!cameraPrompt)destroyWalletView();
+        if(appSplash!=null)appSplash.dismiss();
         super.onPause();
     }
     @Override protected void onStop() {
+        // Opening another app/Home is a new open on return. OS authentication,
+        // permissions and our file pickers are continuations, not new opens.
+        if(!authPrompt&&!cameraPrompt&&!importPending&&exportData==null)splashOnResume=true;
         denyCamera();
         if(!authPrompt) {
             if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('safecore-pause'))",null);
@@ -578,6 +587,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume(); foreground = true;
+        if(splashOnResume&&appSplash!=null){splashOnResume=false;appSplash.show();}
         try {
             boolean required=new DeviceWalletStore(this).authenticationRequired();
             if(required!=deviceAuthEnabled){deviceAuthEnabled=required;destroyWalletView();}
@@ -621,6 +631,7 @@ public final class MainActivity extends Activity {
         });
     }
     @Override public void onBackPressed() {
+        if(appSplash!=null&&appSplash.isShowing()){moveTaskToBack(true);return;}
         if(web==null){moveTaskToBack(true);return;}
         if(web != null) web.evaluateJavascript("location.hash === '#wallet' || !location.hash", value -> {
             if("true".equals(value)) moveTaskToBack(true);
@@ -628,6 +639,7 @@ public final class MainActivity extends Activity {
         });
     }
     @Override protected void onDestroy() {
+        if(appSplash!=null)appSplash.dismiss();
         if(deviceAuthentication!=null)deviceAuthentication.cancel();
         walletIO.shutdown(); // Finish an accepted atomic save; never interrupt it halfway.
         if(screenProtectionDialog!=null)screenProtectionDialog.cancel();

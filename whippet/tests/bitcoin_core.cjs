@@ -75,20 +75,41 @@ const recode=(text,prefix)=>base58.encode(Buffer.concat([Buffer.from(prefix),bas
       assert.ok(pos>=0);assert.equal(T.parse(raw,'btc').txid,decoded.txid);
       utxos.push({...pool[0],raw,txid:decoded.txid,pos,height:i+1,value:T.parse(raw,'btc').outputs[pos].value});
     }
-    async function accepted(signed){
+    async function accepted(signed,plan,feeRate=1000n){
       const [result]=await rpc('testmempoolaccept',[signed.raw]);
       assert.equal(result.allowed,true,JSON.stringify(result));assert.equal(result.txid,signed.txid);
+      if(plan){
+        const decoded=await rpc('decoderawtransaction',signed.raw);
+        const actualFee=plan.inputs.reduce((n,u)=>n+u.value,0n)-T.parse(signed.raw).outputs.reduce((n,o)=>n+o.value,0n);
+        assert.equal(actualFee,plan.fee,'Actual input/output fee must equal approved fee');
+        assert.equal(BigInt(Math.round(result.fees.base*1e8)),plan.fee,'Independent Core fee must equal review');
+        assert.equal(decoded.size,signed.raw.length/2);assert.equal(decoded.vsize,decoded.size,'Legacy inputs use bytes = vbytes');
+        assert.ok(plan.fee*1000n>=BigInt(decoded.vsize)*feeRate,'Reviewed fee covers actual signed size at approved rate');
+      }
     }
     let last;
     for(const destination of destinations)for(const feeIncluded of [false,true]){
       const plan=T.plan({coin:'btc',destination,changeAddress:pool[0].address,amount:'0.005',utxos:[utxos[0]],tip:110,feeRate:1000n,feeIncluded});
-      last=T.sign(plan,recipe);await accepted(last);
+      last=T.sign(plan,recipe);await accepted(last,plan);
       assert.throws(()=>T.sign(plan,E.recipe(ethers,phrase,'wrong fixture passphrase')));
     }
     for(const amount of ['50','60']){
       const plan=T.plan({coin:'btc',destination:destinations[0],changeAddress:pool[0].address,amount,utxos,tip:110,feeRate:1000n,feeIncluded:true});
-      await accepted(T.sign(plan,recipe));
+      await accepted(T.sign(plan,recipe),plan);
     }
+    for(const feeRate of [1000n,2000n,10000n,100000n])for(const amount of ['0.00001','0.0001','0.001','0.01','50']){
+      const args={coin:'btc',destination:destinations[0],changeAddress:pool[0].address,amount,utxos:[utxos[0]],tip:110,feeRate,feeIncluded:true};
+      // Amount too small to cover fee + dust must be rejected, never negative.
+      if(T.amount(amount)<546n+(227n*feeRate+999n)/1000n){assert.throws(()=>T.plan(args),/total must cover/);continue;}
+      const plan=T.plan(args);await accepted(T.sign(plan,recipe),plan,feeRate);
+      assert.equal(plan.amount+plan.fee,T.amount(amount));
+    }
+    console.log('PASS: Core independently confirms actual fees, signed byte sizes and conservation across tiny/normal/Max totals and 1–100 sat/byte rates');
+    for(const feeRate of [1000n,100000n]){
+      const plan=T.sweepPlan({coin:'btc',destination:pool[1].address,utxos,tip:110,feeRate});
+      await accepted(T.signSweep(plan,T.sweepKey('btc',offline.wallets[0].wif),recipe,1),plan,feeRate);
+    }
+    console.log('PASS: Core validates BTC full-balance sweeps and their exact reviewed fees, including the 25% cushion');
     const damaged=T.parse(last.raw,'btc');damaged.outputs[0].value-=1n;
     const altered=ethers.utils.hexlify(T.serialize(damaged)).slice(2);
     assert.equal((await rpc('testmempoolaccept',[altered]))[0].allowed,false,'Core rejects tampered signed output');

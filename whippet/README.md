@@ -1,19 +1,12 @@
-# SafeCore
+# SafeCore wallet guide
 
-SafeCore is a local-first, multi-wallet application for Pepecoin (PEP), Whippet
-(WHT), Shibacoin (SHIC), Litecoin (LTC), Dogecoin (DOGE) and Bitcoin (BTC), with a phone-sized browser interface and a bundled Android application.
-Pepecoin uses green accents; Whippet uses blue. Bitcoin, Dogecoin and SHIC Komodo recovery
-are available in the local `test.19-local.btc-1` build; they are not yet published.
+Local-first Android and browser wallet for **PEP, DOGE, LTC, SHIC, WHT and BTC**.
+Keys and signing stay on-device. This is unaudited development software; keep
+independent backups and use expendable amounts.
 
-This is development software for small-value testing, not an independently
-audited production wallet. Removing development labels from the interface does
-not change its security status or transaction limits.
-
-This guide documents public coin-server defaults but excludes deployment
-credentials, private targets, device identifiers and private testing history.
-Operational values must be reviewed separately. **This README does not make the
-rest of the source tree, Git history or compiled APK safe to publish.** See
-[Preparing a public repository](#preparing-a-public-repository).
+For downloads and a quick overview, start with the [main README](../README.md).
+This guide covers recovery, fees, limits and developer setup for the current
+source. Check release notes for the features in a particular APK.
 
 ## Contents
 
@@ -26,88 +19,25 @@ rest of the source tree, Git history or compiled APK safe to publish.** See
 - [Browser operation](#browser-operation)
 - [Android operation](#android-operation)
 - [Testing and troubleshooting](#testing-and-troubleshooting)
-- [Preparing a public repository](#preparing-a-public-repository)
 
 ## Architecture and trust boundaries
 
-The browser and Android app run the same bundled wallet code. Android serves it
-from a private local HTTPS asset origin; it does not load a hosted wallet page.
-There is no wallet-account backend and no upload of seeds or private keys.
+The Android app bundles the same wallet code as the browser preview; it does not
+load a hosted wallet page. Recovery secrets and signing remain local.
 
-```text
-Saved recovery recipe -> local address derivation -> public address pool
-                                                   |
-                                                   v
-                          configured chain service -> validated snapshots
-                                                   |
-                                                   v
-                                        display / local public cache
+Electrum services supply history, balances and unspent outputs. SafeCore checks
+chain identity and previous transactions, but is **not an SPV-proof client**.
+Price queries contain no wallet data. Neither address caching nor displayed
+balances authorize spending.
 
-User-approved send -> live input checks -> local signing -> signed transaction
-                                                             |
-                                                             v
-                                                   chain-service broadcast
-```
+Amounts use exact integer base units. Network results are scoped to the current
+wallet; switching or locking invalidates pending work. Public caches are separate
+from recovery secrets, and storage writes are coordinated across browser tabs.
 
-Each chain has a separate network client and expected genesis hash. The client
-checks chain identity before use. Chain services receive public address hashes,
-transaction queries and signed transactions, never recovery words or passwords.
-A separate price request contains no wallet data.
-
-History, confirmations and unspent-output reports are trusted to the configured
-chain service. This is **not an SPV-proof client**. Raw input transactions are
-verified locally, but that is not independent verification of the entire chain.
-
-| Module | Responsibility |
-| --- | --- |
-| `www/engine.js` | BIP39 validation, recovery recipes, address derivation, vault encryption |
-| `www/library.js` | Saved-wallet collection, activation, naming and removal |
-| `www/receive.js` | Used-address tracking, receive cursor and first-address pin |
-| `www/network.js` | Chain identity, RPC transport, scans, cache validation and live input checks |
-| `www/reporting.js` | Balance-change stability window and cumulative valuation |
-| `www/transactions.js` | Integer amounts, address checks, input verification, transaction construction and signing |
-| `www/recovery.js` | Local word suggestions and phrase validation |
-| `www/viewport.js` | Keyboard-aware scrolling and caret placement |
-| `www/scanner.js` | On-device QR decoding, address extraction and camera cleanup |
-| `www/native.js` | Narrow Android adapter and permission-sheet state |
-| `www/app.js` | Navigation, user flows, state coordination, confirmations and rendering |
-| `www/index.html`, `www/styles.css` | Application shell, content policy, themes and layout |
-| Android sources | Local asset loading, permissions, lifecycle protection, clipboard and document picker |
-| `scripts/serve.py` | Loopback-only, allowlisted development server |
-
-Navigation is Overview, Receive, Send, Activity and Settings (gear). The header wallet
-icon opens wallet management. A selected-wallet name is shown beneath the brand;
-there is no preview/development status badge. Protected wallets also have a lock
-control. Coin visibility, theme and icon choices do not alter keys.
-Newly created or newly imported wallets start with no coins shown. Choose assets
-through **Add coins**; selections are saved separately for each wallet on this
-device. Existing wallets retain their previous selection (including the old
-all-on default). Hiding coins does not disable background discovery or hide
-funded assets from Send or recorded transactions from Activity.
-Appearance defaults to **Use device theme** and follows system light/dark changes;
-Settings retains persistent Light/Dark overrides. Android passes its device theme
-to the bundled page without reloading wallet state. Wallet deletion is available
-in **Your wallets**, not duplicated in Settings. Overview omits update timestamps
-but still reports pending amounts and refresh failures.
-The bottom navigation uses floating icons and labels without button backgrounds,
-with a subtle active icon/text glow and a soft, theme-aware backdrop that fades
-out above the controls to keep scrolling content from competing with the labels;
-tap targets and space above the navigation remain reserved on small screens.
-Overview prices, holding estimates and the wallet total all use USDT, sharing the
-same conversion and rounding. Missing USDT conversion rates show an unavailable
-price, never a USD value labeled as USDT. Unpriced holdings remain excluded and
-marked with an asterisk; these estimates do not affect exact on-chain amounts.
-
-Electrum JSON monetary integers above JavaScript's safe-number range are preserved
-as decimal strings before parsing, then validated and converted directly to BigInt.
-Large Whippet balances therefore retain all eight decimal places. Amounts remain
-bounded by signed 64-bit transaction integers; inconsistent balances, malformed
-amounts and imprecise floating-point responses are rejected rather than rounded.
-
-State boundaries matter: changing or locking a wallet invalidates in-flight work.
-Storage updates use Web Locks to coordinate tabs. Stale navigation events cannot
-discard a newly staged import. A result belonging to an old wallet must never
-update the new active wallet.
+Navigation is Overview, Receive, Send, Activity and Settings. New wallets start
+with no coins shown; **Add coins** controls visibility without changing keys or
+disabling discovery. Settings contains appearance, privacy, authentication and
+connection controls.
 
 ## Wallet creation, recovery and protection
 
@@ -164,62 +94,34 @@ receiving address after restoration. Core `wallet.dat` files are not supported.
 | Coin | P2PKH version byte | Receive path |
 | --- | --- | --- |
 | Pepecoin | 56 / `0x38` | `m/44'/3434'/0'/0/{index}` |
-| Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
-| Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
-| Litecoin (LTC) | 48 / `0x30` | `m/44'/2'/0'/0/{index}` |
-| Bitcoin (BTC) | 0 / `0x00` | `m/44'/0'/0'/0/{index}` |
 | Dogecoin (DOGE) | 30 / `0x1e` | `m/44'/3'/0'/0/{index}` |
+| Litecoin (LTC) | 48 / `0x30` | `m/44'/2'/0'/0/{index}` |
+| Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
+| Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
+| Bitcoin (BTC) | 0 / `0x00` | `m/44'/0'/0'/0/{index}` |
 
-### Local Bitcoin integration
+### Pepecoin (PEP)
 
-Bitcoin key/address checks do not require real BTC. In addition to the ordinary
-unit tests, an optional independent Bitcoin Core check derives all 200 receiving
-addresses and validates SafeCore signatures on a fresh, private regtest chain:
+Pepecoin is the native PEP proof-of-work chain, not an Ethereum token. It uses
+eight decimals, compressed legacy P2PKH receiving addresses on the path above,
+and WIF version 158. Standard sends and private-key sweeps verify previous
+transaction outputs and sign locally. Newly mined block rewards (coinbase outputs)
+have a 240-block maturity rule in
+[Pepecoin Core](https://github.com/pepecoinppc/pepecoin/blob/master/src/chainparams.cpp).
+SafeCore waits for 240 confirmations before spending those outputs. This does
+not apply to ordinary incoming transfers or typical mining-pool payouts;
+ordinary outputs become eligible after one confirmation, subject to the other
+send checks.
+The default fee for ordinary small sends is 0.01 PEP; the optional 1 PEP total-fee
+checkbox supports larger input sets within the documented limits.
 
-```sh
-BITCOIND_BIN=/absolute/path/to/verified/bitcoind node whippet/tests/bitcoin_core.cjs
-```
+Pepecoin has a default server and an automatic fallback. Connections
+validate the pinned Pepecoin genesis; a fallback is not an uptime guarantee.
+PEP/USD and USD/USDT display estimates use Kraken. The offline recovery tool
+supports PEP JSON/WIF/TXT/CSV, and legacy Komodo recovery is opt-in for PEP/SHIC
+only. This does not discover unrelated derivation paths or Core wallet.dat files.
 
-Run from the repository root after verifying the Core executable using its
-[official download instructions](https://bitcoincore.org/en/download/).
-Verified locally with Bitcoin Core 30.4. The test disables peer networking, uses
-only a public disposable recovery fixture and fake coins, checks all supported
-destination types plus Max/multiple inputs and tamper rejection, and mines a
-local confirmation. It never attaches to an existing node and removes its own
-temporary chain afterward. This validates transaction/address compatibility,
-not a funded mainnet end-to-end test or an independent security audit.
-
-BTC uses legacy P2PKH receiving addresses on `m/44'/0'/0'/0/{index}`, WIF 128
-and eight decimals. Missing BTC paths in old SafeCore backups adopt this fixed
-path; explicit alternate paths are rejected. Existing addresses/passwords stay
-unchanged. This is not BIP49/84/86, multisig or Electrum-seed discovery. Change
-returns to the first receiving address as with the existing sender.
-
-Recipients may use mainnet P2PKH, P2SH, SegWit v0 or Taproot v1/32-byte addresses.
-Wallet-owned inputs and WIF sweeps remain legacy P2PKH. Other witness versions,
-testnet addresses and Komodo recovery are rejected. WIF sweeps do not discover
-SegWit outputs for that key. Ordinals/tokens are not detected or preserved.
-
-Fees use a six-block Electrum estimate with a conservative 1 sat/byte floor,
-a 100 sat/byte rate ceiling and 0.001 BTC total-fee ceiling. These are application
-safety limits, not Bitcoin consensus rules. Fees are proportional to estimated
-legacy bytes, never a 0.01 BTC flat fee. Minimum outputs are conservatively 546
-satoshis; coinbase maturity is 100 confirmations. Missing/invalid/over-limit
-estimates leave balances visible but block spends/sweeps until a fresh estimate.
-Sweeps retain the 25% cushion and pre-broadcast fee recheck. No RBF/CPFP UI is
-implemented, and an estimate is not a confirmation guarantee.
-
-Default WSS: `wss://btc.electrum1.cipig.net:30000/`. Server 2 also passed live
-genesis/height/fee checks and is an automatic fallback. Both share an operator;
-this is not independent-operator redundancy or an uptime guarantee. BTC joins the display-only CoinGecko request.
-Offline JSON/WIF/TXT/CSV exports work without network access. Real BTC receive/send
-testing remains pending; no real transactions were broadcast by automated tests.
-
-References: [Bitcoin Core v30.0](https://github.com/bitcoin/bitcoin/tree/v30.0),
-[BIP44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki),
-[operator endpoint list](https://github.com/KomodoPlatform/coins/blob/master/electrums/BTC).
-
-### Local Dogecoin integration
+### Dogecoin (DOGE)
 
 DOGE uses BIP44 coin type 3, P2PKH version 30, P2SH version 22 and WIF version
 158, with eight decimals. Existing backups without `paths.doge` derive the fixed
@@ -228,14 +130,15 @@ protection preferences are unchanged. UI order is PEP, DOGE, LTC, SHIC, WHT, BTC
 A previously hidden DOGE entry stays hidden; enable it through **Add coins**.
 
 Ordinary small sends retain the reviewed 0.01 DOGE fee, 0.01 DOGE minimum output
-and 1,000-byte limit. Sweeps use at least 0.01 DOGE/kB proportionally plus the
+and 1,000-byte limit. An optional, default-off 1 DOGE total-fee checkbox supports
+up to 40 verified inputs within the documented bounds. Sweeps use at least 0.01 DOGE/kB proportionally plus the
 existing 25% cushion. Mining rewards require 240 confirmations. No SegWit or
 Dogecoin token/inscription handling is implemented. Coin-specific genesis checks,
 raw-prevout verification and uncertain-broadcast protection remain mandatory.
 
-The default WSS endpoint is `wss://doge.electrum1.cipig.net:30060/`; server 2
-also passed live metadata checks. Both share an operator, not independent
-redundancy; server 2 is an automatic fallback, not an uptime guarantee. DOGE quotes
+The default and backup WSS servers passed live metadata checks. Both share an
+operator, so the automatic fallback is not independent-operator redundancy or
+an uptime guarantee. DOGE quotes
 share the display-only CoinGecko request with SHIC/LTC. Offline JSON/WIF/TXT/CSV
 recovery makes no network requests. A real DOGE receive/send test is still needed.
 
@@ -259,18 +162,18 @@ and MWEB extension data, matching Core's `ComputeHash`; the extension is not
 interpreted or used for signing. Recognized HogEx withdrawals require six
 confirmations; mining rewards require 100. Only legacy wallet inputs are signed.
 
-The default is `wss://ltc.electrum1.cipig.net:30063/`. The operator also lists
-`wss://ltc.electrum2.cipig.net:30063/`; both passed certificate, genesis, height
-and read-only RPC checks during local integration. They share an operator and
-are not independent redundancy or an uptime guarantee. Server 2 is an automatic
-fallback. Users can test/select a different WSS server in Settings.
-Provider list: https://github.com/KomodoPlatform/coins/blob/master/electrums/LTC
+The default and backup WSS servers passed certificate, genesis, height and
+read-only RPC checks during local integration. They share an operator, so the
+automatic fallback is not independent-operator redundancy or an uptime guarantee.
+Users can test/select a different WSS server in Settings.
 
-LTC fees are calculated per byte from at least 1,000 litoshis/kB, with a
+LTC fees use a six-block Electrum estimate, at least the live relay minimum
+and 1,000 litoshis/kB, calculated proportionally by byte, with a
 100,000-litoshi/kB rate cap and a 0.001 LTC total-fee cap. The conservative output
 minimum is 5,460 litoshis; small change handling remains explicit. LTC does not
 use the other coins' 0.01 flat fee. Sweeps retain the 25% fee cushion and absolute
-LTC fee cap. Price estimates use CoinGecko's `litecoin` ID in the same five-minute
+LTC fee cap. Missing or invalid estimates block sends/sweeps without hiding balances.
+Price estimates use CoinGecko's `litecoin` ID in the same five-minute
 public request as SHIC, with per-asset validation and expiry. No wallet data is sent.
 The offline tool supports LTC JSON/WIF/TXT/CSV without network requests.
 
@@ -286,7 +189,7 @@ Shibacoin is the native SHIC proof-of-work chain, not the SHIB token. Its mainne
 parameters were checked against Shibacoin Core revision
 `0af632dfa466c62d77a1b9a4358cf4d64d1fbd4b` (`src/chainparams.cpp`,
 `src/amount.h`, and `doc/fee-recommendation.md`) and SLIP-0044 coin type 4474.
-The default external server is `wss://electrum.shibacoinshic.org:50002/`.
+SHIC uses a third-party WSS server by default.
 Certificate validation and the pinned genesis
 `ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f`
 are mandatory. This server is not operated by SafeCore; availability and chain
@@ -299,6 +202,10 @@ without a SHIC path derive this fixed path; an explicitly different SHIC path is
 rejected. PEP/WHT paths, wallet IDs and existing backup format names are unchanged.
 The offline recovery tool supports SHIC JSON, WIF/TXT and CSV without networking.
 
+Ordinary small sends default to 0.01 SHIC. The optional 1 SHIC total-fee checkbox
+supports larger input sets within the documented bounds; it starts off and does
+not change sweep fees. Legacy Komodo recovery is opt-in for PEP and SHIC only.
+
 SHIC USD estimates come from CoinGecko's `shibacoin` ID, no more than once per
 five minutes while the wallet is unlocked/foregrounded. The request contains no
 wallet address, balance, seed or credentials. CoinGecko sees the client's IP.
@@ -309,12 +216,82 @@ USD/USDT quote as PEP; no 1:1 USD/USDT assumption is made.
 Native HTTP access remains restricted to the exact public quote requests;
 remote scripts remain blocked. SHIC support is included in test.18; earlier APKs remain unchanged.
 
+### Whippet (WHT)
+
+Whippet preserves its legacy hardened receiving path `m/0'/3'/{index}'`,
+P2PKH version 73 and WIF version 158. It uses eight decimals and legacy P2PKH
+wallet inputs. Old generator backups and offline JSON/WIF/TXT/CSV recovery remain
+compatible with that path. Assets/covenants and legacy Komodo recovery are not
+supported. Mining rewards require 240 confirmations.
+
+Ordinary small sends keep the 0.01 WHT default. The optional 1 WHT total-fee
+checkbox is separate, off by default, and intended for larger input sets.
+Existing proportional sweep fees and their review remain unchanged. There is
+currently no configured Whippet explorer or reliable USD price feed.
+
+Whippet has one default WSS server. No second public server has been verified;
+retries are not independent redundancy.
+Users can choose their own WSS server in Settings.
+
+### Bitcoin (BTC)
+
+BTC uses legacy P2PKH receiving addresses on `m/44'/0'/0'/0/{index}`, WIF 128
+and eight decimals. Missing BTC paths in old SafeCore backups adopt this fixed
+path; explicit alternate paths are rejected. Existing addresses/passwords stay
+unchanged. This is not BIP49/84/86, multisig or Electrum-seed discovery. Change
+returns to the first receiving address as with the existing sender.
+
+Recipients may use mainnet P2PKH, P2SH, SegWit v0 or Taproot v1/32-byte addresses.
+Wallet-owned inputs and WIF sweeps remain legacy P2PKH. Other witness versions,
+testnet addresses and Komodo recovery are rejected. WIF sweeps do not discover
+SegWit outputs for that key. Ordinals/tokens are not detected or preserved.
+
+Fees use a six-block Electrum estimate with a conservative 1 sat/byte floor,
+a 100 sat/byte rate ceiling and 0.001 BTC total-fee ceiling. These are application
+safety limits, not Bitcoin consensus rules. Fees are proportional to estimated
+legacy bytes, never a 0.01 BTC flat fee. Minimum outputs are conservatively 546
+satoshis; coinbase maturity is 100 confirmations. Missing/invalid/over-limit
+estimates leave balances visible but block spends/sweeps until a fresh estimate.
+Sweeps retain the 25% cushion and pre-broadcast fee recheck. No RBF/CPFP UI is
+implemented, and an estimate is not a confirmation guarantee.
+
+The default and backup WSS servers passed live genesis/height/fee checks.
+The automatic fallback shares an operator with the primary server; this is not
+independent-operator redundancy or an uptime guarantee. BTC uses CoinGecko for
+display values and the USD fee safety check.
+Offline JSON/WIF/TXT/CSV exports work without network access. Real BTC receive/send
+testing remains pending; no real transactions were broadcast by automated tests.
+
+References: [Bitcoin Core v30.0](https://github.com/bitcoin/bitcoin/tree/v30.0),
+[BIP44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki).
+
+#### Local Bitcoin verification
+
+```sh
+BITCOIND_BIN=/absolute/path/to/verified/bitcoind node whippet/tests/bitcoin_core.cjs
+```
+
+Run from the repository root after verifying the Core executable using its
+[official download instructions](https://bitcoincore.org/en/download/).
+Verified locally with Bitcoin Core 30.4. The test disables peer networking, uses
+only a public disposable recovery fixture and fake coins, checks all supported
+destination types plus Max/multiple inputs and tamper rejection. It compares
+Core's independently calculated fees with the reviewed input/output difference,
+checks actual signed sizes at 1–100 sat/byte, tests tiny/normal/Max totals and
+full-balance sweeps with their fee cushion, and mines a local confirmation.
+It never attaches to an existing node and removes its own
+temporary chain afterward. This validates transaction/address compatibility,
+not a funded mainnet end-to-end test or an independent security audit.
+
+### Recovery-path compatibility
+
 The displayed Address #1 is derivation index 0. Whippet's hardened receive path
 is intentionally preserved for legacy compatibility. Do not change these paths,
 formats or address versions as a cosmetic rename.
 
-The current UI derives indices **0–19** per coin. Other accounts, higher indices
-and external change branches are not discovered. Compatibility with another
+The wallet can check indices **0–199** per coin; routine discovery starts with a
+20-address lookahead and full Rescan checks the 200-address pool. Other accounts,
+indices beyond that pool and external change branches are not discovered. Compatibility with another
 wallet depends on its exact derivation recipe, not simply its use of BIP39.
 
 Coinomi accepts compatible recovery phrases on supported networks; the address
@@ -373,6 +350,23 @@ Receiving advances to the next unused address after a payment is observed.
 Previously used addresses remain accessible and are not recycled after spending.
 At the end of the bounded pool, receiving stops rather than inventing coverage.
 
+Once unlocked, Receive can show a locally verified address immediately, even
+while offline or waiting for history. This proves wallet ownership, not that
+the address is unused. The screen notes when history refresh is pending; a
+later history result may advance the current address. Older addresses still work.
+
+A versioned local cache stores the 200 public keys and addresses per asset,
+bound to the wallet ID, network parameters, paths and recovery data with HMAC-SHA256.
+Its domain-separated authentication key is derived only while unlocking and is
+never stored. Cached public-key/address pairs and scope are validated before use;
+altered, corrupt or mismatched caches are regenerated from the unlocked wallet.
+No seed, private key, extended key or chain code is added to this cache. It is
+bounded to three wallets, optional when storage is unavailable, and removed for
+a wallet when that wallet is deleted. Public cache data can reveal address links.
+This prevents storage-only cache substitution when recovery secrets remain
+protected; it does not defend against compromised app code/OS or someone who
+already has the recovery phrase (including readable unprotected browser storage).
+
 **Keep using the first address** pins both the displayed address and its QR to
 index 0 until unchecked. The setting is per wallet and coin. It does not stop
 monitoring other previously used addresses. Change currently returns to index 0.
@@ -389,8 +383,8 @@ requests.
 
 Initial discovery quietly updates the UI after each 20 verified addresses while
 the rest of the scan continues. There are no progress banners or completion
-alerts. Receive can show an individually checked address before discovery ends;
-Send waits for completion. Incomplete checkpoints are display-only, never saved
+alerts. Receive shows locally verified ownership without waiting for history;
+Send selection remains available, but spending waits for completion. Incomplete checkpoints are display-only, never saved
 as a completed balance cache or accepted for spending. Previously cached balances
 remain in unvisited rows until checked, avoiding a temporary zero on reopening.
 Each asset scans independently. Wallet switches, locking and app backgrounding
@@ -467,8 +461,12 @@ USDT/USD quote; USDT is not assumed to equal one dollar. It is an estimate, not 
 USDT account. Zero balances are excluded. Positive unpriced holdings make the
 estimate incomplete (`*`), not worth zero. Whippet currently has no price feed.
 
-Price requests run at most once per minute on unlocked Overview. Quotes expire
-after five minutes. A missing quote never changes the actual coin balance.
+Overview requests Kraken prices at most once per minute and the combined
+CoinGecko quote at most once per five minutes. Quotes expire after five minutes.
+BTC/LTC fee review can request a missing/expired CoinGecko quote sooner, with at
+least ten seconds between attempts and an eight-second request timeout. A missing
+quote never changes the actual coin balance; BTC/LTC sending still requires the
+fresh USD quote described below.
 
 ## Sending and QR scanning
 
@@ -476,6 +474,13 @@ Send opens with no asset selected. Its asset picker shows supported coins with a
 positive reported balance, even if hidden on Overview or without a market price.
 Zero, unknown and coming-soon assets are not selectable. Pending and cached
 balances are labeled; appearing in the picker does not establish spendability.
+Coins remain selectable while discovery is running; spending still waits for
+a complete, current scan and verified inputs.
+After selection, a compact coin header stays above the form. **Change** opens
+the asset list with an explicit selected marker; **Close** keeps the current
+coin and draft. The form is hidden while choosing, and its receiving-address
+label names the selected coin. Balance refreshes update existing picker rows
+instead of replacing buttons during a tap.
 Switching assets clears the recipient, amount and quote, stops any camera scan,
 and invalidates late callbacks. Leaving Send or switching wallets clears its
 selection. Background balance updates do not replace an in-progress send form.
@@ -484,15 +489,92 @@ selection. Background balance updates do not replace an in-progress send form.
 
 1. Open Send in the bottom bar and choose the asset. Create/restore or unlock a
    wallet first if needed. Overview only shows wallet value and the coin list.
-2. Enter or scan a recipient and enter the **total including fee**.
+2. Enter or scan a recipient and enter the **Total to spend**, including the fee.
 3. Refresh spendable inputs and compute recipient amount, fee and change.
-4. Review the coin, complete address, recipient amount and total deduction.
+4. Review the coin, complete address, recipient amount, network fee and total deduction.
 5. Explicitly confirm. Protected wallets require their password again.
 6. Recheck live inputs, sign locally, record the input reservation, then broadcast.
 
 Reviews expire after 90 seconds. A QR scan never signs, broadcasts, advances to
 confirmation, or changes the amount. Opening the Send screen does not bypass
 transaction checks.
+
+There is one editable amount field. **Max** fills the total payment budget; it
+does not turn that amount into a fee. BTC/LTC show a separate, read-only automatic
+fee estimate. The verified fee rate is held in memory for up to five minutes
+while this Send form stays open; changing transaction size or inputs can change
+the calculated total fee. A fresh estimate replaces an expired one. The final
+review still expires after 90 seconds and cannot outlive its fee quote.
+Before broadcast the current relay requirement is checked against the signed
+transaction size: if the approved fee is insufficient, sending stops and requires
+a new review. Fees are never silently increased. Sweeps keep their separate fee
+calculation and review rules.
+
+All six supported assets use eight coin decimals. Amount parsing, Max, fees and
+signed outputs use integer base units, independent of market-price changes.
+Values beyond the supported signed 64-bit output range or with excess decimals
+are rejected. Fiat values are display estimates; very small positive unit prices
+use scientific notation instead of rounding to zero, and positive totals below
+one cent show `<0.01`. Assets with different precision need explicit transaction
+support before they can be enabled; precision is never guessed from a price.
+
+### Fee safety and USD limits
+
+Every coin requires an explicit fee/address/amount acknowledgment and confirmation;
+there is no automatic send. For BTC and LTC, ordinary sends and WIF sweeps also show
+the network fee in **USD**, independently of the Overview's USDT valuation:
+
+- Above **$5 USD**: a prominent high-fee warning; check the amount and confirm,
+  or cancel and try again later.
+- Above **$100 USD**: sending is blocked. The review shows the estimated coin/USD
+  fee and suggests trying again later. **No override is offered.** Exactly $100
+  is not above this limit, but other safety caps still apply.
+- Missing, invalid or stale price: sending is blocked, not treated as a zero fee.
+  Try again later with a new review. Receiving and balance visibility remain available.
+
+CoinGecko's per-coin USD quote must have been fetched less than five minutes ago,
+with a provider timestamp no more than ten minutes old (at most 30 seconds ahead).
+The quote is checked at review, confirmation, and immediately before reserving
+inputs for broadcast. If the displayed USD fee increases during checks, another
+acknowledgment is required; expiry or a newly exceeded cap blocks submission.
+Thresholds use exact integer/decimal arithmetic, not rounded display dollars.
+USD display rounds up to the next cent; positive sub-cent fees display as
+`<$0.01 USD`. Price-provider errors or market changes
+can still make the real-world cost differ; these are safeguards, not a guarantee.
+
+BTC/LTC rates use `blockchain.estimatefee` with a six-block target, in whole coins
+per 1,000 bytes, never coins per byte. The relay minimum and application floor
+also apply. Missing, nonpositive or excessive estimates fail closed; no fallback
+silently authorizes a minimum-rate spend. Both coins retain a 100,000-base-unit/kB
+rate ceiling and 0.001-coin total-fee ceiling, including sweep cushions. These
+coin caps are enforced independently of the USD limits.
+
+The exact reviewed coin fee is checked against verified inputs and signed outputs;
+it is never silently raised. Sweeps retain their existing 25% size-based cushion
+and live pre-signing fee recheck. PEP, DOGE, SHIC and WHT are **not** subject to
+the new USD checks: ordinary small sends keep the existing **0.01-coin default**,
+and their existing sweep/relay/size limits are unchanged. In particular, Whippet
+does not require a price feed to send.
+
+#### Optional 1-coin fee for PEP, DOGE, SHIC and WHT
+
+The Send form has an unchecked **Use 1 PEP/DOGE/SHIC/WHT total fee** option. Selecting
+it replaces the 0.01-coin default with **exactly one coin for the entire
+transaction**, not one coin per input or an additional coin. It is included in
+the entered total: a total of 20 PEP sends 19 PEP and pays 1 PEP in fees.
+
+The option supports up to 40 verified, confirmed inputs and 10,000 signed bytes.
+This limits inputs in one transaction, not the number of outputs a wallet may
+hold. Larger wallets remain usable; all candidate outputs still undergo funding-
+transaction verification. The planner, review and signer enforce the coin allowlist and
+exact fee. A fresh relay check runs before signing; insufficient fee coverage,
+unsupported relay rates, changed inputs or dust change block sending rather than
+silently changing the fee. Max uses up to 40 inputs when selected. Leaving Send
+or switching assets resets the option to off; it is never saved as a preference.
+
+This is a user-selected higher fee, not a recommended fee for ordinary small
+payments. It does not affect BTC/LTC estimates or USD limits, WIF sweeps,
+or Komodo recovery. All sends still require the final acknowledgment/confirmation.
 
 Recipient validation checks Base58 encoding, payload size, network version byte
 and checksum. Validation runs during planning and again when verifying reviewed
@@ -541,7 +623,8 @@ in batches of at most ten, deduplicated, and independently checked before signin
 The fee is based on a conservative signed-size estimate (including compressed or
 uncompressed public keys and CompactSize counts), charged proportionally by byte,
 not rounded to whole kilobytes. The rate is the greater of the live relay floor
-and 0.01 coin/kB for PEP/WHT/SHIC/DOGE (0.00001 LTC/kB for Litecoin), plus a 25% fee cushion applied once. Calculation uses integers:
+and 0.01 coin/kB for PEP/WHT/SHIC/DOGE. BTC/LTC additionally require the six-block
+estimate, with a 0.00001-coin/kB floor. A 25% fee cushion is applied once. Calculation uses integers:
 `ceil(estimatedBytes * rateInBaseUnitsPerKB * 125 / 100000)`.
 Only the final fractional base unit is rounded up. For example, a one-input
 compressed-key sweep estimated at 193 bytes pays 0.0024125 coin at the default
@@ -653,14 +736,15 @@ never stored in wallet backups, settings, logs or network requests.
 | Rule | Current value |
 | --- | --- |
 | Entered total | Limited by verified, confirmed spendable outputs; no 100-coin cap |
-| Minimum recipient amount | PEP/WHT/SHIC/DOGE: 0.01 coin; LTC: 0.00005460 |
-| Fee | PEP/WHT/SHIC/DOGE: 0.01 coin flat; LTC: size-based, at least 0.00001 LTC/kB |
-| Flat-fee transaction size | PEP/WHT/SHIC/DOGE: at most 1,000 bytes; not used for LTC |
-| Planner input limit | 8; size rules can reject fewer |
-| Max input selection | PEP/WHT/SHIC/DOGE: conservatively up to 6; LTC: up to 8 |
-| Candidate-output scan bound | 40 |
-| General fee ceiling | PEP/WHT/SHIC/DOGE: 0.1 coin (flat path exactly 0.01); LTC: 0.001 |
-| Coinbase maturity | PEP/WHT/SHIC/DOGE: 240 confirmations; LTC: 100 (MWEB withdrawal: 6) |
+| Minimum recipient amount | PEP/WHT/SHIC/DOGE: 0.01 coin; LTC: 0.00005460; BTC: 0.00000546 |
+| Fee | PEP/DOGE/SHIC/WHT: 0.01 coin default or optional exact 1-coin fee; BTC/LTC: six-block estimate, size-based, at least 0.00001 coin/kB |
+| Flat-fee transaction size | Default: at most 1,000 bytes; explicit 1-coin option: at most 10,000 bytes; not used for BTC/LTC |
+| Planner input limit | 8 normally; 40 with the explicit PEP/DOGE/SHIC/WHT 1-coin option; size rules can reject fewer |
+| Max input selection | Default PEP/WHT/SHIC/DOGE: conservatively up to 6; BTC/LTC: up to 8; explicit 1-coin option: up to 40 |
+| Wallet output count | No 40-output wallet-wide block; selected transaction inputs remain limited as above |
+| General fee ceiling | PEP/DOGE/SHIC/WHT: 0.1 coin (default flat path exactly 0.01), or exactly 1 coin with explicit selection; BTC/LTC: 0.001 coin plus USD guard |
+| USD fee guard | BTC/LTC only: warn above $5; block above $100 or without a fresh USD quote; no override |
+| Newly mined block rewards (coinbase outputs) | SafeCore waits for 240 confirmations for PEP/WHT/SHIC/DOGE; 100 for BTC/LTC. Ordinary transfers do not have this wait. LTC MWEB withdrawals separately require 6. |
 | Review expiry | 90 seconds |
 
 Only confirmed, mature outputs are spendable. Raw previous transactions must
@@ -766,6 +850,7 @@ or assume copying app files to another device is a recovery backup.
 | `whippet.dev.encrypted.v1` | Legacy active-wallet slot; name does not guarantee encryption |
 | `corevault.wallets.v1` | Saved-wallet collection |
 | `corevault.balance.<wallet-id>.<coin>` | Public balance/history cache |
+| `corevault.public-addresses.<wallet-id>` | Authenticated public-key/address cache; never spending authority |
 | `corevault.receive.<wallet-id>` | Used indices and first-address preferences |
 | `corevault.send-attempts.<wallet-id>` | Input reservations and submission records |
 | `corevault.hidden-coins.v1` | Legacy displayed-coin selection; fallback for existing wallets |
@@ -872,12 +957,11 @@ control.
 
 ### Default connection resilience
 
-Verified default pools retain the original primary server. PEP falls back to
-`wss://electrum.pepeblocks.com:50004/`; BTC, DOGE and LTC use the corresponding
-CiPiG server 2 listed above. WHT and SHIC currently have no verified second WSS
-server, so they only reconnect to their existing server. The listed SHIC
-shibaexplorer service was unreachable and is deliberately excluded. Availability
-can change; the public read-only connection test is not an uptime guarantee.
+Verified default pools retain the original primary server. PEP, BTC, DOGE and
+LTC have automatic backup servers. WHT and SHIC currently have no verified second
+WSS server, so they only reconnect to their existing server. Unreachable candidate
+servers are excluded. Availability can change; the public read-only connection
+test is not an uptime guarantee.
 
 Transport/read failures rotate through available pool members, with bounded
 2–30 second per-server cooldowns instead of reconnection storms. Every connection
@@ -890,6 +974,11 @@ pinned for privacy. Transaction broadcasts are never automatically retried;
 existing uncertain-send tracking remains authoritative.
 
 ## Android operation
+
+Android shows the full SafeCore globe for 2.3 seconds on initial launch and
+after returning from the background. Returns from authentication, camera permission
+and backup-picker flows do not replay it. The splash is presentation only: it does
+not unlock a wallet, delay background locking, or change screenshot protection.
 
 Use Java 17 or newer, Android SDK/build tools 35 and the checked-in Gradle wrapper.
 Set `ANDROID_HOME` to your SDK installation. Network access may be needed for
@@ -1013,8 +1102,10 @@ legacy migration, first-wallet defaults, authentication cancellation, background
 locking, protected export/import return, expiry, and screen-lock removal. Local
 recovery-copy checks cover encrypted-only/local-provider policy, remembered
 picker locations, a real document save, and restore after uninstall/reinstall
-of only the disposable QA package (20 native test executions in total, including
-the per-coin explorer URL allowlist).
+of only the disposable QA package (25 native security/icon/splash test executions in total, including
+the per-coin explorer URL allowlist and full-globe adaptive-icon safe-area checks
+at six rendered sizes, the system splash mask, and 2.3-second cold/reopen splash
+timing without delaying background protection or replaying after system flows).
 Only disposable fixtures and a public fake PIN are used. No release credentials,
 real wallets or funded transactions are needed. Raw device logs, screenshots,
 wallet data and emulator snapshots are not uploaded. A failed, missing, timed-out,
@@ -1071,33 +1162,3 @@ directory. Do not infer production readiness from a regtest or emulator pass.
 | Backup import rejected | Supported format, file bounds, correct password and unchanged recovery recipe |
 | Android update rejected | Device, package ID, version and signing key; back up before any removal |
 | Screenshot or USB inspection blocked | Expected with the debug toggle off; do not weaken a funded wallet just to troubleshoot UI |
-
-## Preparing a public repository
-
-This is a publication checklist, not a claim that sanitization is complete.
-
-1. Review the exact staging set and Git history before uploading. Removing a value
-   from the latest README does not remove earlier commits.
-2. Remove or replace operator addresses and service identifiers in
-   `www/network.js`, `www/app.js`, `www/index.html`, Android network allowlists
-   and relevant fixtures. Keep replacement network configuration, content policy
-   and native allowlists consistent. Do not weaken TLS or genesis checks.
-3. Exclude deployment-specific `deploy/` content and private runbooks from the
-   public package unless deliberately rewritten as generic examples.
-4. Review test scripts and Android local configuration for personal filesystem
-   paths, devices, live targets and parent-project dependencies.
-5. Exclude seeds, backups, browser profiles, caches, node data, environment files,
-   credentials, signing keys, APKs not intended for release and test artifacts.
-   Existing ignore rules help but do not untrack files already committed.
-6. Inspect compiled artifacts too: operational addresses are recoverable from
-   bundled code and network traffic. Never describe them as secrets once shipped.
-7. Retain third-party copyright and license notices. See [THIRD_PARTY.md](THIRD_PARTY.md).
-   Choose an appropriate project license and review artwork rights before release;
-   third-party notices do not license all first-party code or branding.
-8. Build from the intended public tree, verify its asset allowlist and signature,
-   run isolated tests, review current limitations and document reproducible setup.
-9. Add production signing, verified-backup onboarding and independent security
-   review before presenting the application as production-ready.
-
-No server deployment, endpoint rotation, Git push or public release is performed
-by following the local build instructions alone.

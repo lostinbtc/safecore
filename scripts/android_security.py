@@ -112,7 +112,16 @@ class SecurityRun:
         self.adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         self.adb('shell', 'wm', 'dismiss-keyguard')
         self.adb('shell', 'svc', 'wifi', 'disable')
-        self.adb('shell', 'svc', 'data', 'disable')
+        # sys.boot_completed can precede telephony-service readiness on a fresh
+        # emulator. Still require data to be disabled before any tests run.
+        for attempt in range(10):
+            try:
+                self.adb('shell', 'svc', 'data', 'disable')
+                break
+            except RuntimeError:
+                if attempt == 9:
+                    raise
+                time.sleep(2)
         self.adb('shell', 'settings', 'put', 'system', 'screen_off_timeout', '1800000')
         self.adb('shell', 'svc', 'power', 'stayon', 'true')
         for setting in ('window_animation_scale', 'transition_animation_scale', 'animator_duration_scale'):
@@ -137,6 +146,8 @@ class SecurityRun:
         for apk in ('debug/app-debug.apk', 'androidTest/debug/app-debug-androidTest.apk'):
             self.owned()
             self.adb('install', '-t', str(ROOT / 'whippet/android/app/build/outputs/apk' / apk), timeout=120)
+        self.test('IconLayoutTest', 2)
+        self.test('SplashScreenTest', 3)
         self.test('DeviceWalletStoreTest', 3)
         self.test('NetworkPolicyTest', 3)
         self.test('LocalRecoveryCopyTest', 3)
@@ -177,7 +188,7 @@ class SecurityRun:
         if 'Lock credential cleared' not in result:
             raise RuntimeError('Could not clear disposable emulator PIN')
         self.test('DeviceAuthenticationTest#testCredentialRemovedFailsClosed')
-        print('PASS: all 20 native security test executions', flush=True)
+        print('PASS: all 25 native security/icon/splash test executions', flush=True)
 
     def close(self):
         # Kill only the process group we launched, never adb's shared server/devices.

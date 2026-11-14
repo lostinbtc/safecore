@@ -50,6 +50,15 @@ const explorers={pep:'https://pepecoinservice.org/explorer/tx/',btc:'https://mem
   const pageInput=pep.locator('.activity-pager input'),nextPage=pep.locator('[data-page-step="1"]'),previousPage=pep.locator('[data-page-step="-1"]'),goPage=pep.locator('.activity-pager button[type=submit]');
   for(const theme of ['light','dark']){
    await p.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   for(const width of [320,390,430]){
+    await p.setViewportSize({width,height:844});
+    const pager=await pep.locator('.activity-pager').boundingBox(),group=await pep.locator('.activity-page-jump').boundingBox(),prev=await previousPage.boundingBox(),next=await nextPage.boundingBox();
+    assert.ok(Math.abs(group.x+group.width/2-pager.x-pager.width/2)<1,'Page jump stays centered');
+    assert.ok(prev.x+prev.width<=group.x&&group.x+group.width<=next.x,'Paging controls do not overlap');
+    assert.equal(prev.y,next.y,'Paging actions share a baseline');
+    assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   }
+   await p.setViewportSize({width:390,height:844});
    assert.equal(await pageInput.evaluate(el=>getComputedStyle(el).color===getComputedStyle(document.body).color),true,'Page number stays readable in each theme');
    for(const control of await pep.locator('.activity-pager button, .activity-pager input').all()){
     const plain=()=>control.evaluate(el=>{const s=getComputedStyle(el);return s.backgroundColor==='rgba(0, 0, 0, 0)'&&s.borderTopWidth==='0px'&&s.borderRadius==='0px'&&s.boxShadow==='none'&&el.getBoundingClientRect().height>=44;});

@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict');
 const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=require('../www/assets/ethers.umd.min.js');
+const bitcore=require('bitcore-lib-doge');
 const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
 for(const [value,display] of [[0n,'0'],[1n,'0.00000001'],[99999999999n,'999.99999999'],[100000000000n,'1,000'],[470900000000n,'4,709'],[193992200111100n,'1,939,922.001111'],[-193992200111100n,'-1,939,922.001111'],[900719925474099312345678n,'9,007,199,254,740,993.12345678']]){
   assert.equal(T.formatDisplay(value),display);
@@ -7,7 +8,7 @@ for(const [value,display] of [[0n,'0'],[1n,'0.00000001'],[99999999999n,'999.9999
 }
 assert.equal(T.amount('1939922.001111'),193992200111100n);
 assert.throws(()=>T.amount('1,939,922.001111'));
-for(const coin of ['pep','wht','shic']){
+for(const coin of ['pep','doge','wht','shic']){
   const a=E.accounts(ethers,recipe,0)[coin],dest=E.accounts(ethers,recipe,1)[coin].address;
   const funding={version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:'',sequence:0xffffffff}],outputs:[{value:500000000n,script:T.script(coin,a.address)}],locktime:0};
   const raw=ethers.utils.hexlify(T.serialize(funding)).slice(2),prev=T.parse(raw);
@@ -35,6 +36,23 @@ for(const coin of ['pep','wht','shic']){
   const fragmentedRaw=ethers.utils.hexlify(T.serialize(fragmented)).slice(2),fp=T.parse(fragmentedRaw);
   const many=fp.outputs.map((o,pos)=>({...u,pos,value:o.value,raw:fragmentedRaw,txid:fp.txid}));
   assert.throws(()=>T.plan({...inclusive,amount:'3.5',utxos:many}),/too large/);
+  const largerRaw=ethers.utils.hexlify(T.serialize({...funding,outputs:Array.from({length:41},()=>({value:50000000n,script:T.script(coin,a.address)}))})).slice(2);
+  const larger=T.parse(largerRaw),forty=larger.outputs.slice(0,40).map((o,pos)=>({...u,pos,value:o.value,raw:largerRaw,txid:larger.txid}));
+  const override={...inclusive,utxos:forty,amount:'20',flatFee:false,oneCoinFee:true,feeRate:1000000n};
+  const one=T.plan(override);assert.equal(one.inputs.length,40);assert.equal(one.fee,T.COIN);assert.equal(one.amount,19n*T.COIN);
+  const signedOne=T.sign(one,recipe),decoded=T.parse(signedOne.raw);assert.equal(decoded.inputs.length,40);assert.equal(decoded.outputs.length,1);assert.equal(20n*T.COIN-decoded.outputs[0].value,T.COIN);
+  const independent=new bitcore.Transaction(signedOne.raw);
+  for(const index of [0,39]){
+    const chunks=independent.inputs[index].script.chunks;
+    assert.equal(bitcore.Transaction.sighash.verify(independent,bitcore.crypto.Signature.fromTxFormat(chunks[0].buf),bitcore.PublicKey.fromBuffer(chunks[1].buf),index,new bitcore.Script(one.inputs[index].script)),true);
+  }
+  assert.throws(()=>T.plan({...override,oneCoinFee:false,flatFee:true}));
+  assert.throws(()=>T.plan({...override,flatFee:true}));assert.throws(()=>T.plan({...override,feeIncluded:false}));
+  assert.throws(()=>T.plan({...override,amount:'1'}),/cover/);assert.throws(()=>T.plan({...override,amount:'19.999'}),/Use Max/);
+  assert.throws(()=>T.plan({...override,utxos:[...forty,{...forty[0],pos:40}],amount:'20.5'}),/40 inputs/);
+  for(const feeRate of [null,undefined,0n,-1n,10000001n])assert.throws(()=>T.plan({...override,feeRate}));
+  for(const other of ['btc','ltc'])assert.throws(()=>T.plan({...override,coin:other}));
+  for(const tampered of [{fee:T.COIN-1n},{fee:T.COIN+1n},{oneCoinFee:false},{flatFee:true},{sweep:true},{feeRate:10000001n}])assert.throws(()=>T.sign({...one,...tampered},recipe));
   assert.throws(()=>T.plan({...args,amount:'0.00000001'}));assert.throws(()=>T.plan({...args,amount:'101'}));
   // Max is the spendable total, not the old 100-coin development cap.
   const largeFunding={...funding,outputs:[{value:950n*T.COIN,script:T.script(coin,a.address)}]};

@@ -84,7 +84,7 @@ const paragraphs = fs.readFileSync(require('node:path').resolve(__dirname, '../.
         assert.equal(await page.locator('#komodo-recovery-enabled').isChecked(), false);
         assert.equal(await page.locator('.komodo-setting strong').innerText(), 'Komodo recovery (PEP / SHIC)');
         assert.equal(await page.locator('.komodo-setting small').innerText(), 'Recover legacy Pepecoin or Shibacoin funds.');
-        await page.locator('#theme-choice').selectOption('light');
+        await page.locator('[data-theme-choice=light]').click();
         await page.locator('#wallet-information').click();
         await page.screenshot({path:'/tmp/safecore-information-light.png'});
         // Replacing the active public-fixture wallet does not reset installation acknowledgment.

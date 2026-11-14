@@ -49,7 +49,11 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   assert.ok(p.fee>=BigInt(signed.raw.length/2));assert.equal(T.parse(signed.raw).outputs[0].script,T.script('ltc',destination));
   assert.throws(()=>T.sign({...p,fee:100001n},recipe));
  }
- const args={coin:'ltc',destination:destinations[0],changeAddress:change,amount:'0.005',tip:500,utxos:[input]};
+ const args={coin:'ltc',destination:destinations[0],changeAddress:change,amount:'0.005',tip:500,utxos:[input],feeRate:1000n};
+ for(const feeRate of [undefined,null,0n,-1n,1000]){
+  assert.throws(()=>T.plan({...args,feeRate}),/current Litecoin fee estimate/);
+  assert.throws(()=>T.sweepFee(200,feeRate,'ltc'),/current Litecoin fee estimate/);
+ }
  assert.throws(()=>T.plan({...args,flatFee:true}));assert.throws(()=>T.plan({...args,feeRate:100001n}));assert.throws(()=>T.plan({...args,amount:'0.00005459'}));
  const sweep=T.sweepPlan({...args,compressed:true,feeRate:1000n});assert.ok(sweep.fee<1000n);
  T.signSweep(sweep,T.sweepKey('ltc',bundle.wallets[0].wif),recipe,1);
