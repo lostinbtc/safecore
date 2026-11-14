@@ -1,0 +1,8 @@
+<resources>
+    <style name="AppTheme" parent="BaseAppTheme">
+        <item name="android:windowSplashScreenBackground">@color/launcher_background</item>
+        <!-- Padded, non-adaptive artwork: the system splash has its own mask. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_safecore</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+    </style>
+</resources>

@@ -95,7 +95,8 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await word(0).fill(phrase);await done();assert.equal(await p.locator('#submit-setup').isDisabled(),false);
   assert.ok(requests.every(url=>url.startsWith('http://localhost:8787/')),'No recovery information goes to the network');
   assert.equal(await p.locator('#error').isVisible(),false,'Editing words clears the previous failed-import error');
-  await p.locator('#submit-setup').click();await p.locator('.holdings').waitFor();
+  await p.locator('#submit-setup').click();await p.locator('#coin-empty').waitFor();
+  await require('./coin-selection-helper.cjs')(p,['pep']);
   assert.equal(await p.locator('#restore-keyboard').count(),0);assert.equal(await p.locator('.bottom-navigation').isVisible(),true);
   const expected=E.accounts(ethers,E.recipe(ethers,phrase)).pep.address;
   await p.locator('[data-nav=receive]').click();await p.locator('[data-coin=pep]').click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').textContent(),expected);

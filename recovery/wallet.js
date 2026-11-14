@@ -9,11 +9,13 @@
   const NETWORKS = Object.freeze({
     wht: Object.freeze({ network: NETWORK, path: PATH_TEMPLATE, format: 'whippet-seed-v1' }),
     pep: Object.freeze({ network: Object.freeze({ name: 'Pepecoin mainnet', pubKeyHash: 56, scriptHash: 22, wif: 158 }), path: "m/44'/3434'/0'/0/{index}", format: 'pepecoin-seed-v1' }),
+    doge: Object.freeze({ network: Object.freeze({ name: 'Dogecoin mainnet', pubKeyHash: 30, scriptHash: 22, wif: 158 }), path: "m/44'/3'/0'/0/{index}", format: 'dogecoin-seed-v1' }),
+    btc: Object.freeze({ network: Object.freeze({ name: 'Bitcoin mainnet', pubKeyHash: 0, scriptHash: 5, wif: 128 }), path: "m/44'/0'/0'/0/{index}", format: 'bitcoin-seed-v1' }),
     ltc: Object.freeze({ network: Object.freeze({ name: 'Litecoin mainnet', pubKeyHash: 48, scriptHash: 50, wif: 176 }), path: "m/44'/2'/0'/0/{index}", format: 'litecoin-seed-v1' }),
     shic: Object.freeze({ network: Object.freeze({ name: 'Shibacoin mainnet', pubKeyHash: 63, scriptHash: 22, wif: 158 }), path: "m/44'/4474'/0'/0/{index}", format: 'shibacoin-seed-v1' }),
   });
   function config(coin = 'wht') {
-    if (!Object.hasOwn(NETWORKS, coin)) throw new Error('Choose Pepecoin, Shibacoin, Whippet or Litecoin.');
+    if (!Object.hasOwn(NETWORKS, coin)) throw new Error('Choose Pepecoin, Bitcoin, Dogecoin, Litecoin, Shibacoin or Whippet.');
     return NETWORKS[coin];
   }
   function backupCoin(backup) {

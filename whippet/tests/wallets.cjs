@@ -26,7 +26,8 @@ const store = 'whippet.dev.encrypted.v1';
     assert.equal(await page.locator('#seed-lock svg path').first().getAttribute('d'),protect?'M8 10V6a4 4 0 0 1 8 0v4':'M8 10V6a4 4 0 0 1 7.5-2');
     assert.equal(await page.locator('#seed-lock svg path').last().getAttribute('d'),'M12 15v2');
     assert.equal(await page.locator('#ack').count(),0);await page.locator('#submit-setup').click();
-    await page.locator('.holdings').waitFor();
+    await page.locator('#coin-empty').waitFor();
+    await require('./coin-selection-helper.cjs')(page,['pep','wht']);
     await page.waitForFunction(()=>document.documentElement.dataset.walletState === 'unlocked');
   }
   async function openRecovery(){
@@ -93,7 +94,7 @@ const store = 'whippet.dev.encrypted.v1';
     assert.equal(await page.locator('#unlock-security').count(),0);
     assert.equal(await page.locator('.settings-heading .subtle').innerText(),'Open fixture');
     assert.match(await page.locator('#main').innerText(),/Not encrypted\./);
-    await page.locator('#theme-choice').selectOption('light'); await page.reload();
+    await page.locator('[data-theme-choice=light]').click(); await page.reload();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     assert.equal(await page.locator('#show-seed').count(),0);
     await openRecovery();
@@ -195,7 +196,7 @@ const store = 'whippet.dev.encrypted.v1';
     assert.equal(await generated.locator('#saved-phrase').count(),0);
     assert.equal(await generated.evaluate(k=>JSON.parse(localStorage.getItem(k)).format,store),E.OPEN_FORMAT);
     await generated.locator('#finish').click();
-    await generated.locator('.holdings').waitFor();
+    await generated.locator('#coin-empty').waitFor();
     assert.equal(await generated.evaluate(k=>JSON.parse(localStorage.getItem(k)).format,store),E.OPEN_FORMAT);
     await fresh.close();
     console.log('PASS: default password-off, per-wallet protection, historical seed access, lock icons, seed hiding, address navigation/QR/copy/reuse, separate wallets and light/dark themes.');

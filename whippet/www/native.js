@@ -65,6 +65,7 @@
       return reply.revision;
     },
     exportBackup: data => request('exportBackup', data),
+    exportRecoveryCopy: data => request('exportRecoveryCopy', data),
     getScreenProtection: () => screenProtection('getScreenProtection',''),
     setScreenProtection: enabled => {
       if(typeof enabled!=='boolean')return Promise.reject(Error('Invalid screenshot setting.'));

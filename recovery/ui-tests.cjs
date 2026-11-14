@@ -11,7 +11,7 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await context.route(/^https?:/,route=>{network.push(route.request().url());return route.abort();});
   await page.goto(pathToFileURL(path.join(__dirname,'index.html')).href);
   assert.equal(await page.locator('#coin').inputValue(),'pep');
-  assert.deepEqual(await page.locator('#coin option').evaluateAll(options=>options.map(option=>option.value)),['pep','ltc','shic','wht']);
+  assert.deepEqual(await page.locator('#coin option').evaluateAll(options=>options.map(option=>option.value)),['pep','doge','ltc','shic','wht','btc']);
   await page.locator('#phrase').fill(phrase);await page.locator('#count').fill('3');
   await page.locator('#derive').click();await page.getByRole('heading',{name:'Pepecoin addresses',exact:true}).waitFor();
   const pep=G.derive(ethers,phrase,{coin:'pep',count:3});
@@ -58,9 +58,27 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   }
   await page.locator('#coin').selectOption('pep');await page.locator('#restore').setInputFiles({name:'throwaway-litecoin.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,ltc)))});
   await page.getByRole('heading',{name:'Litecoin addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),'ltc');
+  await page.locator('#coin').selectOption('doge');await page.locator('#derive').click();await page.getByRole('heading',{name:'Dogecoin addresses',exact:true}).waitFor();
+  const doge=G.derive(ethers,phrase,{coin:'doge',count:3});assert.deepEqual(await page.locator('.address').allTextContents(),doge.wallets.map(w=>w.address));
+  for(const id of ['download','download-text','download-address-text','download-csv']){
+   const pending=page.waitForEvent('download');await page.locator('#'+id).click();const file=await pending;
+   assert.ok(file.suggestedFilename().startsWith('dogecoin-'));const raw=await fs.readFile(await file.path(),'utf8');
+   if(id==='download')assert.deepEqual(await F.importJSON(ethers,G,E,webcrypto,JSON.parse(raw)),doge);else assert.ok(raw.includes(doge.wallets[0].wif));
+  }
+  await page.locator('#coin').selectOption('pep');await page.locator('#restore').setInputFiles({name:'throwaway-dogecoin.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,doge)))});
+  await page.getByRole('heading',{name:'Dogecoin addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),'doge');
+  await page.locator('#coin').selectOption('btc');await page.locator('#derive').click();await page.getByRole('heading',{name:'Bitcoin addresses',exact:true}).waitFor();
+  const btc=G.derive(ethers,phrase,{coin:'btc',count:3});assert.deepEqual(await page.locator('.address').allTextContents(),btc.wallets.map(w=>w.address));
+  for(const id of ['download','download-text','download-address-text','download-csv']){
+   const pending=page.waitForEvent('download');await page.locator('#'+id).click();const file=await pending;
+   assert.ok(file.suggestedFilename().startsWith('bitcoin-'));const raw=await fs.readFile(await file.path(),'utf8');
+   if(id==='download')assert.deepEqual(await F.importJSON(ethers,G,E,webcrypto,JSON.parse(raw)),btc);else assert.ok(raw.includes(btc.wallets[0].wif));
+  }
+  await page.locator('#coin').selectOption('pep');await page.locator('#restore').setInputFiles({name:'throwaway-bitcoin.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,btc)))});
+  await page.getByRole('heading',{name:'Bitcoin addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),'btc');
   await page.locator('#clear').click();assert.equal(await page.locator('#phrase').inputValue(),'');assert.equal(await page.locator('#results').isHidden(),true);
   await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'/tmp/safecore-recovery-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);assert.deepEqual(network,[]);
-  console.log('PASS: file:// offline UI, all four assets, private exports, plain/encrypted JSON imports, clearing and mobile layout.');
+  console.log('PASS: file:// offline UI, all six assets, private exports, plain/encrypted JSON imports, clearing and mobile layout.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

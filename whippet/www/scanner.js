@@ -6,7 +6,7 @@
 })(typeof globalThis==='object'?globalThis:this,function(){
   function address(raw,coin,validate){
     if(typeof raw!=='string'||raw.length>2048)throw Error('This QR code is not a supported payment address.');
-    const text=raw.trim(),scheme={pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin'}[coin];
+    const text=raw.trim(),scheme={pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin'}[coin];
     if(!scheme)throw Error('Select a supported coin first.');
     let result=text;
     if(text.includes(':')){
@@ -40,7 +40,7 @@
       if(video.readyState>=2&&video.videoWidth&&video.videoHeight){
         if(video.dataset.ready!=='true'){
           video.dataset.ready='true';
-          message(`Scanning ${({pep:'PEP',wht:'WHT',shic:'SHIC',ltc:'LTC'})[coin]} QR code… Keep the whole code in view.`);
+          message(`Scanning ${({pep:'PEP',wht:'WHT',shic:'SHIC',ltc:'LTC',doge:'DOGE',btc:'BTC'})[coin]} QR code… Keep the whole code in view.`);
         }
         // Match the square object-fit:cover preview. Downscaling the entire
         // portrait frame made its visible QR too small and wasted side space.

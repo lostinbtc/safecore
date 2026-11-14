@@ -22,6 +22,14 @@ IMAGE = 'system-images;android-35;google_apis;x86_64'
 PORT = 5580
 
 
+def require_free_port(port):
+    with socket.socket() as probe:
+        # Ignore stale TIME_WAIT sockets from our previous stopped emulator.
+        # Active listeners still fail the bind; identity checks remain mandatory.
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(('127.0.0.1', port))
+
+
 def require_pass(output, expected):
     """adb/am can return zero on test failure; demand the runner's full result."""
     if (re.search(r'^OK \(' + str(expected) + r' tests?\)\s*$', output, re.M) is None
@@ -71,8 +79,7 @@ class SecurityRun:
     def boot(self):
         # Refuse occupied ports, even if adb hasn't discovered that emulator yet.
         for port in (PORT, PORT + 1):
-            with socket.socket() as probe:
-                probe.bind(('127.0.0.1', port))
+            require_free_port(port)
         devices = self.command([self.sdk / 'platform-tools/adb', 'devices'])
         if self.serial in devices:
             raise RuntimeError('Reserved emulator serial is already in use')
@@ -105,7 +112,16 @@ class SecurityRun:
         self.adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         self.adb('shell', 'wm', 'dismiss-keyguard')
         self.adb('shell', 'svc', 'wifi', 'disable')
-        self.adb('shell', 'svc', 'data', 'disable')
+        # sys.boot_completed can precede telephony-service readiness on a fresh
+        # emulator. Still require data to be disabled before any tests run.
+        for attempt in range(10):
+            try:
+                self.adb('shell', 'svc', 'data', 'disable')
+                break
+            except RuntimeError:
+                if attempt == 9:
+                    raise
+                time.sleep(2)
         self.adb('shell', 'settings', 'put', 'system', 'screen_off_timeout', '1800000')
         self.adb('shell', 'svc', 'power', 'stayon', 'true')
         for setting in ('window_animation_scale', 'transition_animation_scale', 'animator_duration_scale'):
@@ -130,8 +146,26 @@ class SecurityRun:
         for apk in ('debug/app-debug.apk', 'androidTest/debug/app-debug-androidTest.apk'):
             self.owned()
             self.adb('install', '-t', str(ROOT / 'whippet/android/app/build/outputs/apk' / apk), timeout=120)
+        self.test('IconLayoutTest', 2)
+        self.test('SplashScreenTest', 3)
         self.test('DeviceWalletStoreTest', 3)
-        self.test('NetworkPolicyTest', 2)
+        self.test('NetworkPolicyTest', 3)
+        self.test('LocalRecoveryCopyTest', 3)
+        self.reset_qa()
+        self.test('RecoveryCopyUiTest#testSaveEncryptedCopy')
+        document = '/sdcard/Documents/SafeCore-disposable-recovery.json'
+        self.owned()
+        saved_hash = self.adb('shell', 'sha256sum', document).split()[0]
+        # Uninstall ONLY this run's emulator QA package. The local SAF document
+        # must survive while app storage, Keystore keys and picker hints disappear.
+        self.owned()
+        self.adb('uninstall', PACKAGE)
+        self.owned()
+        self.adb('install', '-t', str(ROOT / 'whippet/android/app/build/outputs/apk/debug/app-debug.apk'), timeout=120)
+        if self.adb('shell', 'sha256sum', document).split()[0] != saved_hash:
+            raise RuntimeError('Disposable recovery document changed across uninstall')
+        print('PASS: encrypted local document survived uninstall unchanged', flush=True)
+        self.test('RecoveryCopyUiTest#testRestoreAfterUninstall')
         self.reset_qa()
         self.test('DeviceAuthenticationTest#testFirstWalletWithoutScreenLock')
         self.reset_qa()
@@ -154,7 +188,7 @@ class SecurityRun:
         if 'Lock credential cleared' not in result:
             raise RuntimeError('Could not clear disposable emulator PIN')
         self.test('DeviceAuthenticationTest#testCredentialRemovedFailsClosed')
-        print('PASS: all 14 native security test executions', flush=True)
+        print('PASS: all 25 native security/icon/splash test executions', flush=True)
 
     def close(self):
         # Kill only the process group we launched, never adb's shared server/devices.

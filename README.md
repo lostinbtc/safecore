@@ -1,11 +1,64 @@
 # SafeCore
 
-An extensible, self-custodial Android wallet for Layer-1 coins, launching with
-Pepecoin, Whippet, Shibacoin (SHIC) and Litecoin (LTC), with self-hostable Pepecoin/Whippet backends
-and external Shibacoin/Litecoin Electrum connections.
+A self-custodial Android wallet with a browser preview and offline recovery tool.
+Keys and transaction signing stay on your device.
 
-This is a development prerelease, not an audited production wallet. Use small,
-expendable amounts and keep an independent recovery backup.
+Supports **Pepecoin, Dogecoin, Litecoin, Shibacoin, Whippet and Bitcoin**.
+This is an unaudited development prerelease: use expendable amounts and keep an
+independent recovery backup. Check release notes—the downloadable APK may lag
+behind this source.
+
+## Start here
+
+1. [Download an Android APK](https://github.com/lostinbtc/safecore/releases).
+   [Verify it](docs/RELEASES.md) and back up before updating. Do not uninstall to
+   bypass a signing error.
+2. Create or restore a wallet, then use **Add coins** to choose what appears.
+3. Keep a separate recovery backup. A local recovery copy does not protect
+   against losing or resetting your device.
+
+[Wallet guide](whippet/README.md) · [Offline recovery](recovery/README.md) ·
+[Security](SECURITY.md) · [Self-hosting](docs/SELF_HOSTING.md)
+
+### Browser preview
+
+```sh
+python3 whippet/scripts/serve.py
+```
+
+Open `http://localhost:8787`. Use a disposable wallet for testing.
+Password-free browser wallets are not encrypted; browser storage is not a backup.
+
+## Sending and fees
+
+Enter one **Total to spend**, including the fee. Max uses the available balance;
+the review separates the recipient amount from the network fee.
+
+- **BTC/LTC:** automatic, read-only size-based fees. Estimates are held for up to
+  five minutes; transaction reviews expire after 90 seconds. Fees above **$5 USD**
+  require a warning; above **$100 USD**, or without a fresh USD price, sending is
+  blocked. There is no override, and other safety caps still apply.
+- **PEP/DOGE/SHIC/WHT:** default **0.01-coin** fee within transaction-size limits.
+  An optional **1-coin total fee** replaces it for larger input sets; off by default.
+- Every send requires confirmation. Live input/fee checks remain mandatory, and
+  fees are never silently increased. Sweeps have separate fee rules.
+
+See [fee details and limits](whippet/README.md#fee-safety-and-usd-limits).
+
+## Connections and recovery
+
+Settings supports a custom secure Electrum connection for each coin. Defaults
+retry and use verified backups where available; custom connections stay pinned.
+Servers see your public address queries and IP address, not recovery secrets.
+
+An optional encrypted JSON recovery copy uses a separate password. Save it in a
+local folder and keep an independent backup. After reinstalling, restore the file
+manually with its password.
+
+For offline recovery, open **`recovery/index.html`** from an extracted repository.
+It supports all six coins and plain/encrypted wallet JSON. Private-key exports
+are unencrypted—keep them private. Legacy Komodo recovery is **PEP/SHIC only**;
+other wallets' derivation paths may differ.
 
 ## Wallet risks & disclaimer
 
@@ -24,29 +77,11 @@ keeps it available under **Settings → Information**. Clearing app/browser data
 removes the acknowledgment. This notice does not replace applicable law or
 change the component licenses listed in [third-party notices](THIRD_PARTY_NOTICES.md).
 
-## Download and preview
-
-[Download the Android prerelease](https://github.com/lostinbtc/safecore/releases)
-or run the browser preview from a local checkout:
-
-```sh
-python3 whippet/scripts/serve.py
-```
-
-Open `http://localhost:8787`. See the wallet guide before importing recovery
-material. Use an independent offline backup; browser storage is not a backup.
-
-**Settings → Electrum connections** lets you test and select your own secure
-`wss://` server separately for Pepecoin, Whippet, Shibacoin and Litecoin if the defaults are unavailable.
-Choose a trusted operator: servers see your public address queries and IP address.
-Connection preferences stay on this device, not in wallet backups. Restore default
-connections is always available; the app does not silently switch servers.
-
 ## Components
 
 - `whippet/`: the SafeCore wallet, Android project, browser preview and tests.
   The directory name is historical; the app is named SafeCore.
-- `recovery/`: the self-contained offline Whippet address/key recovery tool.
+- `recovery/`: the self-contained offline recovery tool for all six supported coins.
 - `services/electrumx/`: the ElectrumX fork with Pepecoin and Whippet support.
 - `services/blockbook/`: the Pepecoin Blockbook fork and its source.
 - `infra/`: self-hosted deployment templates and node configuration examples.
@@ -59,6 +94,13 @@ Whippet does not currently have a bundled Blockbook adapter or explorer.
 
 The wallet derives keys and signs on-device. Indexers receive public address
 queries and signed transactions, never recovery phrases or private keys.
+
+Core nodes must finish synchronization and transaction indexing before the
+backend is usable. Starting containers is not proof of readiness. This repository
+contains source and templates, not blockchain databases, wallets, TLS private
+keys, RPC credentials or Android signing keys. Adding another asset requires
+protocol, derivation, address-validation, indexer and transaction tests; it is not
+just an icon or configuration change.
 
 ## Credits, licenses and Blockbook source
 
@@ -121,38 +163,3 @@ source offer. Publishing this README alone does not establish that the live
 service has an accessible, complete source offer. Do not include wallet secrets,
 RPC passwords or production private keys in a source release; use safe examples
 for operator-specific settings.
-
-## Offline recovery tool
-
-Download and extract this repository, then open **`recovery/index.html`**
-directly in your browser. It runs without a server, installation, or network
-connection. Choose **Pepecoin, Whippet, Shibacoin or Litecoin** to generate 200 address/key pairs
-for that asset by default, adjustable from 1 to 1,000. Local recovery-word
-suggestions are included. It uses SafeCore’s receiving-address paths, not
-legacy Komodo derivation.
-
-Import plain or encrypted SafeCore/Whippet wallet JSON, or an original generator
-backup. Export wallet-compatible JSON, WIF keys as TXT, address/key pairs as TXT,
-or CSV. Exports are unencrypted and must be kept private.
-
-See the [offline recovery guide](recovery/README.md) for the recovery recipe,
-standalone ZIP packaging, compatibility details, and local verification.
-
-## Start here
-
-- [Wallet behavior and build instructions](whippet/README.md)
-- [Offline multi-coin recovery](recovery/README.md)
-- [Self-hosting](docs/SELF_HOSTING.md)
-- [Architecture and boundaries](docs/ARCHITECTURE.md)
-- [Security and current limitations](SECURITY.md)
-- [Licenses and third-party notices](THIRD_PARTY_NOTICES.md)
-- [APK release and verification](docs/RELEASES.md)
-
-Core nodes must finish synchronization and transaction indexing before the
-backend is usable. Starting containers is not proof of readiness. This repository
-contains source and templates, not blockchain databases, wallets, TLS private
-keys, RPC credentials or Android signing keys.
-
-Currently implemented assets are PEP, WHT, SHIC and LTC. Dogecoin is a disabled coming-soon
-entry. Adding another asset requires protocol, derivation, address-validation,
-indexer and transaction tests; it is not just an icon or configuration change.

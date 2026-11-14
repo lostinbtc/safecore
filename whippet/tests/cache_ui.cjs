@@ -9,6 +9,8 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
     page.on('pageerror',e=>errors.push(e.message));
     await context.addInitScript(()=>{window.fetch=async()=>{throw Error('Fixture offline');};window.WebSocket=class{constructor(){throw Error('Fixture offline');}};});
     await page.goto('http://localhost:8787/');
+    await page.locator('#coin-empty').waitFor();
+    await require('./coin-selection-helper.cjs')(page,['pep']);
     assert.equal(await page.locator('[data-overview-coin=pep] .holding-balance').innerText(),'* PEP');
     await page.locator('[data-nav="activity"]').click();await expect(page.locator('#main')).toContainText(/transactions will appear/);
     const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
@@ -30,7 +32,8 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
     await page.locator('[data-nav="receive"]').click();
     await page.locator('#receive-coin').click();await page.locator('[data-coin="pep"]').click();
     assert.equal(await page.locator('#address-number').innerText(),'Address #2');
-    assert.equal(await page.locator('#address').count(),0); // No stale receive QR.
+    assert.equal(await page.locator('#address').innerText(),E.accounts(ethers,recipe,1).pep.address); // Ownership is local; history remains stale.
+    assert.match(await page.locator('#receive-history-status').innerText(),/History refresh pending/);
     assert.equal(await page.locator('#next-address').isDisabled(),true);
     await page.goto('http://localhost:8787/');
     await page.evaluate(()=>localStorage.setItem('corevault.balance.'+WalletLibrary.id(JSON.parse(localStorage.getItem('whippet.dev.encrypted.v1')))+'.pep','{broken'));
@@ -40,6 +43,6 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
     await page.evaluate(v=>{localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));},other);
     await page.reload();assert.equal(await page.locator('[data-overview-coin=pep] .holding-balance').innerText(),'* PEP');
     assert.deepEqual(errors,[]);await context.close();
-    console.log('PASS: no sample balances/activity, cached total on reload, offline labeling, stale-send/receive blocking, corrupt cache rejection and wallet isolation.');
+    console.log('PASS: no sample balances/activity, cached total, offline local Receive with stale-history label, stale-send blocking, corrupt balance-cache rejection and wallet isolation.');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

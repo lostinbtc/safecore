@@ -5,13 +5,17 @@
   else root.WalletTransactions=factory(root.WalletEngine,root.ethers);
 })(typeof globalThis==='object'?globalThis:this,function(E,ethers){
   const U=ethers.utils, COIN=100000000n, DUST=1000000n, MAX_FEE=10000000n, FLAT_MAX_INPUTS=6;
+  if(Object.values(E.NETWORKS).some(n=>n.decimals!==8))throw Error('Unsupported asset precision. Add explicit transaction support before enabling this asset.');
+  const ONE_COIN_MAX_INPUTS=40;
+  const supportsOneCoinFee=coin=>['pep','doge','shic','wht'].includes(coin);
   // Supported chains reject standard transactions at >= 400,000 weight.
   // These legacy (non-witness) sweeps must therefore stay below 100,000 bytes.
   const SWEEP_MAX_BYTES=100000;
   const SWEEP_FEE_POLICY=Object.freeze({baseRate:COIN/100n,bytesPerUnit:1000,cushionPercent:25,maxRate:10000000n});
   const LEGACY_POLICY=Object.freeze({dust:DUST,minRate:1000000n,maxRate:MAX_FEE,maxFee:MAX_FEE,maturity:240,flatFee:true});
   const LTC_POLICY=Object.freeze({dust:5460n,minRate:1000n,maxRate:100000n,maxFee:100000n,maturity:100,flatFee:false});
-  const policy=coin=>{if(!E.NETWORKS[coin])throw Error('Unsupported coin.');return coin==='ltc'?LTC_POLICY:LEGACY_POLICY;};
+  const BTC_POLICY=Object.freeze({dust:546n,minRate:1000n,maxRate:100000n,maxFee:100000n,maturity:100,flatFee:false});
+  const policy=coin=>{if(!E.NETWORKS[coin])throw Error('Unsupported coin.');return coin==='btc'?BTC_POLICY:coin==='ltc'?LTC_POLICY:LEGACY_POLICY;};
   const bytes=x=>U.arrayify(x), hex=x=>U.hexlify(x).slice(2), concat=parts=>U.concat(parts);
   const reverse=x=>Uint8Array.from(x).reverse();
   const hash256=x=>bytes(U.sha256(U.sha256(x)));
@@ -19,34 +23,35 @@
   function le(value,size){let n=integer(value,(1n<<BigInt(size*8))-1n);const a=new Uint8Array(size);for(let i=0;i<size;i++){a[i]=Number(n&255n);n>>=8n;}return a;}
   function vi(n){if(n<253)return le(n,1);if(n<=65535)return concat([le(253,1),le(n,2)]);return concat([le(254,1),le(n,4)]);}
   function blob(h){const a=bytes('0x'+h);return concat([vi(a.length),a]);}
-  function amount(text){if(typeof text!=='string'||!/^(0|[1-9]\d{0,9})(\.\d{1,8})?$/.test(text))throw Error('Enter a coin amount with at most 8 decimal places.');const [whole,fraction='']=text.split('.');return BigInt(whole)*COIN+BigInt(fraction.padEnd(8,'0'));}
+  function amount(text){if(typeof text!=='string'||!/^(0|[1-9]\d{0,10})(\.\d{1,8})?$/.test(text))throw Error('Enter a coin amount with at most 8 decimal places.');const [whole,fraction='']=text.split('.');const value=BigInt(whole)*COIN+BigInt(fraction.padEnd(8,'0'));if(value>0x7fffffffffffffffn)throw Error('Amount exceeds the supported transaction value.');return value;}
   function format(n){n=BigInt(n);const sign=n<0n?'-':'';if(n<0n)n=-n;const fraction=String(n%COIN).padStart(8,'0').replace(/0+$/,'');return sign+String(n/COIN)+(fraction?'.'+fraction:'');}
   // Display only: group the integer part without converting exact base units
   // to floating point. Editable amounts and transaction serialization use format.
   function formatDisplay(n){const [whole,fraction]=format(n).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(fraction?'.'+fraction:'');}
   function script(coin,address){
     if(coin==='ltc'&&typeof address==='string'&&address.toLowerCase().startsWith('ltcmweb'))throw Error('MWEB privacy addresses are not supported. Use a standard Litecoin address.');
-    if(coin==='ltc'&&typeof address==='string'&&address.toLowerCase().startsWith('ltc1'))return witnessScript(address);
+    if(['ltc','btc'].includes(coin)&&typeof address==='string'&&address.toLowerCase().startsWith(coin==='btc'?'bc1':'ltc1'))return witnessScript(address,coin);
     if(!E.NETWORKS[coin]||typeof address!=='string'||address.length<25||address.length>40)throw Error('Use a plain receiving address for the selected coin.');
     let a;try{a=U.base58.decode(address);}catch(_){throw Error('Invalid address.');}
-    if(a.length!==25||!([E.NETWORKS[coin].prefix,...(coin==='ltc'?[50,5]:[])].includes(a[0]))||hex(hash256(a.slice(0,21)).slice(0,4))!==hex(a.slice(21)))throw Error('Address checksum or coin network does not match.');
-    if(coin==='ltc'&&[50,5].includes(a[0]))return 'a914'+hex(a.slice(1,21))+'87';
+    if(a.length!==25||!([E.NETWORKS[coin].prefix,...(coin==='ltc'?[50,5]:coin==='btc'?[5]:coin==='doge'?[22]:[])].includes(a[0]))||hex(hash256(a.slice(0,21)).slice(0,4))!==hex(a.slice(21)))throw Error('Address checksum or coin network does not match.');
+    if(coin==='ltc'&&[50,5].includes(a[0])||coin==='doge'&&a[0]===22||coin==='btc'&&a[0]===5)return 'a914'+hex(a.slice(1,21))+'87';
     return '76a914'+hex(a.slice(1,21))+'88ac';
   }
   // BIP173/BIP350 decoding only: wallet-owned keys remain legacy BIP44/P2PKH.
-  function witnessScript(address){
-    if(address.length>90||address!==address.toLowerCase()&&address!==address.toUpperCase())throw Error('Invalid Litecoin SegWit address.');
-    const s=address.toLowerCase(),alphabet='qpzry9x8gf2tvdw0s3jn54khce6mua7l',words=[...s.slice(4)].map(c=>alphabet.indexOf(c));
-    if(!s.startsWith('ltc1')||words.length<7||words.includes(-1))throw Error('Invalid Litecoin SegWit address.');
-    const hrp='ltc',expanded=[...[...hrp].map(c=>c.charCodeAt(0)>>5),0,...[...hrp].map(c=>c.charCodeAt(0)&31)];
+  function witnessScript(address,coin){
+    const hrp=coin==='btc'?'bc':'ltc',name=E.NETWORKS[coin].name;
+    if(address.length>90||address!==address.toLowerCase()&&address!==address.toUpperCase())throw Error(`Invalid ${name} SegWit address.`);
+    const s=address.toLowerCase(),alphabet='qpzry9x8gf2tvdw0s3jn54khce6mua7l',words=[...s.slice(hrp.length+1)].map(c=>alphabet.indexOf(c));
+    if(!s.startsWith(hrp+'1')||words.length<7||words.includes(-1))throw Error(`Invalid ${name} SegWit address.`);
+    const expanded=[...[...hrp].map(c=>c.charCodeAt(0)>>5),0,...[...hrp].map(c=>c.charCodeAt(0)&31)];
     let chk=1;const generators=[0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3];
     for(const v of [...expanded,...words]){const top=chk>>>25;chk=((chk&0x1ffffff)<<5)^v;for(let i=0;i<5;i++)if((top>>>i)&1)chk^=generators[i];}
-    const version=words[0];if(version>16||(chk>>>0)!==(version===0?1:0x2bc830a3))throw Error('Litecoin address checksum does not match.');
+    const version=words[0];if(version>16||(chk>>>0)!==(version===0?1:0x2bc830a3))throw Error(`${name} address checksum does not match.`);
     let acc=0,bits=0;const program=[];
     for(const v of words.slice(1,-6)){acc=((acc<<5)|v)&0xfff;bits+=5;if(bits>=8){bits-=8;program.push((acc>>>bits)&255);}}
-    if(bits>=5||((acc<<(8-bits))&255)||program.length<2||program.length>40||version===0&&![20,32].includes(program.length))throw Error('Invalid Litecoin witness program.');
+    if(bits>=5||((acc<<(8-bits))&255)||program.length<2||program.length>40||version===0&&![20,32].includes(program.length))throw Error(`Invalid ${name} witness program.`);
     // Only established v0 and v1/32-byte destinations; reject future versions.
-    if(version!==0&&!(version===1&&program.length===32))throw Error('Unsupported Litecoin witness version.');
+    if(version!==0&&!(version===1&&program.length===32))throw Error(`Unsupported ${name} witness version.`);
     return hex(concat([[version===0?0:0x50+version],[program.length],program]));
   }
   const scriptHash=(coin,address)=>hex(reverse(bytes(U.sha256('0x'+script(coin,address)))));
@@ -87,12 +92,15 @@
     if(prev.hogex&&tip-u.height+1<6)throw Error('Litecoin MWEB withdrawal requires 6 confirmations.');
     return {...u,value:out.value,script:out.script};
   }
-  function plan({coin,destination,amount:requested,utxos,changeAddress,feeRate,tip,feeIncluded=false,flatFee=false}){
+  function plan({coin,destination,amount:requested,utxos,changeAddress,feeRate,tip,feeIncluded=false,flatFee=false,oneCoinFee=false}){
     const rules=policy(coin),dust=rules.dust;
+    if(typeof oneCoinFee!=='boolean'||oneCoinFee&&(!supportsOneCoinFee(coin)||flatFee||!feeIncluded||typeof feeRate!=='bigint'||feeRate<=0n))throw Error('The 1-coin fee requires an explicit PEP, DOGE, SHIC or WHT fee-inclusive review and current relay rate.');
+    const maxInputs=oneCoinFee?ONE_COIN_MAX_INPUTS:8;
+    if(!rules.flatFee&&(typeof feeRate!=='bigint'||feeRate<=0n))throw Error(`A current ${E.NETWORKS[coin].name} fee estimate is required.`);
     let value=amount(requested);const budget=value;if(value<dust)throw Error(`Enter enough to cover the fee and at least ${format(dust)} for the recipient.`);
     const destinationScript=script(coin,destination),changeScript=script(coin,changeAddress);
     let rate=integer(feeRate??rules.minRate);if(rate<rules.minRate)rate=rules.minRate;if(rate>rules.maxRate)throw Error('Network fee exceeds this development wallet’s safety limit.');
-    if(flatFee&&(!['pep','wht','shic'].includes(coin)||rate>1000000n))throw Error('The 0.01-coin flat fee does not meet the current relay requirement.');
+    if(flatFee&&(!['pep','wht','shic','doge'].includes(coin)||rate>1000000n))throw Error('The 0.01-coin flat fee does not meet the current relay requirement.');
     if(!Number.isInteger(tip)||tip<0||!Array.isArray(utxos))throw Error('A fresh chain snapshot is required.');
     const seen=new Set();const candidates=utxos.map(u=>verifyUTXO(coin,u,tip)).sort((a,b)=>a.value===b.value?a.txid.localeCompare(b.txid):a.value>b.value?-1:1);
     let total=0n,fee=0n,change=0n;const inputs=[];
@@ -100,11 +108,12 @@
       const key=u.txid+':'+u.pos;if(seen.has(key))throw Error('Duplicate transaction input.');seen.add(key);
       inputs.push(u);total+=u.value;
       const size=10+149*inputs.length+18+(destinationScript.length+changeScript.length)/2;
-      fee=coin==='ltc'?(BigInt(size)*rate+999n)/1000n:BigInt(Math.ceil(size/1000))*rate;
+      fee=!rules.flatFee?(BigInt(size)*rate+999n)/1000n:BigInt(Math.ceil(size/1000))*rate;
+      if(oneCoinFee){if(fee>COIN)throw Error('The 1-coin total fee does not cover this transaction’s relay requirement.');fee=COIN;}
       if(total>=(feeIncluded?budget:value+fee)){change=total-(feeIncluded?budget:value+fee);break;}
-      if(inputs.length>=8)break;
+      if(inputs.length>=maxInputs)break;
     }
-    if(!inputs.length||inputs.length>8||total<(feeIncluded?budget:value+fee))throw Error(`Available confirmed coins: ${format(total)}. The entered total exceeds what can be spent in this test transaction (up to 8 inputs).`);
+    if(!inputs.length||inputs.length>maxInputs||total<(feeIncluded?budget:value+fee))throw Error(`Available confirmed coins: ${format(total)}. The entered total exceeds what can be spent in this test transaction (up to ${maxInputs} inputs).`);
     if(flatFee&&fee!==1000000n)throw Error('This transaction is too large for the 0.01-coin flat fee. Use fewer inputs or a smaller total.');
     if(feeIncluded){
       value=budget-fee;
@@ -113,14 +122,15 @@
     }
     if(change<dust){fee+=change;change=0n;}
     if(flatFee&&fee!==1000000n)throw Error('Small change would increase the flat fee. Use Max instead.');
-    if(fee>rules.maxFee)throw Error(`Fee exceeds the ${format(rules.maxFee)}-coin development limit.`);
+    if(oneCoinFee&&fee!==COIN)throw Error('The reviewed 1-coin fee must not change.');
+    if(fee>(oneCoinFee?COIN:rules.maxFee))throw Error(`Fee exceeds the ${format(rules.maxFee)}-coin development limit.`);
     const outputs=[{value,script:destinationScript}];if(change)outputs.push({value:change,script:changeScript});
-    return {coin,destination,changeAddress,amount:value,fee,change,inputs,outputs,tip,feeIncluded,flatFee,budget,version:1,locktime:0,createdAt:Date.now()};
+    return {coin,destination,changeAddress,amount:value,fee,change,inputs,outputs,tip,feeIncluded,flatFee,budget,oneCoinFee,...(oneCoinFee?{feeRate:rate}:{}),version:1,locktime:0,createdAt:Date.now()};
   }
   function signWith(p,keyForInput,limits={inputs:8,bytes:10000,fee:MAX_FEE}){
-    if(p.version!==1||p.locktime!==0||p.inputs.length<1||p.inputs.length>limits.inputs||p.amount<policy(p.coin).dust||p.fee<0n||p.fee>limits.fee||p.coin==='ltc'&&p.fee>LTC_POLICY.maxFee)throw Error('Invalid send review.');
+    if(p.version!==1||p.locktime!==0||p.inputs.length<1||p.inputs.length>limits.inputs||p.amount<policy(p.coin).dust||p.fee<0n||p.fee>limits.fee||!policy(p.coin).flatFee&&p.fee>policy(p.coin).maxFee)throw Error('Invalid send review.');
     if(p.feeIncluded&&p.amount+p.fee!==p.budget)throw Error('The reviewed total changed.');
-    if(p.flatFee&&(!['pep','wht','shic'].includes(p.coin)||p.fee!==1000000n))throw Error('The reviewed flat fee changed.');
+    if(p.flatFee&&(!['pep','wht','shic','doge'].includes(p.coin)||p.fee!==1000000n))throw Error('The reviewed flat fee changed.');
     if(p.outputs.length!==(p.change?2:1)||p.outputs[0].value!==p.amount||p.outputs[0].script!==script(p.coin,p.destination)||p.change&&(p.outputs[1].value!==p.change||p.outputs[1].script!==script(p.coin,p.changeAddress)))throw Error('Send review outputs changed.');
     let total=0n;
     const seen=new Set();
@@ -144,9 +154,17 @@
     return {raw,txid:decoded.txid};
   }
   function sign(p,recipe){
+    let limits;
+    if(p.oneCoinFee){
+      if(p.oneCoinFee!==true||!supportsOneCoinFee(p.coin)||p.sweep||p.flatFee!==false||p.feeIncluded!==true||p.fee!==COIN
+        ||typeof p.feeRate!=='bigint'||p.feeRate<policy(p.coin).minRate||p.feeRate>policy(p.coin).maxRate)throw Error('Invalid 1-coin fee review.');
+      const size=10+149*p.inputs.length+18+(script(p.coin,p.destination).length+script(p.coin,p.changeAddress).length)/2;
+      if(BigInt(Math.ceil(size/1000))*p.feeRate>COIN)throw Error('The reviewed 1-coin fee does not cover the relay requirement.');
+      limits={inputs:ONE_COIN_MAX_INPUTS,bytes:10000,fee:COIN};
+    }
     const valid=E.validateRecipe(ethers,recipe),master=U.HDNode.fromMnemonic(valid.mnemonic,valid.passphrase);
     if(p.changeAddress!==E.accounts(ethers,valid,0)[p.coin].address)throw Error('Change address does not belong to this wallet.');
-    return signWith(p,u=>master.derivePath(E.NETWORKS[p.coin].path.replace('{index}',String(u.index))));
+    return signWith(p,u=>master.derivePath(E.NETWORKS[p.coin].path.replace('{index}',String(u.index))),limits);
   }
   function sweepKey(coin,wif){
     // Never include supplied text in errors, logs, storage, URLs or network calls.
@@ -171,13 +189,14 @@
   function sweepFee(size,feeRate,coin='pep'){
     if(!Number.isSafeInteger(size)||size<1||size>=SWEEP_MAX_BYTES)throw Error('Invalid sweep transaction size.');
     const rules=policy(coin);
+    if(!rules.flatFee&&(typeof feeRate!=='bigint'||feeRate<=0n))throw Error(`A current ${E.NETWORKS[coin].name} fee estimate is required.`);
     let rate=integer(feeRate??rules.minRate);if(rate<rules.minRate)rate=rules.minRate;
     if(rate>rules.maxRate)throw Error('Network fee rate exceeds the sweep safety limit.');
     // Prorate by bytes, apply the cushion once, then round up only to base units.
     // Keep the uncushioned requirement alongside it for the pre-broadcast check.
     const numerator=BigInt(size)*rate,unit=BigInt(SWEEP_FEE_POLICY.bytesPerUnit),denominator=unit*100n;
     const fee=(numerator*BigInt(100+SWEEP_FEE_POLICY.cushionPercent)+denominator-1n)/denominator;
-    if(coin==='ltc'&&fee>rules.maxFee)throw Error('Sweep fee exceeds the Litecoin safety limit.');
+    if(!rules.flatFee&&fee>rules.maxFee)throw Error(`Sweep fee exceeds the ${E.NETWORKS[coin].name} safety limit.`);
     return {rate,requiredFee:(numerator+unit-1n)/unit,fee};
   }
   function sweepPlan({coin,destination,utxos,tip,feeRate,compressed=true}){
@@ -196,12 +215,12 @@
     return {coin,destination,changeAddress:destination,amount:value,fee,change:0n,inputs,outputs:[{value,script:destinationScript}],tip,feeIncluded:true,flatFee:false,budget:total,version:1,locktime:0,createdAt:Date.now(),sweep:true,compressed,feeRate:rate,estimatedBytes};
   }
   function signSweep(p,key,recipe,destinationIndex){
-    if(!Number.isInteger(destinationIndex)||destinationIndex<0||destinationIndex>=200||key.coin!==p.coin||p.change!==0n||p.outputs.length!==1||p.flatFee!==false||p.feeIncluded!==true||p.sweep!==true||p.compressed!==key.compressed)throw Error('Invalid sweep review.');
+    if(p.oneCoinFee||!Number.isInteger(destinationIndex)||destinationIndex<0||destinationIndex>=200||key.coin!==p.coin||p.change!==0n||p.outputs.length!==1||p.flatFee!==false||p.feeIncluded!==true||p.sweep!==true||p.compressed!==key.compressed)throw Error('Invalid sweep review.');
     const size=sweepSize(p.inputs.length,key.compressed),{fee}=sweepFee(size,p.feeRate,p.coin);
     if(p.estimatedBytes!==size||p.fee!==fee)throw Error('The reviewed sweep size or fee changed.');
     const owned=E.accounts(ethers,recipe,destinationIndex)[p.coin].address;
     if(p.destination!==owned||p.changeAddress!==owned||key.address===owned)throw Error('Sweep destination must be a different address in your wallet.');
     return signWith(p,()=>key,{inputs:p.inputs.length,bytes:size,fee});
   }
-  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,SWEEP_FEE_POLICY,policy,amount,format,formatDisplay,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
+  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,ONE_COIN_MAX_INPUTS,supportsOneCoinFee,SWEEP_FEE_POLICY,policy,amount,format,formatDisplay,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
 });

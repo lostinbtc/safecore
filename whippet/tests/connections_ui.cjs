@@ -25,6 +25,20 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
  const key='corevault.connections.v1',pep=p.locator('#endpoint-pep'),use=p.locator('[data-use-connection="pep"]'),test=p.locator('[data-test-connection="pep"]');
  const stored=await p.evaluate(()=>localStorage.getItem('whippet.dev.encrypted.v1'));
  await p.locator('#custom-connections > summary').click();assert.equal(await use.isDisabled(),true);
+ for(const theme of ['dark','light'])for(const width of [320,390,430]){
+  await p.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await p.setViewportSize({width,height:844});
+  for(const field of await p.locator('.connection-form > input').all()){
+   assert.equal((await field.boundingBox()).height,44);
+   assert.deepEqual(await field.evaluate(el=>{const s=getComputedStyle(el);return [s.backgroundColor,s.borderTopWidth,s.borderBottomWidth,s.borderRadius];}),['rgba(0, 0, 0, 0)','0px','1px','0px']);
+  }
+  for(const button of await p.locator('.connection-actions button').all()){
+   await button.hover();assert.deepEqual(await button.evaluate(el=>{const s=getComputedStyle(el);return [s.backgroundColor,s.borderTopWidth,s.textDecorationLine];}),['rgba(0, 0, 0, 0)','0px','none']);
+   assert.ok((await button.boundingBox()).height>=44);
+  }
+  assert.equal(await use.evaluate(el=>getComputedStyle(el).animationName),'none','Untested endpoint remains disabled without a glow');
+  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ }
+ await p.evaluate(()=>document.documentElement.dataset.theme='dark');await p.setViewportSize({width:390,height:844});
  const checkDefaults=async()=>{
   for(const coin of ['pep','wht','shic']){
    assert.equal(await p.locator('#endpoint-'+coin).inputValue(),'','Built-in addresses are not prefilled');

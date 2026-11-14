@@ -43,7 +43,8 @@ const store = 'whippet.dev.encrypted.v1';
     await page.locator('#recovery-words').waitFor();
     assert.equal(await page.locator('.word').count(),12);
     assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('corevault.wallets.v1')).wallets.length),2);
-    // Switching directly to Receive must work without Continue/save confirmation.
+    // New wallets start empty; explicitly choose Pepecoin before receiving.
+    await require('./coin-selection-helper.cjs')(page,['pep']);
     await page.locator('[data-nav="receive"]').click();
     await page.locator('#receive-coin').click();await page.locator('[data-coin="pep"]').click();
     await page.locator('#address').waitFor();
@@ -68,6 +69,7 @@ const store = 'whippet.dev.encrypted.v1';
     assert.equal(await page.locator('#ack').count(),0);
     await page.locator('#submit-setup').click();
     await page.waitForFunction(() => document.documentElement.dataset.walletState === 'unlocked');
+    await require('./coin-selection-helper.cjs')(page,['pep','wht']);
     await page.locator('[data-nav="receive"]').click();await page.locator('#receive-coin').click();await page.locator('[data-coin="wht"]').click();
     assert.equal(await page.locator('#address').textContent(),original.wallets[0].address);
     await page.locator('#receive-coin').click(); await page.locator('[data-coin="pep"]').click();

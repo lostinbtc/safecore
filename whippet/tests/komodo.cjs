@@ -19,6 +19,10 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
    assert.equal(key.privateKey.slice(2),digest.toString('hex'));assert.equal(key.publicKey.slice(2),ec.getPublicKey('hex','compressed'));
    const hash160=crypto.createHash('ripemd160').update(crypto.createHash('sha256').update(ec.getPublicKey(null,'compressed')).digest()).digest();
    assert.equal(T.script('pep',key.address),'76a914'+hash160.toString('hex')+'88ac');
+   const shic=K.key(phrase,fingerprint,'shic');
+   assert.equal(shic.coin,'shic');assert.equal(shic.privateKey,key.privateKey);assert.notEqual(shic.address,key.address);
+   const decoded=ethers.utils.base58.decode(shic.address);assert.equal(decoded[0],63);
+   assert.equal(T.script('shic',shic.address),'76a914'+hash160.toString('hex')+'88ac');
   }
   assert.equal(K.key('  '+old+'\n',fingerprint).address,K.key(old,fingerprint).address);
   assert.notEqual(K.key(old.replace(' ','  '),fingerprint).address,K.key(old,fingerprint).address);
@@ -26,6 +30,8 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
   for(const reused of [current,current.toUpperCase(),current.replaceAll(' ','  ')])assert.throws(()=>K.key(reused,fingerprint),/Do not reuse/);
   for(const bad of ['',old.split(' ').slice(1).join(' '),'x'.repeat(2049),null])assert.throws(()=>K.key(bad,fingerprint));
   assert.throws(()=>K.key(old,''),/Open your destination wallet/);
+  for(const coin of ['ltc','wht','doge','kmd',null])assert.throws(()=>K.key(old,fingerprint,coin),/only PEP and SHIC/);
+  for(const reused of [current,current.toUpperCase(),current.replaceAll(' ','  ')])assert.throws(()=>K.key(reused,fingerprint,'shic'),/Do not reuse/);
  }
  await assert.rejects(()=>K.verifyDestination(crypto.webcrypto,encrypted,'Wrong-fixture-password',current,recipe.passphrase),/Incorrect password/);
  const normal=R.create(ethers),legacy=R.create(ethers,{mode:'komodo'}),invalidChecksum=Array(12).fill('abandon').join(' ');

@@ -3,7 +3,7 @@
 body { margin: 0; }
 main { max-width: 940px; margin: 0 auto; padding: 42px 22px; }
 header { display: flex; gap: 22px; align-items: center; margin-bottom: 30px; }
-.mark { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border: 1px solid #245675; border-radius: 12px; background: #101e31; color: #53c4f3; font-size: 28px; font-weight: 750; }
+.mark { display: block; flex: 0 0 48px; width: 48px; height: 48px; object-fit: contain; }
 h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 2px 0 8px; letter-spacing: -.035em; }
 h2 { margin: 0 0 12px; font-size: 1.3rem; }
 p { line-height: 1.6; margin: 10px 0; }

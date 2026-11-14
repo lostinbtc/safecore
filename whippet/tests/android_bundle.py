@@ -10,6 +10,9 @@ preview = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preview)
 apk = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'android/app/build/outputs/apk/liveTest/app-liveTest.apk'
 assert (root / 'www/assets/safecore.LICENSE').read_bytes() == (root.parent / 'LICENSE').read_bytes(), 'Stale first-party MIT notice'
+brand = (root / 'www/assets/safecore.png').read_bytes()
+assert (root / 'android/app/src/main/res/drawable-nodpi/safecore_logo.png').read_bytes() == brand, 'Stale Android brand artwork'
+assert (root.parent / 'recovery/assets/safecore.png').read_bytes() == brand, 'Stale offline-tool brand artwork'
 with zipfile.ZipFile(apk) as package:
     expected = {'assets/wallet/' + name for name in preview.FILES}
     assets = {name for name in package.namelist() if name.startswith('assets/') and not name.endswith('/')}

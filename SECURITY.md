@@ -42,6 +42,26 @@ extension data by Core's definition; only hash-bound transparent outputs are use
 This does not implement or validate private MWEB transfers. Existing encrypted
 storage and device-authentication boundaries remain unchanged.
 
+The local BTC integration keeps legacy P2PKH keys and verifies raw prevouts,
+coin-specific genesis and receiving scripts before spending. Six-block fee
+estimates are bounded, unavailable estimates block spending without hiding
+balances, and review/signing never uses floating-point amounts. Ordinary sends
+use size-based fees; sweeps retain their fee-rise recheck. BIP49/84/86 discovery,
+RBF/CPFP, Ordinal/token preservation and general Electrum seed import are not
+implemented. Test with expendable amounts; this is not an independent audit.
+
+The local DOGE integration uses an external, genesis-pinned WSS server and the
+same display-only CoinGecko request as SHIC/LTC. Normal receiving uses BIP44 coin
+type 3; old SafeCore backups derive this fixed path without changing existing
+addresses. PEP/WHT/SHIC/DOGE share WIF prefixes: the user must select the correct
+coin, because a valid WIF does not identify its chain.
+
+Legacy Komodo recovery supports PEP and SHIC, never BTC/DOGE/LTC/WHT/KMD or HD accounts.
+It derives one legacy key locally and sweeps only the selected asset. Session
+authorization is bound to the selected coin, wallet and connection epoch. Old
+phrases are not persisted or transmitted; existing password, review expiry,
+source revalidation and uncertain-broadcast guards remain mandatory.
+
 Password protection is optional. In this source version, Android encrypts all saved
 wallet records using AES-256-GCM and a non-exportable Android Keystore key, even
 without a wallet password starting in test.17. Browsers still store password-free recipes in plaintext, and
@@ -67,6 +87,11 @@ Screenshot blocking defaults on; the local Android settings control can allow
 captures after confirmation. Neither screenshot blocking nor hidden balances is
 a substitute for encryption. Uninstalling may
 erase the only local copy; use an independent recovery backup first.
+New-wallet setup offers an optional password-encrypted local document that normally
+survives uninstall. It is not silent seed retention: the user must choose a local
+destination and retain its separate password. App-private keys and remembered
+locations are still removed on uninstall; device loss/reset can also remove the
+document. No automatic cloud backup or plaintext recovery copy is enabled.
 
 The prerelease APK uses a development signing identity, not a production release
 key. Check release hashes and the signing-certificate fingerprint before install.

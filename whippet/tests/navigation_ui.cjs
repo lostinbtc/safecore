@@ -10,6 +10,14 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
    await p.setViewportSize({width,height:844});
    const nav=await p.locator('.bottom-navigation').evaluate(el=>{const s=getComputedStyle(el);return [s.backgroundColor,s.borderTopWidth,s.backdropFilter,s.pointerEvents];});
    assert.deepEqual(nav,['rgba(0, 0, 0, 0)','0px','none','none']);
+   const backdrop=await p.locator('.bottom-navigation').evaluate(el=>{const s=getComputedStyle(el,'::before');return {image:s.backgroundImage,color:s.backgroundColor,top:s.top,pointer:s.pointerEvents,z:s.zIndex};});
+   if(theme==='dark'){
+    assert.ok(backdrop.image.startsWith('linear-gradient(')&&backdrop.image.includes('13, 24, 38'),'Dark-mode gradient unchanged');assert.equal(backdrop.top,'-18px');
+   }else{
+    assert.equal(backdrop.image,'none');assert.equal(backdrop.top,'0px');
+    assert.equal(backdrop.color,await p.locator('.topbar').evaluate(el=>getComputedStyle(el).backgroundColor),'Light-mode navigation matches dark header');
+   }
+   assert.equal(backdrop.pointer,'none');assert.equal(backdrop.z,'-1');
    const links=await p.locator('.bottom-navigation a').evaluateAll(els=>els.map(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return {x:r.x,right:r.right,y:r.y,bottom:r.bottom,width:r.width,height:r.height,pointer:s.pointerEvents};}));
    assert.equal(links.length,5);for(let i=0;i<links.length;i++){assert.ok(links[i].width>=44&&links[i].height>=44);assert.equal(links[i].pointer,'auto');assert.ok(links[i].bottom<=844-7);if(i)assert.ok(links[i].x-links[i-1].right>=7);}
    assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -27,5 +35,5 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
   }
   await p.screenshot({path:`/tmp/safecore-floating-nav-${theme}.png`});
  }
- assert.deepEqual(errors,[]);console.log('PASS: bubble-free navigation including hover, transparent gaps, active icon/text glow, all routes, dark/light and 320–1280px layouts.');
+ assert.deepEqual(errors,[]);console.log('PASS: bubble-free navigation including hover, soft theme-aware backdrop, active icon/text glow, all routes, dark/light and 320–1280px layouts.');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

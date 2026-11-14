@@ -22,7 +22,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
    }});
   },{vault:E.unprotected(webcrypto,recipe),fixtures});
   const p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto('http://localhost:8787/');
-  for(const coin of ['pep','wht','shic']){
+  for(const coin of ['pep','wht','shic','doge']){
    await p.locator('[data-nav=send]').click();await p.locator('#send-coin').click();await p.locator(`[data-send-coin=${coin}]`).click();
    await p.locator('#send-address').fill(E.accounts(ethers,recipe,1)[coin].address);await p.locator('#send-max').click();
    assert.equal(await p.locator('#send-amount').inputValue(),'950');
@@ -37,6 +37,6 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
    assert.equal(await p.evaluate(coin=>WalletNetwork.endpoint(coin),coin),'wss://selected.example/');
    await p.locator('[data-nav=wallet]').click();
   }
-  assert.deepEqual(errors,[]);console.log('PASS: PEP/WHT/SHIC Max, recipient/fee conservation, endpoint-change review invalidation and no broadcasts.');
+  assert.deepEqual(errors,[]);console.log('PASS: PEP/WHT/SHIC/DOGE Max, recipient/fee conservation, endpoint-change review invalidation and no broadcasts.');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
