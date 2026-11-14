@@ -1,16 +1,18 @@
 {
-  "tag": "v0.1.0-test.19",
-  "filename": "SafeCore-0.1.0-test.19.apk",
-  "artifact_commit": "8a109210c6ac6dfc0d153d7b88d41cc9085b6b92",
-  "sha256": "425823935ff1672daab7f3b2ba8dbe03251231d6fe27835f5d5444b403e49dab",
+  "tag": "v0.1.0-test.20",
+  "filename": "SafeCore-0.1.0-test.20.apk",
+  "artifact_commit": "e7ac012e99493ea654115f84e0c5d73aed8f2c69",
+  "sha256": "9e33ec75c76412bd4fad41dac7755fc3b24cc06346925c38722b693f1a64e0cc",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
-  "version_code": 19,
+  "version_code": 20,
   "changes": [
-    "Litecoin (LTC) receiving, sending and private-key sweeps with LTC-specific size-based fees.",
-    "Live LTC price estimates included in the USDT wallet value alongside SHIC and PEP.",
-    "Offline LTC recovery with wallet-compatible JSON, WIF, TXT and CSV exports; existing backups remain compatible.",
-    "Consistent coin order: Pepecoin, Litecoin, Shibacoin, then Whippet; existing addresses and protection settings preserved.",
-    "Standard Litecoin only: no MWEB privacy addresses or BIP49/BIP84 account discovery. Automated checks passed; real LTC receive/send testing remains pending."
+    "Bitcoin and Dogecoin support across the wallet and offline recovery tool; legacy Komodo recovery extended to SHIC (PEP/SHIC only).",
+    "Automatic, read-only BTC/LTC fees based on transaction size, including inputs and outputs; fresh USD pricing, warnings above $5 and a hard block above $100 with no override.",
+    "Optional 1-coin total fee for PEP/DOGE/SHIC/WHT and improved handling of wallets with many outputs; transaction input limits and explicit confirmation remain in place.",
+    "Verified backup servers where available, automatic connection retries and authenticated public-address caching for faster Receive loading.",
+    "Optional password-encrypted local recovery copies, manual restore after reinstall, and no coins enabled by default on new wallets; existing backups and selections remain compatible.",
+    "Refreshed branding, compact screens and controls, soft button glow, improved light mode, activity pagination and explorer links, and a 2.3-second splash screen.",
+    "Clearer README and fee/recovery documentation, expanded automated coverage and independent Bitcoin Core regtest verification using disposable coins; no real BTC test or independent security audit."
   ]
 }
