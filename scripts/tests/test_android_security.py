@@ -1,8 +1,17 @@
 import unittest
-from scripts.android_security import require_owned, require_pass
+import socket
+from scripts.android_security import require_owned, require_pass, require_free_port
 
 
 class AndroidSecurityRunnerTests(unittest.TestCase):
+    def test_active_listener_cannot_be_reused(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            with self.assertRaises(OSError):
+                require_free_port(listener.getsockname()[1])
+
     def test_requires_exact_test_count(self):
         require_pass('INSTRUMENTATION_STATUS_CODE: 0\nOK (3 tests)\n', 3)
         require_pass('OK (1 test)\n', 1)

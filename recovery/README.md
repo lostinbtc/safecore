@@ -1,6 +1,6 @@
-# Offline Pepecoin, Whippet, Shibacoin and Litecoin recovery
+# Offline Pepecoin, Bitcoin, Dogecoin, Litecoin, Shibacoin and Whippet recovery
 
-Generate or recover Pepecoin, Whippet, Shibacoin or Litecoin addresses and their matching private keys entirely
+Generate or recover Pepecoin, Bitcoin, Dogecoin, Litecoin, Shibacoin or Whippet addresses and their matching private keys entirely
 inside your browser. The folder is self-contained: it needs no server, package
 installation, blockchain connection, or internet access.
 
@@ -8,7 +8,7 @@ installation, blockchain connection, or internet access.
 
 1. Download this repository as a ZIP and extract it.
 2. Open `recovery/index.html` in a current Chrome, Edge, or Firefox browser.
-3. Choose **Pepecoin**, **Litecoin (LTC)**, **Shibacoin (SHIC)** or **Whippet**, then generate a new phrase, enter an existing English BIP39 phrase, or choose
+3. Choose **Pepecoin**, **Bitcoin (BTC)**, **Dogecoin (DOGE)**, **Litecoin (LTC)**, **Shibacoin (SHIC)** or **Whippet**, then generate a new phrase, enter an existing English BIP39 phrase, or choose
    **Import wallet JSON**.
 4. Select an address count and derive the keys for that asset. The default is **200**, with a
    supported range of **1–1,000**.
@@ -69,7 +69,17 @@ encrypted-export screens with all 1,000 Whippet addresses matching afterward.
 - Shibacoin P2PKH version: 63 (`0x3f`); script version: 22 (`0x16`).
 - Litecoin path: `m/44'/2'/0'/0/index`, starting at index 0 (legacy P2PKH).
 - Litecoin P2PKH version: 48 (`0x30`); script version: 50 (`0x32`).
-- WIF version: 158 (`0x9e`) for PEP/WHT/SHIC; 176 (`0xb0`) for LTC, with compressed public keys.
+- WIF version: 158 (`0x9e`) for PEP/WHT/SHIC/DOGE; 176 (`0xb0`) for LTC; 128 (`0x80`) for BTC, with compressed public keys.
+
+Bitcoin uses path `m/44'/0'/0'/0/index`, P2PKH version 0 and WIF version 128.
+This is account 0's external legacy branch only: it does not discover BIP49,
+BIP84, BIP86, separate change branches or Electrum-specific seeds. Restore the
+SafeCore backup using the same optional BIP39 passphrase. Existing asset paths
+are unchanged. Komodo recovery remains a PEP/SHIC-only wallet sweep, not this tool.
+
+Dogecoin uses path `m/44'/3'/0'/0/index`, P2PKH version 30 (`0x1e`), P2SH
+version 22 (`0x16`), and `dogecoin-seed-v1` generator bundles. Older SafeCore
+backups without `paths.doge` derive this fixed path; other explicit paths are rejected.
 
 Litecoin backups use `litecoin-seed-v1` generator bundles and the existing SafeCore
 wallet JSON formats. Older SafeCore recipes without `paths.ltc` derive the fixed
@@ -120,7 +130,7 @@ and Playwright Chromium (`npm ci`, then `npx playwright install chromium`):
 node recovery/ui-tests.cjs
 ```
 
-The checks use a published BIP39 test vector for all four assets. They cover the 200/1,000 address
+The checks use a published BIP39 test vector for all six assets. They cover the 200/1,000 address
 bounds, exact key pairs, wallet-compatible JSON, encrypted wallet import,
 wrong-password rejection, TXT/CSV exports and cancellation. No funded wallet
 or network connection is used.

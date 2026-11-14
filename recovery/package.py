@@ -6,7 +6,7 @@ import zipfile
 
 FILES = ('index.html', 'app.js', 'wallet.js', 'wallet-format.js', 'formats.js',
          'recovery.js', 'styles.css', 'assets/ethers.umd.min.js',
-         'assets/ethers.LICENSE', 'README.md')
+         'assets/ethers.LICENSE', 'assets/safecore.png', 'README.md')
 
 
 def main():

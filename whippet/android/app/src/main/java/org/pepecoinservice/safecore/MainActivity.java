@@ -46,6 +46,7 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private boolean importPending;
     private String exportData;
+    private boolean exportLocalRecovery;
     private JavaScriptReplyProxy exportReply;
     private long exportId;
     private boolean foreground;
@@ -221,9 +222,14 @@ public final class MainActivity extends Activity {
             && resources.length == 1 && PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resources[0]);
     }
     static boolean transactionPage(Uri uri) {
-        return uri != null && "https".equals(uri.getScheme()) && "pepecoinservice.org".equals(uri.getHost())
-            && uri.getPort() == -1 && uri.getUserInfo() == null && uri.getQuery() == null && uri.getFragment() == null
-            && uri.getEncodedPath() != null && uri.getEncodedPath().matches("/explorer/tx/[0-9a-f]{64}/");
+        if(uri == null || !"https".equals(uri.getScheme()) || uri.getPort() != -1
+            || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
+            || uri.getEncodedPath() == null)return false;
+        String host=uri.getHost(),path=uri.getEncodedPath();
+        if("pepecoinservice.org".equals(host))return path.matches("/explorer/tx/[0-9a-f]{64}/");
+        return ("mempool.space".equals(host) || "dogechain.com".equals(host)
+            || "litecoinspace.org".equals(host) || "explorer.shibacoinshic.org".equals(host))
+            && path.matches("/tx/[0-9a-f]{64}");
     }
     private boolean cameraPage() {
         if(web == null || web.getUrl() == null)return false;
@@ -241,7 +247,7 @@ public final class MainActivity extends Activity {
         return ("api.kraken.com".equals(uri.getHost()) && "/0/public/Ticker".equals(uri.getEncodedPath())
             && "pair=PEPUSD,USDTUSD".equals(uri.getEncodedQuery()))
             || ("api.coingecko.com".equals(uri.getHost()) && "/api/v3/simple/price".equals(uri.getEncodedPath())
-            && "ids=shibacoin,litecoin&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
+            && "ids=shibacoin,litecoin,dogecoin,bitcoin&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
     }
     private void denyCamera() {
         PermissionRequest request=cameraRequest;cameraRequest=null;cameraPrompt=false;cameraResultReady=false;
@@ -453,15 +459,17 @@ public final class MainActivity extends Activity {
                             screenProtectionDialog.setOnDismissListener(d->screenProtectionDialog=null);
                             screenProtectionDialog.show();
                         }
-                    } else if (action.equals("exportBackup")) {
+                    } else if (action.equals("exportBackup") || action.equals("exportRecoveryCopy")) {
                         if (exportData != null || value.length() > 65536 || value.isEmpty()) throw new IllegalArgumentException();
+                        final boolean localRecovery=action.equals("exportRecoveryCopy");
+                        if(localRecovery)LocalRecoveryCopy.validate(value);
                         final long requestId=id;
                         if(deviceAuthEnabled)authenticate("Export wallet backup",()->walletIO.execute(()->{
                             try {new DeviceWalletStore(this).read();}
                             catch(Exception e){runOnUiThread(()->respond(reply,requestId,false,"Wallet storage could not be unlocked."));return;}
-                            runOnUiThread(()->{if(foreground&&view==web)beginNativeExport(value,reply,requestId);});
+                            runOnUiThread(()->{if(foreground&&view==web)beginNativeExport(value,reply,requestId,localRecovery);});
                         }),()->authenticationCancelled(reply,requestId));
-                        else beginNativeExport(value,reply,id);
+                        else beginNativeExport(value,reply,id,localRecovery);
                     } else respond(reply,id,false,"Unsupported Android action.");
                 } catch (Exception e) { respond(reply,id,false,"Android action could not be completed."); }
             });
@@ -475,9 +483,14 @@ public final class MainActivity extends Activity {
         notice.setText("Update Android System WebView / Chrome, then reopen SafeCore. This WebView lacks required wallet security features.");
         notice.setTextColor(Color.WHITE); notice.setPadding(24,48,24,24); setContentView(notice);
     }
-    private void beginNativeExport(String value,JavaScriptReplyProxy reply,long id) {
+    private void beginNativeExport(String value,JavaScriptReplyProxy reply,long id,boolean localRecovery) {
         if(exportData!=null){respond(reply,id,false,"A backup export is already open.");return;}
-        exportData=value;exportReply=reply;exportId=id;
+        exportData=value;exportReply=reply;exportId=id;exportLocalRecovery=localRecovery;
+        if(localRecovery){
+            try {startActivityForResult(LocalRecoveryCopy.picker(this),EXPORT);}
+            catch(Exception e){finishExport(false,"Could not open the local file picker.");}
+            return;
+        }
         new AlertDialog.Builder(this).setTitle("Save wallet backup?")
             .setMessage("This file may contain an unencrypted recovery phrase. Choose a private location; avoid shared or cloud folders.")
             .setPositiveButton("Choose location",(d,w)->{
@@ -493,8 +506,9 @@ public final class MainActivity extends Activity {
     }
     private void finishExport(boolean ok, String error) {
         if(exportReply != null) respond(exportReply, exportId, ok, error);
-        exportData = null; exportReply = null; exportId = 0;
-        Toast.makeText(this, ok ? "Backup saved. Keep it private." : error, Toast.LENGTH_SHORT).show();
+        String success=exportLocalRecovery?"Encrypted recovery copy saved. Keep its password safe.":"Backup saved. Keep it private.";
+        exportData = null; exportReply = null; exportId = 0; exportLocalRecovery=false;
+        Toast.makeText(this, ok ? success : error, Toast.LENGTH_SHORT).show();
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
@@ -521,6 +535,14 @@ public final class MainActivity extends Activity {
         if(request == EXPORT && exportData != null) {
             Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
             if(uri == null || !"content".equals(uri.getScheme())) { finishExport(false,"Backup cancelled."); return; }
+            if(exportLocalRecovery){
+                final String encrypted=exportData;
+                walletIO.execute(()->{
+                    try {LocalRecoveryCopy.save(this,uri,encrypted);runOnUiThread(()->finishExport(true,""));}
+                    catch(Exception e){runOnUiThread(()->finishExport(false,"Recovery copy was not saved. Choose a local device folder and retry to a new file."));}
+                });
+                return;
+            }
             try(OutputStream out = getContentResolver().openOutputStream(uri,"wt")) {
                 if(out == null) throw new IllegalStateException();
                 out.write(exportData.getBytes(StandardCharsets.UTF_8)); out.flush();
@@ -611,7 +633,7 @@ public final class MainActivity extends Activity {
         if(screenProtectionDialog!=null)screenProtectionDialog.cancel();
         denyCamera();
         if(fileCallback != null) fileCallback.onReceiveValue(null);
-        exportData = null; exportReply = null; importedBackup = null;
+        exportData = null; exportReply = null; exportLocalRecovery=false; importedBackup = null;
         if(web != null) { web.stopLoading(); web.destroy(); web = null; }
         super.onDestroy();
     }

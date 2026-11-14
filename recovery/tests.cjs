@@ -76,7 +76,17 @@ async function main() {
     const bad=structuredClone(pepSmall);mutate(bad);
     assert.throws(()=>generator.restore(ethers,bad));await assert.rejects(generator.restoreAsync(ethers,bad));
   }
-  assert.throws(()=>generator.derive(ethers,phrase,{coin:'btc'}),/Choose/);
+  for (const coin of ['pep','doge','ltc','shic','wht','btc']) {
+    const sample=generator.derive(ethers,phrase,{coin,count:3,passphrase:'TREZOR'});
+    for (const [index,row] of sample.wallets.entries()) {
+      assert.equal(row.address,walletEngine.accounts(ethers,recipe,index)[coin].address);
+    }
+    assert.deepEqual(generator.restore(ethers,sample),sample);
+    assert.deepEqual(await generator.restoreAsync(ethers,sample),sample);
+    assert.deepEqual(await formats.importJSON(ethers,generator,backupEngine,crypto.webcrypto,native,
+      {coin,count:3,password}),sample);
+  }
+  assert.throws(()=>generator.derive(ethers,phrase,{coin:'unsupported'}),/Choose/);
   assert.equal(formats.exportText(pep).trim().split('\n').length,1000);
   assert.ok(formats.exportAddressText(pep).includes(pep.wallets[999].path));
   assert.ok(formats.exportCSV(pep).includes(pep.wallets[999].address));
@@ -96,6 +106,6 @@ async function main() {
     assert.ok(fs.existsSync(path.join(__dirname, match[1].split('?')[0])), 'Missing local asset');
   }
   console.log('PASS: 200 default, 1000 keys, independent WIF/public-key checks, and wallet JSON compatibility.');
-  console.log('PASS: native encrypted import, legacy JSON, all text/CSV exports, cancellation and offline assets.');
+  console.log('PASS: all six coins, native encrypted import, legacy JSON, all text/CSV exports, cancellation and offline assets.');
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -27,8 +27,8 @@
   }
   // Display estimates only; never used for coin amounts or transaction signing.
   // Keep the total, each holding and unit price on the same USDT conversion.
-  function valueInUsdt(coin,amount,pepUsd,usdtUsd,shicUsd=null,ltcUsd=null){
-    const usd=coin==='pep'?pepUsd:coin==='shic'?shicUsd:coin==='ltc'?ltcUsd:null;
+  function valueInUsdt(coin,amount,pepUsd,usdtUsd,shicUsd=null,ltcUsd=null,dogeUsd=null,btcUsd=null){
+    const usd=coin==='pep'?pepUsd:coin==='shic'?shicUsd:coin==='ltc'?ltcUsd:coin==='doge'?dogeUsd:coin==='btc'?btcUsd:null;
     if(!Number.isFinite(usd)||usd<=0||!Number.isFinite(usdtUsd)||usdtUsd<=0)return null;
     const value=Number(amount)/1e8*usd/usdtUsd;
     return Number.isFinite(value)?value:null;
@@ -40,7 +40,7 @@
   }
   // Include all known coin balances for this wallet, not the selected coin.
   // Unknown positive holdings are not assigned a fabricated zero price.
-  function worth(snapshots,pepUsd,usdtUsd,shicUsd=null,ltcUsd=null){
+  function worth(snapshots,pepUsd,usdtUsd,shicUsd=null,ltcUsd=null,dogeUsd=null,btcUsd=null){
     let total=0,priced=false,incomplete=false,positive=false;
     for(const coin of new Set(['pep','wht',...Object.keys(snapshots)])){
       const s=snapshots[coin];
@@ -48,14 +48,14 @@
       const amount=s.confirmed+s.unconfirmed;
       if(amount<=0n)continue;
       positive=true;
-      const value=valueInUsdt(coin,amount,pepUsd,usdtUsd,shicUsd,ltcUsd);
+      const value=valueInUsdt(coin,amount,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd);
       if(value!==null){total+=value;priced=true;}
       else incomplete=true;
     }
     return {value:priced||(!positive&&!incomplete)?total:null,incomplete};
   }
   function marketQuote(data,id,now=Date.now()){
-    if(!['shibacoin','litecoin'].includes(id))throw Error('Unsupported price asset');
+    if(!['shibacoin','litecoin','dogecoin','bitcoin'].includes(id))throw Error('Unsupported price asset');
     const q=data?.[id],updated=q?.last_updated_at*1000;
     if(typeof q?.usd!=='number'||!Number.isFinite(q.usd)||q.usd<=0
       ||!Number.isSafeInteger(q?.last_updated_at)||updated>now+30000||now-updated>600000)throw Error('Price unavailable');
@@ -63,6 +63,8 @@
   }
   const shicQuote=(data,now=Date.now())=>marketQuote(data,'shibacoin',now);
   const ltcQuote=(data,now=Date.now())=>marketQuote(data,'litecoin',now);
+  const dogeQuote=(data,now=Date.now())=>marketQuote(data,'dogecoin',now);
   const freshShic=(quote,now=Date.now())=>!!quote&&now-quote.at<300000&&now-quote.updated<=600000&&quote.updated<=now+30000;
-  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,formatWorth,shicQuote,ltcQuote,freshShic};
+  const btcQuote=(data,now=Date.now())=>marketQuote(data,'bitcoin',now);
+  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,formatWorth,shicQuote,ltcQuote,dogeQuote,btcQuote,freshShic};
 });

@@ -3,35 +3,35 @@ const assert=require('node:assert/strict'),{webcrypto}=require('node:crypto'),{c
 const E=require('../www/engine.js'),K=require('../www/komodo.js'),T=require('../www/transactions.js'),ethers=require('../www/assets/ethers.umd.min.js');
 const phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const old='legal winner thank year wave sausage worth useful legal winner thank yellow';
-(async()=>{const browser=await chromium.launch();try{for(const scenario of ['send','protected','pinned','reuse','disable','cancel','expiry','review-expiry','background']){
- console.log('Komodo UI:',scenario);
+(async()=>{const browser=await chromium.launch();try{for(const asset of ['pep','shic'])for(const scenario of ['send','protected','pinned','reuse','disable','cancel','expiry','review-expiry','background']){
+ console.log('Komodo UI:',asset,scenario);
  const password='Disposable-test-password',extra=scenario==='protected'?'extra fixture phrase':'',recipe=E.recipe(ethers,phrase,extra);
  const vault=scenario==='protected'?await E.encrypt(webcrypto,recipe,password):E.unprotected(webcrypto,recipe);
- const fingerprint=await K.verifyDestination(webcrypto,vault,password,phrase,extra),key=K.key(old,fingerprint);
- const funding={version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:'',sequence:0xffffffff}],outputs:Array.from({length:2},()=>({value:300000000n,script:T.script('pep',key.address)})),locktime:0};
+ const fingerprint=await K.verifyDestination(webcrypto,vault,password,phrase,extra),key=K.key(old,fingerprint,asset);
+ const funding={version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:'',sequence:0xffffffff}],outputs:Array.from({length:2},()=>({value:300000000n,script:T.script(asset,key.address)})),locktime:0};
  const raw=ethers.utils.hexlify(T.serialize(funding)).slice(2),txid=T.parse(raw).txid;
  const c=await browser.newContext({viewport:{width:390,height:844}}),p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
- await c.addInitScript(({vault,raw,txid,address})=>{
+ await c.addInitScript(({vault,raw,txid,address,asset})=>{
   if(!localStorage.getItem('whippet.dev.encrypted.v1'))localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(vault));
   window.fetch=async()=>new Response(JSON.stringify({error:[],result:{}}));window.WebSocket=class{constructor(){throw Error('No real network in recovery tests');}};
   window.__sent=[];window.__source=[];window.__confirmed=false;window.__holdSource=false;
   Object.defineProperty(window,'WalletNetwork',{configurable:true,set(N){Object.defineProperty(window,'WalletNetwork',{value:N});
    N.scan=async(coin,accounts)=>({coin,tip:500,at:Date.now(),everUsed:[0],confirmed:0n,unconfirmed:0n,feeRate:1000000n,rows:accounts.map(account=>({account,checked:true,confirmed:0n,unconfirmed:0n,history:account.index?[]:[{tx_hash:txid,height:499}],utxos:[]}))});
-   N.sweepSource=async(coin,source)=>{if(coin!=='pep'||source!==address)throw Error('Wrong Komodo source');__source.push({coin,source});if(__holdSource)await new Promise(resolve=>window.__finishSource=resolve);return {snapshot:{tip:500,feeRate:1000000n},utxos:[0,1].map(pos=>({index:0,address,txid,pos,height:499,value:300000000n,raw}))};};
+   N.sweepSource=async(coin,source)=>{if(coin!==asset||source!==address)throw Error('Wrong Komodo source');__source.push({coin,source});if(__holdSource)await new Promise(resolve=>window.__finishSource=resolve);return {snapshot:{tip:500,feeRate:1000000n},utxos:[0,1].map(pos=>({index:0,address,txid,pos,height:499,value:300000000n,raw}))};};
    N.checkInputs=async()=>{};N.confirmation=async()=>({seen:true,confirmations:__confirmed?1:0});
    N.client=()=>({call:async(method,params)=>{if(method!=='blockchain.transaction.broadcast')throw Error('Unexpected call');__sent.push(params[0]);return WalletTransactions.parse(params[0]).txid;}});
   }});
- },{vault,raw,txid,address:key.address});
+ },{vault,raw,txid,address:key.address,asset});
  await p.clock.install();await p.goto('http://localhost:8787/');
  if(scenario==='protected'){await p.locator('#lock').click();await p.locator('#unlock-password').fill(password);await p.locator('#unlock-submit').click();await p.waitForFunction(()=>document.documentElement.dataset.walletState==='unlocked');}
  const choose=async coin=>{await p.locator('[data-nav=receive]').click();await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').waitFor();};
- await choose('pep');assert.equal(await p.locator('#komodo-open').count(),0);
+ await choose(asset);assert.equal(await p.locator('#komodo-open').count(),0);
  await p.evaluate(()=>location.hash='#komodo-sweep');await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-recovery-enabled').isChecked(),false);assert.equal(await p.locator('#komodo-phrase').count(),0);
  await p.locator('#komodo-recovery-enabled').check();await choose('wht');assert.equal(await p.locator('#komodo-open').count(),0);
  await p.evaluate(()=>location.hash='#komodo-sweep');await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-phrase').count(),0,'Whippet direct route is blocked');
  await p.reload();if(scenario==='protected'){await p.locator('#unlock-security').click();await p.locator('#unlock-password').fill(password);await p.locator('#unlock-submit').click();await p.waitForFunction(()=>document.documentElement.dataset.walletState==='unlocked');}
  await p.locator('[data-nav=security]').click();await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-recovery-enabled').isChecked(),true);
- await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator('[data-coin=pep]').click();
+ await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${asset}]`).click();
  if(scenario==='pinned')await p.locator('#reuse-first').check();
  assert.equal(await p.locator('#sweep-open').evaluate(el=>el.nextElementSibling.id),'komodo-open');
  if(scenario==='send'){
@@ -42,9 +42,9 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();
  assert.equal(await p.locator('#verify-wallet-phrase').count(),0);
  assert.equal(await p.locator('#verify-wallet-password').count(),0);
- assert.equal(await p.locator('.komodo-scope').innerText(),'Pepecoin (PEP) only');
+ assert.equal(await p.locator('.komodo-scope').innerText(),`${E.NETWORKS[asset].name} (${E.NETWORKS[asset].ticker}) only`);
  assert.match(await p.locator('#komodo-sweep-form').innerText(),/Enter your old Komodo phrase exactly as backed up/);
- assert.equal(await p.locator('#komodo-recovery-explainer').innerText(),'The recovered Pepecoin will be controlled by this wallet’s new seed phrase. Your old Komodo Pepecoin address will be emptied by the sweep. Do not reuse the old Komodo seed.');
+ assert.equal(await p.locator('#komodo-recovery-explainer').innerText(),`The recovered ${E.NETWORKS[asset].name} will be controlled by this wallet’s new seed phrase. Your old Komodo ${E.NETWORKS[asset].name} address will be emptied by the sweep. Do not reuse the old Komodo seed.`);
  assert.equal(await p.locator('#komodo-backup-ack + span').innerText(),'I have backed up this wallet’s new seed phrase and any extra passphrase.');
  const word=i=>p.locator('[data-restore-word="'+i+'"]');
  const done=async()=>{if(await p.locator('#restore-keyboard').isVisible())await p.locator('#restore-done').click();};
@@ -74,7 +74,7 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  }
  else if(scenario==='background'){
   await p.evaluate(()=>window.dispatchEvent(new Event('safecore-pause')));assert.equal(await p.locator('#komodo-phrase').count(),0);
-  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await choose('pep');await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();assert.equal(await word(0).inputValue(),'');
+  await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await choose(asset);await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();assert.equal(await word(0).inputValue(),'');
  }else{
   if(scenario==='cancel')await p.evaluate(()=>__holdSource=true);
   await p.locator('#review-komodo-sweep').click();
@@ -84,8 +84,8 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
    await p.locator('#komodo-open').click();await p.locator('#restore-grid').waitFor();
   }else{
    await p.getByRole('heading',{name:'Review sweep',exact:true}).waitFor();assert.equal(await p.locator('#komodo-phrase').count(),0);
-   assert.match(await p.locator('#komodo-review-warning').innerText(),/empties the displayed old Komodo PEP address/);
-   assert.match(await p.locator('#sweep-fee-estimate').innerText(),/0.004275 PEP/);
+   assert.match(await p.locator('#komodo-review-warning').innerText(),new RegExp(`empties the displayed old Komodo ${E.NETWORKS[asset].ticker} address`));
+   assert.match(await p.locator('#sweep-fee-estimate').innerText(),new RegExp(`0.004275 ${E.NETWORKS[asset].ticker}`));
    if(scenario==='review-expiry'){await p.clock.runFor(90001);await p.locator('#restore-grid').waitFor();assert.equal(await word(0).inputValue(),'');}
    else{
     if(scenario==='disable')await p.evaluate(()=>{for(const k of Object.keys(localStorage))if(k.startsWith('corevault.komodo-recovery.'))localStorage.removeItem(k);});
@@ -99,8 +99,8 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
     if(scenario==='disable'){await p.locator('#error').waitFor({state:'visible'});assert.match(await p.locator('#error').innerText(),/disabled|expired/);}
     else{
      await p.getByRole('heading',{name:'Sweep submitted',exact:true}).waitFor();const rawSent=await p.evaluate(()=>__sent[0]),decoded=T.parse(rawSent);
-     const destination=E.accounts(ethers,recipe,scenario==='pinned'?0:1).pep.address;
-     assert.equal(decoded.inputs.length,2);assert.equal(decoded.outputs.length,1);assert.equal(decoded.outputs[0].script,T.script('pep',destination));assert.equal(decoded.outputs[0].value,599572500n);
+     const destination=E.accounts(ethers,recipe,scenario==='pinned'?0:1)[asset].address;
+     assert.equal(decoded.inputs.length,2);assert.equal(decoded.outputs.length,1);assert.equal(decoded.outputs[0].script,T.script(asset,destination));assert.equal(decoded.outputs[0].value,599572500n);
      await p.evaluate(()=>__confirmed=true);await p.clock.runFor(4001);await p.getByRole('heading',{name:'Sweep confirmed',exact:true}).waitFor();
     }
    }
@@ -116,4 +116,4 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  }
  for(const width of [320,390,430]){await p.setViewportSize({width,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  assert.deepEqual(errors,[]);await c.close();
-}console.log('PASS: opt-in/per-wallet gate, PEP-only routes, acknowledgment/password checks, exact-text predictive entry, no seed reuse, full review, pinned/next destinations, confirmation, disable/expiry/cancel/background guards and no old-seed storage.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+}console.log('PASS: opt-in/per-wallet gate, PEP/SHIC-only routes, acknowledgment/password checks, exact-text predictive entry, no seed reuse, full review, pinned/next destinations, confirmation, disable/expiry/cancel/background guards and no old-seed storage.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

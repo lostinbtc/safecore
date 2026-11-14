@@ -1,17 +1,17 @@
 # SafeCore
 
 SafeCore is a local-first, multi-wallet application for Pepecoin (PEP), Whippet
-(WHT), Shibacoin (SHIC) and Litecoin (LTC), with a phone-sized browser interface and a bundled Android application.
-Pepecoin uses green accents; Whippet uses blue. Dogecoin is a **Coming soon**
-catalog entry, not an implemented wallet.
+(WHT), Shibacoin (SHIC), Litecoin (LTC), Dogecoin (DOGE) and Bitcoin (BTC), with a phone-sized browser interface and a bundled Android application.
+Pepecoin uses green accents; Whippet uses blue. Bitcoin, Dogecoin and SHIC Komodo recovery
+are available in the local `test.19-local.btc-1` build; they are not yet published.
 
 This is development software for small-value testing, not an independently
 audited production wallet. Removing development labels from the interface does
 not change its security status or transaction limits.
 
-This guide intentionally omits operator domains, service URLs, credentials,
-deployment targets, device identifiers and private testing history. Operational
-values must be supplied and reviewed separately. **This README does not make the
+This guide documents public coin-server defaults but excludes deployment
+credentials, private targets, device identifiers and private testing history.
+Operational values must be reviewed separately. **This README does not make the
 rest of the source tree, Git history or compiled APK safe to publish.** See
 [Preparing a public repository](#preparing-a-public-repository).
 
@@ -79,13 +79,19 @@ Navigation is Overview, Receive, Send, Activity and Settings (gear). The header 
 icon opens wallet management. A selected-wallet name is shown beneath the brand;
 there is no preview/development status badge. Protected wallets also have a lock
 control. Coin visibility, theme and icon choices do not alter keys.
+Newly created or newly imported wallets start with no coins shown. Choose assets
+through **Add coins**; selections are saved separately for each wallet on this
+device. Existing wallets retain their previous selection (including the old
+all-on default). Hiding coins does not disable background discovery or hide
+funded assets from Send or recorded transactions from Activity.
 Appearance defaults to **Use device theme** and follows system light/dark changes;
 Settings retains persistent Light/Dark overrides. Android passes its device theme
 to the bundled page without reloading wallet state. Wallet deletion is available
 in **Your wallets**, not duplicated in Settings. Overview omits update timestamps
 but still reports pending amounts and refresh failures.
 The bottom navigation uses floating icons and labels without button backgrounds,
-with a subtle active icon/text glow;
+with a subtle active icon/text glow and a soft, theme-aware backdrop that fades
+out above the controls to keep scrolling content from competing with the labels;
 tap targets and space above the navigation remain reserved on small screens.
 Overview prices, holding estimates and the wallet total all use USDT, sharing the
 same conversion and rounding. Missing USDT conversion rates show an unavailable
@@ -161,6 +167,63 @@ receiving address after restoration. Core `wallet.dat` files are not supported.
 | Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
 | Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
 | Litecoin (LTC) | 48 / `0x30` | `m/44'/2'/0'/0/{index}` |
+| Bitcoin (BTC) | 0 / `0x00` | `m/44'/0'/0'/0/{index}` |
+| Dogecoin (DOGE) | 30 / `0x1e` | `m/44'/3'/0'/0/{index}` |
+
+### Local Bitcoin integration
+
+BTC uses legacy P2PKH receiving addresses on `m/44'/0'/0'/0/{index}`, WIF 128
+and eight decimals. Missing BTC paths in old SafeCore backups adopt this fixed
+path; explicit alternate paths are rejected. Existing addresses/passwords stay
+unchanged. This is not BIP49/84/86, multisig or Electrum-seed discovery. Change
+returns to the first receiving address as with the existing sender.
+
+Recipients may use mainnet P2PKH, P2SH, SegWit v0 or Taproot v1/32-byte addresses.
+Wallet-owned inputs and WIF sweeps remain legacy P2PKH. Other witness versions,
+testnet addresses and Komodo recovery are rejected. WIF sweeps do not discover
+SegWit outputs for that key. Ordinals/tokens are not detected or preserved.
+
+Fees use a six-block Electrum estimate with a conservative 1 sat/byte floor,
+a 100 sat/byte rate ceiling and 0.001 BTC total-fee ceiling. These are application
+safety limits, not Bitcoin consensus rules. Fees are proportional to estimated
+legacy bytes, never a 0.01 BTC flat fee. Minimum outputs are conservatively 546
+satoshis; coinbase maturity is 100 confirmations. Missing/invalid/over-limit
+estimates leave balances visible but block spends/sweeps until a fresh estimate.
+Sweeps retain the 25% cushion and pre-broadcast fee recheck. No RBF/CPFP UI is
+implemented, and an estimate is not a confirmation guarantee.
+
+Default WSS: `wss://btc.electrum1.cipig.net:30000/`. Server 2 also passed live
+genesis/height/fee checks and is an automatic fallback. Both share an operator;
+this is not independent-operator redundancy or an uptime guarantee. BTC joins the display-only CoinGecko request.
+Offline JSON/WIF/TXT/CSV exports work without network access. Real BTC receive/send
+testing remains pending; no real transactions were broadcast by automated tests.
+
+References: [Bitcoin Core v30.0](https://github.com/bitcoin/bitcoin/tree/v30.0),
+[BIP44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki),
+[operator endpoint list](https://github.com/KomodoPlatform/coins/blob/master/electrums/BTC).
+
+### Local Dogecoin integration
+
+DOGE uses BIP44 coin type 3, P2PKH version 30, P2SH version 22 and WIF version
+158, with eight decimals. Existing backups without `paths.doge` derive the fixed
+path above; explicit alternate paths are rejected. Existing coin addresses and
+protection preferences are unchanged. UI order is PEP, DOGE, LTC, SHIC, WHT, BTC.
+A previously hidden DOGE entry stays hidden; enable it through **Add coins**.
+
+Ordinary small sends retain the reviewed 0.01 DOGE fee, 0.01 DOGE minimum output
+and 1,000-byte limit. Sweeps use at least 0.01 DOGE/kB proportionally plus the
+existing 25% cushion. Mining rewards require 240 confirmations. No SegWit or
+Dogecoin token/inscription handling is implemented. Coin-specific genesis checks,
+raw-prevout verification and uncertain-broadcast protection remain mandatory.
+
+The default WSS endpoint is `wss://doge.electrum1.cipig.net:30060/`; server 2
+also passed live metadata checks. Both share an operator, not independent
+redundancy; server 2 is an automatic fallback, not an uptime guarantee. DOGE quotes
+share the display-only CoinGecko request with SHIC/LTC. Offline JSON/WIF/TXT/CSV
+recovery makes no network requests. A real DOGE receive/send test is still needed.
+
+Network parameters, icon and fee guidance: [Dogecoin Core](https://github.com/dogecoin/dogecoin/tree/b38c83fbf10302b23ac6e7ad89bc83068efe2fd8),
+`src/chainparams.cpp` and `doc/fee-recommendation.md`.
 
 ### Litecoin (LTC)
 
@@ -182,8 +245,8 @@ confirmations; mining rewards require 100. Only legacy wallet inputs are signed.
 The default is `wss://ltc.electrum1.cipig.net:30063/`. The operator also lists
 `wss://ltc.electrum2.cipig.net:30063/`; both passed certificate, genesis, height
 and read-only RPC checks during local integration. They share an operator and
-are not independent redundancy or an uptime guarantee. No silent fallback is
-performed. Users can test/select a different WSS server in Settings.
+are not independent redundancy or an uptime guarantee. Server 2 is an automatic
+fallback. Users can test/select a different WSS server in Settings.
 Provider list: https://github.com/KomodoPlatform/coins/blob/master/electrums/LTC
 
 LTC fees are calculated per byte from at least 1,000 litoshis/kB, with a
@@ -363,12 +426,23 @@ requires fresh, accepted data; unsettled changes block review until rechecked.
 
 Activity includes server history and locally recorded submitted/uncertain sends.
 An unconfirmed or unknown submission is not automatically assumed failed.
-Each supported asset has a collapsed header and a scrollable list of its latest
-30 server transactions plus locally outstanding sends. Refreshes preserve open
-sections and scroll positions. PEP transaction IDs link to the configured explorer;
-WHT IDs remain plain text. Explorer pages open only after a user click, in an
-external browser rather than the wallet WebView. Android allows only the exact
-HTTPS explorer host and transaction-path format, with no query, fragment or user info.
+Each supported asset has a collapsed header and shows all 10 transactions on its
+selected history page, without an inner scroll area. Borderless Previous/Next
+controls and a jump-to-page field sit below the history. All
+loaded history is accessible, newest first. Locally outstanding sends stay above
+the paged list. Refreshes preserve open sections, scroll positions, selected pages
+and focused page-entry drafts; shrinking history clamps to the last valid page.
+Page selections are per coin and reset when the wallet is locked or changed.
+Valid transaction IDs link to the matching chain:
+PEP keeps `pepecoinservice.org/explorer/tx/`, BTC uses `mempool.space/tx/`,
+DOGE uses `dogechain.com/tx/`, LTC uses `litecoinspace.org/tx/`, and SHIC uses
+`explorer.shibacoinshic.org/tx/`. WHT IDs remain plain text because no explorer is
+configured. Both history entries and locally outstanding sends use these links.
+Explorer pages open only after a user click, in an external browser rather than
+the wallet WebView. Android allows only the exact HTTPS hosts and transaction-path
+formats, with no query, fragment, custom port or user info. IDs must be 64 hex
+characters. No explorer request is made during refresh; following a link shares
+that public transaction ID and the user's IP with the explorer.
 
 Wallet value is cumulative for the active saved wallet, independent of selected
 or hidden coins. The estimate converts supported coin/USD prices using the
@@ -406,8 +480,9 @@ transaction checks.
 Recipient validation checks Base58 encoding, payload size, network version byte
 and checksum. Validation runs during planning and again when verifying reviewed
 outputs before signing. PEP, WHT and SHIC addresses are not interchangeable.
-This build supports ordinary P2PKH destinations only, not P2SH, multisig,
-Whippet assets/covenants or Dogecoin sending.
+Wallet-owned inputs use P2PKH. DOGE also accepts P2SH destinations; LTC accepts
+P2SH and supported SegWit destinations as documented above. Multisig ownership,
+Whippet assets/covenants and MWEB privacy transfers are not implemented.
 
 ### After an ordinary send
 
@@ -449,7 +524,7 @@ in batches of at most ten, deduplicated, and independently checked before signin
 The fee is based on a conservative signed-size estimate (including compressed or
 uncompressed public keys and CompactSize counts), charged proportionally by byte,
 not rounded to whole kilobytes. The rate is the greater of the live relay floor
-and 0.01 coin/kB for PEP/WHT/SHIC (0.00001 LTC/kB for Litecoin), plus a 25% fee cushion applied once. Calculation uses integers:
+and 0.01 coin/kB for PEP/WHT/SHIC/DOGE (0.00001 LTC/kB for Litecoin), plus a 25% fee cushion applied once. Calculation uses integers:
 `ceil(estimatedBytes * rateInBaseUnitsPerKB * 125 / 100000)`.
 Only the final fractional base unit is rounded up. For example, a one-input
 compressed-key sweep estimated at 193 bytes pays 0.0024125 coin at the default
@@ -461,7 +536,7 @@ acknowledgment followed by **Confirm sweep** before submission.
 The rate remains bounded at 0.1 coin/kB before the cushion; the ordinary-send
 0.1-coin total-fee ceiling does not apply to larger sweeps. Nothing is sent if
 the balance cannot cover the fee plus the minimum 0.01 wallet output.
-Those rate/output limits apply to PEP/WHT/SHIC. Litecoin instead has a
+Those rate/output limits apply to PEP/WHT/SHIC/DOGE. Litecoin instead has a
 0.001 LTC/kB rate cap, a 0.001 LTC absolute fee cap (including the cushion),
 and a 0.00005460 LTC minimum output.
 
@@ -501,14 +576,15 @@ key is never added to local storage, backups, logs or requests. JavaScript garba
 collection does not guarantee physical memory zeroization. Tests use public,
 disposable fixtures only; never use fixture keys for funds.
 
-### Optional Komodo recovery (Pepecoin only)
+### Optional Komodo recovery (Pepecoin and Shibacoin only)
 
-This control is hidden by default. In **Settings → Komodo recovery (PEP)**,
+This feature is off by default. In **Settings → Komodo recovery (PEP / SHIC)**,
 enable it for the selected unlocked wallet. Then choose **Receive →
-Pepecoin → Sweep Komodo seed**, directly below **Sweep private key**.
+Pepecoin or Shibacoin → Sweep Komodo seed**, directly below **Sweep private key**.
 Send and Receive show coin choices directly, without a dropdown.
 The setting is local, per wallet,
-and contains no recovery material. It never enables a Whippet or KMD sweep.
+and contains no recovery material. It never enables a Whippet, Litecoin, Dogecoin, Bitcoin or KMD Komodo sweep. The one
+opt-in applies to both supported assets; only the selected asset is recovered.
 
 Enter only the old Komodo phrase. A required acknowledgment reminds the user to
 save the current SafeCore backup and not reuse the old seed; it does not prove
@@ -523,10 +599,15 @@ The source follows the legacy single-address transformation in
 [ks2pwif at 8a72544](https://github.com/PepeEnthusiast/ks2pwif/blob/8a725440427534c7b3638db5f0a952b1073d8458/src/index.js):
 SHA-256 of UTF-8 text; clear the first byte's low three bits, clear the last
 byte's high bit and set its next bit; use those bytes as the big-endian secp256k1
-key with a compressed public key and Pepecoin prefixes. Outer whitespace is
+key with a compressed public key and the selected coin's prefixes (PEP: 56,
+SHIC: 63; WIF: 158 for both). Outer whitespace is
 trimmed to match that converter's UI. Case, internal whitespace and Unicode bytes
 are not normalized. SafeCore implements the transformation independently using
 its existing libraries; it does not download or execute the converter at runtime.
+The same non-HD SHA256/clamping behavior is verified against
+[Komodo's legacy key derivation](https://github.com/GLEECBTC/komodo-defi-framework/blob/9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957/mm2src/crypto/src/privkey.rs).
+SHIC's Komodo HD path is different and intentionally not scanned. Recovery sessions
+are bound to the selected coin as well as the current wallet and connection.
 
 The old-phrase entry reuses the local restore-word suggestions, but its validation
 is isolated: 12 or 24 words are accepted without SafeCore's HD mnemonic checksum
@@ -536,13 +617,13 @@ Suggestions are optional explicit replacements, not automatic corrections.
 The numbered editor starts empty, allows words outside the suggestion dictionary,
 and has an uppercase toggle. Pasting a phrase into the first field preserves its
 case, internal whitespace and Unicode bytes; only outer whitespace is trimmed.
-Matching the word count does not verify ownership: confirm the displayed old PEP
+Matching the word count does not verify ownership: confirm the displayed old PEP/SHIC
 address before approving a sweep. Other phrase lengths, Komodo HD accounts,
 hardware-wallet derivations, KMD and other assets are not supported by this flow.
 
 The existing full-source sweep checks, byte-based fee review, current-wallet
 destination selection, signing and first-confirmation screen are reused. The
-review warns that all reviewed spendable PEP leaves the derived old address,
+review warns that all reviewed spendable funds for the selected coin leave the derived old address,
 minus the fee, and the current SafeCore backup controls the recovered funds.
 Do not reuse the old Komodo seed/address, but retain its backup until any other
 assets have been recovered. A seed is not deleted on-chain, and this operation
@@ -555,14 +636,14 @@ never stored in wallet backups, settings, logs or network requests.
 | Rule | Current value |
 | --- | --- |
 | Entered total | Limited by verified, confirmed spendable outputs; no 100-coin cap |
-| Minimum recipient amount | PEP/WHT/SHIC: 0.01 coin; LTC: 0.00005460 |
-| Fee | PEP/WHT/SHIC: 0.01 coin flat; LTC: size-based, at least 0.00001 LTC/kB |
-| Flat-fee transaction size | PEP/WHT/SHIC: at most 1,000 bytes; not used for LTC |
+| Minimum recipient amount | PEP/WHT/SHIC/DOGE: 0.01 coin; LTC: 0.00005460 |
+| Fee | PEP/WHT/SHIC/DOGE: 0.01 coin flat; LTC: size-based, at least 0.00001 LTC/kB |
+| Flat-fee transaction size | PEP/WHT/SHIC/DOGE: at most 1,000 bytes; not used for LTC |
 | Planner input limit | 8; size rules can reject fewer |
-| Max input selection | PEP/WHT/SHIC: conservatively up to 6; LTC: up to 8 |
+| Max input selection | PEP/WHT/SHIC/DOGE: conservatively up to 6; LTC: up to 8 |
 | Candidate-output scan bound | 40 |
-| General fee ceiling | PEP/WHT/SHIC: 0.1 coin (flat path exactly 0.01); LTC: 0.001 |
-| Coinbase maturity | PEP/WHT/SHIC: 240 confirmations; LTC: 100 (MWEB withdrawal: 6) |
+| General fee ceiling | PEP/WHT/SHIC/DOGE: 0.1 coin (flat path exactly 0.01); LTC: 0.001 |
+| Coinbase maturity | PEP/WHT/SHIC/DOGE: 240 confirmations; LTC: 100 (MWEB withdrawal: 6) |
 | Review expiry | 90 seconds |
 
 Only confirmed, mature outputs are spendable. Raw previous transactions must
@@ -570,7 +651,7 @@ match their transaction IDs, claimed values and wallet-owned scripts.
 The live relay minimum is checked. A higher required fee or oversized transaction
 is rejected rather than silently underpaying.
 
-For PEP/WHT/SHIC, a total of 5 coins and a 0.01 fee leaves 4.99 for the recipient. Tiny change below
+For PEP/WHT/SHIC/DOGE, a total of 5 coins and a 0.01 fee leaves 4.99 for the recipient. Tiny change below
 0.01 is rejected in the fee-inclusive flow with guidance to use Max; it is not
 silently added to the fee. Change returns to the first receiving address.
 
@@ -670,7 +751,8 @@ or assume copying app files to another device is a recovery backup.
 | `corevault.balance.<wallet-id>.<coin>` | Public balance/history cache |
 | `corevault.receive.<wallet-id>` | Used indices and first-address preferences |
 | `corevault.send-attempts.<wallet-id>` | Input reservations and submission records |
-| `corevault.hidden-coins.v1` | Displayed-coin selection |
+| `corevault.hidden-coins.v1` | Legacy displayed-coin selection; fallback for existing wallets |
+| `corevault.hidden-coins.v2.<wallet-id>` | Per-wallet displayed-coin selection; new wallets start empty |
 | `corevault.theme`, icon preferences | Appearance only |
 
 Historical key names are compatibility identifiers. Collection writes precede
@@ -691,6 +773,25 @@ The documented backup formats are `pepecoin-whippet-encrypted-v1`,
 `corevault-unprotected-v1` and the supported legacy `whippet-seed-v1` import.
 The internal recovery recipe is `pepecoin-whippet-seed-v1`.
 
+New-wallet setup offers **Yes / No, continue** for an encrypted local recovery
+copy. Yes requires a separate backup password of at least 12 characters and a
+matching confirmation, even when the wallet itself has no password. The copy
+uses the portable PBKDF2-SHA256/AES-256-GCM JSON envelope above, includes the BIP39
+passphrase, and recovers all supported coins. The backup password is never saved.
+Android requires device authentication when enabled, uses a local-only system
+document picker, rejects cloud and app-specific destinations, and reads the saved
+encrypted bytes back before reporting success. Each export creates a new file.
+The last successfully saved document is a hint for the next picker location; it
+does not grant silent writes. Browser downloads use the browser's save settings.
+
+Shared local documents normally survive Android uninstall; app-private wallets,
+Keystore keys, remembered locations and access grants do not. After reinstall,
+choose the saved JSON through Restore and enter its backup password. This is not
+automatic recovery, cloud backup, a guarantee against device loss/reset, or a way
+around a forgotten backup password. Keep an independent manual backup. Cancelling
+the optional copy does not delete the already-saved wallet. Existing/restored
+wallets keep their manual Export controls; nothing is exported without approval.
+
 Deleting a wallet requires its named confirmation, typing REMOVE and acknowledging
 recovery. Only that wallet and its local metadata are removed. Deleting an
 inactive wallet does not activate it. Other wallets, exported backups and
@@ -699,10 +800,17 @@ on-chain funds are unchanged.
 The localhost-only test reset removes SafeCore wallets, caches and preferences
 for that origin, preserving unrelated storage keys. It cannot reset another
 browser profile, the phone, a server database or the blockchain.
-Uninstalling Android or clearing its app data removes local recovery material.
+Uninstalling Android or clearing its app data removes app-private recovery material.
 Keep an independent recovery backup before any destructive operation.
 
 ## Browser operation
+
+The default brand artwork is the supplied silver SC / blue globe, used for the
+header, favicon, Android adaptive launcher icon and offline recovery tool. Earlier
+gallery preferences do not override this approved default; all earlier designs
+remain selectable. `scripts/prepare-brand-assets.py <square-source.png>` resamples
+the artwork to the packaged 512px assets (Pillow required only for this developer
+step). It does not alter wallet data or contact a service.
 
 Commands below run from the SafeCore repository root, which contains `whippet/`.
 No production service changes are needed to start the preview.
@@ -732,7 +840,8 @@ signing remains local and all existing transaction checks still apply.
 Choose a trusted operator: it sees your public address queries and IP address.
 Overrides apply to wallets on this device/browser and are not included in backups.
 Tests do not change the active server. Using a connection clears pending transaction
-reviews and refreshes discovery; failures never silently fall back. Restore default
+reviews and refreshes discovery; custom-server failures never fall back to public
+servers. Restore default
 connections resets all supported coins, including invalid saved preferences. The content
 policy permits secure WebSocket hosts for user-selected servers, while scripts and
 ordinary HTTP requests retain their restrictions. This distribution retains the
@@ -743,6 +852,25 @@ loader in the app; do not put server credentials in client code.
 Client-visible service addresses cannot be kept secret in a distributed app.
 Do not embed credentials or expose administrative RPC. Obscurity is not access
 control.
+
+### Default connection resilience
+
+Verified default pools retain the original primary server. PEP falls back to
+`wss://electrum.pepeblocks.com:50004/`; BTC, DOGE and LTC use the corresponding
+CiPiG server 2 listed above. WHT and SHIC currently have no verified second WSS
+server, so they only reconnect to their existing server. The listed SHIC
+shibaexplorer service was unreachable and is deliberately excluded. Availability
+can change; the public read-only connection test is not an uptime guarantee.
+
+Transport/read failures rotate through available pool members, with bounded
+2–30 second per-server cooldowns instead of reconnection storms. Every connection
+must match the coin's genesis before address queries; a reported chain tip more
+than 12 blocks behind the highest seen this session is rejected. This is a
+freshness safeguard, not independent blockchain validation. Concurrent reads
+share one connection. An interrupted scan restarts coherently; old-server or
+disconnected snapshots cannot authorize spending. Manual connections remain
+pinned for privacy. Transaction broadcasts are never automatically retried;
+existing uncertain-send tracking remains authoritative.
 
 ## Android operation
 
@@ -865,7 +993,11 @@ The runner creates its own temporary Android 35 emulator on port 5580. It refuse
 an occupied port or a mismatched emulator identity; it never selects a connected
 phone. It covers encrypted storage, tampering/key loss, interrupted writes,
 legacy migration, first-wallet defaults, authentication cancellation, background
-locking, protected export/import return, expiry, and screen-lock removal.
+locking, protected export/import return, expiry, and screen-lock removal. Local
+recovery-copy checks cover encrypted-only/local-provider policy, remembered
+picker locations, a real document save, and restore after uninstall/reinstall
+of only the disposable QA package (20 native test executions in total, including
+the per-coin explorer URL allowlist).
 Only disposable fixtures and a public fake PIN are used. No release credentials,
 real wallets or funded transactions are needed. Raw device logs, screenshots,
 wallet data and emulator snapshots are not uploaded. A failed, missing, timed-out,

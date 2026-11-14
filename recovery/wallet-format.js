@@ -9,6 +9,8 @@
     pep: Object.freeze({ name: 'Pepecoin', ticker: 'PEP', prefix: 56, path: "m/44'/3434'/0'/0/{index}" }),
     wht: Object.freeze({ name: 'Whippet', ticker: 'WHT', prefix: 73, path: "m/0'/3'/{index}'" }),
     shic: Object.freeze({ name: 'Shibacoin', ticker: 'SHIC', prefix: 63, path: "m/44'/4474'/0'/0/{index}" }),
+    doge: Object.freeze({ name: 'Dogecoin', ticker: 'DOGE', prefix: 30, wif: 158, path: "m/44'/3'/0'/0/{index}" }),
+    btc: Object.freeze({ name: 'Bitcoin', ticker: 'BTC', prefix: 0, wif: 128, path: "m/44'/0'/0'/0/{index}" }),
     ltc: Object.freeze({ name: 'Litecoin', ticker: 'LTC', prefix: 48, wif: 176, path: "m/44'/2'/0'/0/{index}" }),
   });
   const ITERATIONS = 600000;
@@ -29,15 +31,17 @@
     if (!payload || payload.format !== 'pepecoin-whippet-seed-v1' || typeof payload.passphrase !== 'string'
         || payload.paths?.pep !== NETWORKS.pep.path || payload.paths?.wht !== NETWORKS.wht.path
         || payload.paths.shic !== undefined && payload.paths.shic !== NETWORKS.shic.path
-        || payload.paths.ltc !== undefined && payload.paths.ltc !== NETWORKS.ltc.path) {
+        || payload.paths.ltc !== undefined && payload.paths.ltc !== NETWORKS.ltc.path
+        || payload.paths.doge !== undefined && payload.paths.doge !== NETWORKS.doge.path
+        || payload.paths.btc !== undefined && payload.paths.btc !== NETWORKS.btc.path) {
       throw new Error('Unsupported wallet recovery recipe.');
     }
     return { format: payload.format, mnemonic: normalize(ethers, payload.mnemonic),
-      passphrase: payload.passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path, shic: NETWORKS.shic.path, ltc: NETWORKS.ltc.path } };
+      passphrase: payload.passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path, shic: NETWORKS.shic.path, ltc: NETWORKS.ltc.path, doge: NETWORKS.doge.path, btc: NETWORKS.btc.path } };
   }
   function recipe(ethers, mnemonic, passphrase = '') {
     return validateRecipe(ethers, { format: 'pepecoin-whippet-seed-v1', mnemonic,
-      passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path, shic: NETWORKS.shic.path, ltc: NETWORKS.ltc.path } });
+      passphrase, paths: { pep: NETWORKS.pep.path, wht: NETWORKS.wht.path, shic: NETWORKS.shic.path, ltc: NETWORKS.ltc.path, doge: NETWORKS.doge.path, btc: NETWORKS.btc.path } });
   }
   function accounts(ethers, payload, index = 0) {
     const valid = validateRecipe(ethers, payload);
@@ -91,7 +95,9 @@
           || typeof p.mnemonic !== 'string' || p.mnemonic.length > 1000 || typeof p.passphrase !== 'string' || p.passphrase.length > 1000
           || p.paths?.pep !== NETWORKS.pep.path || p.paths?.wht !== NETWORKS.wht.path
           || p.paths.shic !== undefined && p.paths.shic !== NETWORKS.shic.path
-          || p.paths.ltc !== undefined && p.paths.ltc !== NETWORKS.ltc.path) throw new Error('Invalid unprotected wallet backup.');
+          || p.paths.ltc !== undefined && p.paths.ltc !== NETWORKS.ltc.path
+          || p.paths.doge !== undefined && p.paths.doge !== NETWORKS.doge.path
+          || p.paths.btc !== undefined && p.paths.btc !== NETWORKS.btc.path) throw new Error('Invalid unprotected wallet backup.');
       return envelope;
     }
     if (!envelope || envelope.format !== FORMAT || envelope.kdf !== 'PBKDF2-SHA256'

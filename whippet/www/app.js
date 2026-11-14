@@ -70,6 +70,8 @@
     }
   });
   const COIN_PREFS = 'corevault.hidden-coins.v1';
+  const WALLET_COIN_PREFS = 'corevault.hidden-coins.v2.';
+  const coinPrefsKey = () => envelope ? WALLET_COIN_PREFS + WalletLibrary.id(envelope) : COIN_PREFS;
   const CONNECTION_PREFS='corevault.connections.v1';
   const connectionTests=new Set();
   const cancelConnectionTests=()=>{for(const controller of connectionTests)controller.abort();connectionTests.clear();};
@@ -80,23 +82,34 @@
   const balancesHidden=()=>{try{return localStorage.getItem(BALANCE_PRIVACY)==='true';}catch(_){return true;}};
   const hiddenBalance='<span class="masked-balance" aria-label="Balance hidden">••••</span>';
   // Approved brand icon; older gallery-preview choices do not override it.
-  const BRAND_PREF = 'corevault.icon.v2';
-  const DEFAULT_BRAND = 26;
+  const BRAND_PREF = 'corevault.icon.v3';
+  const DEFAULT_BRAND = 31;
   const BRAND_ICONS = ['Shield Core','Orbit','Safe Hex','SC Monogram','Vault Dial','Linked','Keystone','Core Layers','Signal','North Star','Minted Core','Twin Coins','Chain Token','Block Mint','Core Coin','Coin Reserve','Crypto Orbit','Node Coin','Crystal Token','Proof Coin','Nexus Hub','Hex Mesh','Relay Ring','Node Shield','Consensus','Ledger Cube','Circuit Core','Constellation','Dual Hub','Chain Bridge'];
-  const brandPath = id => id ? `assets/icons/safecore-${String(id).padStart(2,'0')}.svg` : 'assets/corevault.svg';
+  BRAND_ICONS.push('SC Globe');
+  const brandPath = id => id===31 ? 'assets/safecore.png' : id ? `assets/icons/safecore-${String(id).padStart(2,'0')}.svg` : 'assets/corevault.svg';
   function savedBrand(){try{const raw=localStorage.getItem(BRAND_PREF);if(raw===null)return DEFAULT_BRAND;const id=Number(raw);return Number.isInteger(id)&&id>=0&&id<=BRAND_ICONS.length?id:DEFAULT_BRAND;}catch(_){return DEFAULT_BRAND;}}
-  function applyBrand(id){document.querySelector('.mobile-brand img').src=brandPath(id);document.querySelector('link[rel="icon"]').href=brandPath(id);}
-  // Display catalog only. Coming-soon entries never enter the key engine.
-  const COINS = { pep: E.NETWORKS.pep, ltc: E.NETWORKS.ltc, shic: E.NETWORKS.shic, wht: E.NETWORKS.wht, doge: { name: 'Dogecoin', ticker: 'DOGE', comingSoon: true } };
+  function applyBrand(id){document.querySelector('.mobile-brand img').src=brandPath(id);const favicon=document.querySelector('link[rel="icon"]');favicon.href=brandPath(id);favicon.type=id===31?'image/png':'image/svg+xml';}
+  // Display order is independent of the key engine's historical asset order.
+  const COINS = { pep: E.NETWORKS.pep, doge: E.NETWORKS.doge, ltc: E.NETWORKS.ltc, shic: E.NETWORKS.shic, wht: E.NETWORKS.wht, btc: E.NETWORKS.btc };
+  // Navigation only, never polled or loaded inside the wallet. WHT has no explorer.
+  const EXPLORERS = Object.freeze({
+    pep:'https://pepecoinservice.org/explorer/tx/',
+    btc:'https://mempool.space/tx/',
+    doge:'https://dogechain.com/tx/',
+    ltc:'https://litecoinspace.org/tx/',
+    shic:'https://explorer.shibacoinshic.org/tx/'
+  });
   const assetOrder = Object.keys(COINS).filter(coin => Object.hasOwn(E.NETWORKS, coin));
   let hiddenCoins = [];
   function loadCoinPrefs() {
     try {
-      const saved = JSON.parse(localStorage.getItem(COIN_PREFS) || '["doge"]');
-      hiddenCoins = Array.isArray(saved) ? saved.filter(coin => Object.hasOwn(COINS, coin)) : ['doge'];
-    } catch (_) { hiddenCoins = ['doge']; }
+      // Existing wallets inherit their old installation-wide selection until
+      // explicitly changed. New wallets receive their own empty selection at save.
+      const raw = localStorage.getItem(coinPrefsKey()) ?? localStorage.getItem(COIN_PREFS);
+      const saved = raw === null ? (envelope ? [] : assetOrder) : JSON.parse(raw);
+      hiddenCoins = Array.isArray(saved) ? saved.filter(coin => Object.hasOwn(COINS, coin)) : [...assetOrder];
+    } catch (_) { hiddenCoins = [...assetOrder]; }
   }
-  loadCoinPrefs();
   const visibleCoins = () => Object.keys(COINS).filter(coin => !hiddenCoins.includes(coin));
   const icons = {
     wallet: '<rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 8h15M17 12h4v5h-4a2.5 2.5 0 0 1 0-5Z"/>',
@@ -115,8 +128,8 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.wallet}</svg>`;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const coinImage = coin => `assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin'})[coin]}.png`;
-  const coinMark = coin => coin === 'doge' ? '<span class="doge-mark" aria-hidden="true">Ð</span>' : `<img src="${coinImage(coin)}" alt="">`;
+  const coinImage = coin => `assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin'})[coin]}.png`;
+  const coinMark = coin => `<img src="${coinImage(coin)}" alt="">`;
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
   let receiveBooks = null, addingWallet = false, revealed = false;
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
@@ -126,7 +139,7 @@
   let destinationFingerprint=null,komodoEntry=null;
   const komodoPreference=()=>envelope?'corevault.komodo-recovery.'+WalletLibrary.id(envelope):null;
   const komodoEnabled=()=>{try{return Boolean(envelope)&&localStorage.getItem(komodoPreference())==='true';}catch(_){return false;}};
-  const komodoVerified=()=>komodoEnabled()&&komodoGate?.source===envelope&&komodoGate.epoch===networkEpoch&&Date.now()<komodoGate.expires;
+  const komodoVerified=(coin=receiveCoin)=>komodoEnabled()&&WalletKomodo.supports(coin)&&komodoGate?.coin===coin&&komodoGate?.source===envelope&&komodoGate.epoch===networkEpoch&&Date.now()<komodoGate.expires;
   function clearKomodo(){
     komodoEntry?.destroy();komodoEntry=null;
     if(komodoGate)clearTimeout(komodoGate.timer);komodoGate=null;
@@ -145,18 +158,20 @@
   function clearReports(){for(const timer of Object.values(reportTimers))clearTimeout(timer);reportTimers={};reports={};}
   const reported=coin=>reports[coin]?.value;
   let pepPrice=null,priceAttempt=0,priceBusy=false;
-  let shicPrice=null,ltcPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
+  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
   const priceFresh=()=>pepPrice&&Date.now()-pepPrice.at<300000;
   async function refreshShicPrice(){
     if(shicPriceBusy||Date.now()-shicPriceAttempt<300000)return;
     shicPriceBusy=true;shicPriceAttempt=Date.now();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
-      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
+      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('SHIC price unavailable');
       const quotes=await response.json();
       try{shicPrice=WalletReporting.shicQuote(quotes);}catch(_){shicPrice=null;}
       try{ltcPrice=WalletReporting.ltcQuote(quotes);}catch(_){ltcPrice=null;}
+      try{dogePrice=WalletReporting.dogeQuote(quotes);}catch(_){dogePrice=null;}
+      try{btcPrice=WalletReporting.btcQuote(quotes);}catch(_){btcPrice=null;}
     }catch(_){/* Optional public price only; never affects wallet keys or spendability. */}
     finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
   }
@@ -176,12 +191,15 @@
   }
   let mode = 'demo', generation = 0, idleTimer = null, toastTimer = null;
   let stagedFile = null, setupType = 'create', busy = false;
+  let activityPages = {};
   let restoreEntry = null;
   try {
     const saved = walletStorage.getItem(STORE);
     if (saved) { envelope = E.validateEnvelope(JSON.parse(saved)); mode = 'locked'; }
   } catch (_) { mode = 'storage-error'; }
+  loadCoinPrefs();
   function prepareAddresses(candidate, vault) {
+    activityPages = {};
     sendCoin = null; receiveCoin = null;
     clearReports();
     clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
@@ -238,6 +256,7 @@
     }
   }
   function lock(message, reopen = true) {
+    activityPages = {};
     cancelConnectionTests();
     exportSelection=null;
     clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
@@ -261,7 +280,7 @@
   function liveEnabled() {
     return riskAccepted() && Boolean(envelope);
   }
-  const liveSnapshot = coin => !connectionProblem && snapshots[coin] && !snapshots[coin].cached && !networkErrors[coin] && Date.now() - snapshots[coin].at < 45000;
+  const liveSnapshot = coin => !connectionProblem && snapshots[coin] && !snapshots[coin].cached && N.isCurrent(snapshots[coin]) && !networkErrors[coin] && Date.now() - snapshots[coin].at < 45000;
   const fresh = coin => liveSnapshot(coin) && snapshots[coin].complete!==false;
   function refreshBalanceViews(coin){
     if (['', '#wallet', '#activity'].includes(location.hash) || coin === receiveCoin && location.hash === '#receive') render();
@@ -398,7 +417,7 @@
     if (!sendCoin) { $('main').innerHTML = header; updateSendPicker(); return; }
     const coin = sendCoin, network = E.NETWORKS[coin];
     $('main').innerHTML = header +
-      `<form id="send-form" class="form-panel"><label for="send-address">Receiving address</label><div class="send-address-row"><input id="send-address" autocomplete="off" spellcheck="false" required maxlength="90"><button id="scan-address" type="button" class="icon-button" aria-label="Scan address QR code" title="Scan address QR code">${icon('camera')}</button></div><section id="scan-panel" aria-label="Scan receiving address" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" class="inline-info" role="status" hidden></p><label for="send-amount">Total including fee (${network.ticker})</label><input id="send-amount" inputmode="decimal" autocomplete="off" required placeholder="0.00"><button id="send-max" type="button" class="text-button" disabled>Max</button><p class="subtle">${coin==='ltc'?'Fee based on transaction size; shown before confirmation. Standard Litecoin only; no MWEB.':`Network fee: 0.01 ${network.ticker} for small transactions.`}</p><div id="send-estimate" aria-live="polite" class="subtle">Checking available balance…</div><div class="form-actions">${button('review-send','Review transaction','primary')}<a href="#wallet" class="text-button">Cancel</a></div></form>`;
+      `<form id="send-form" class="form-panel"><label for="send-address">Receiving address</label><div class="send-address-row"><input id="send-address" autocomplete="off" spellcheck="false" required maxlength="90"><button id="scan-address" type="button" class="icon-button" aria-label="Scan address QR code" title="Scan address QR code">${icon('camera')}</button></div><section id="scan-panel" aria-label="Scan receiving address" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" class="inline-info" role="status" hidden></p><label for="send-amount">Total including fee (${network.ticker})</label><input id="send-amount" inputmode="decimal" autocomplete="off" required placeholder="0.00"><button id="send-max" type="button" class="text-button" disabled>Max</button><p class="subtle">${!T.policy(coin).flatFee?'Fee based on transaction size; shown before confirmation.'+(coin==='ltc'?' Standard Litecoin only; no MWEB.':''):`Network fee: 0.01 ${network.ticker} for small transactions.`}</p><div id="send-estimate" aria-live="polite" class="subtle">Checking available balance…</div><div class="form-actions">${button('review-send','Review transaction','primary')}<a href="#wallet" class="text-button">Cancel</a></div></form>`;
     updateSendPicker();
     $('review-send').type = 'submit';
     const viewToken=generation,viewWallet=envelope;
@@ -445,7 +464,7 @@
     $('send-address').oninput=estimate;$('send-amount').oninput=estimate;
     $('send-max').onclick=()=>{
       if(!quote)return;
-      const total=quote.utxos.slice().sort((a,b)=>a.value>b.value?-1:a.value<b.value?1:0).slice(0,coin==='ltc'?8:T.FLAT_MAX_INPUTS).reduce((n,u)=>n+u.value,0n);
+      const total=quote.utxos.slice().sort((a,b)=>a.value>b.value?-1:a.value<b.value?1:0).slice(0,T.policy(coin).flatFee?T.FLAT_MAX_INPUTS:8).reduce((n,u)=>n+u.value,0n);
       $('send-amount').value=T.format(total);estimate();
     };
     void available().then(data=>{if(data&&activeView()){quote=data;$('send-max').disabled=false;estimate();}}).catch(e=>{if(activeView())$('send-estimate').textContent=e.message;});
@@ -492,7 +511,7 @@
   }
   async function prepareSweepReview(key,active,komodoRecovery=false){
     const coin=receiveCoin,source=envelope;
-    if(key.coin!==coin||komodoRecovery&&(coin!=='pep'||!komodoVerified()))throw Error('Komodo recovery is disabled or its session expired.');
+    if(key.coin!==coin||komodoRecovery&&(!WalletKomodo.supports(coin)||!komodoVerified(coin)))throw Error('Komodo recovery is disabled or its session expired.');
     const state={key,destinationIndex:null,komodo:komodoRecovery};sweepState=state;
     await refreshLive(coin);
     if(!active()||sweepState!==state)return;
@@ -512,16 +531,17 @@
     sendDraft={plan:p,walletId:WalletLibrary.id(source),sweep:true,komodo:komodoRecovery};sendReview();
   }
   function komodo(){
-    if(mode!=='unlocked'||receiveCoin!=='pep'||!komodoEnabled()){clearKomodo();clearSweep();go('security');return;}
+    if(mode!=='unlocked'||!WalletKomodo.supports(receiveCoin)||!komodoEnabled()){clearKomodo();clearSweep();go('security');return;}
     if(sweepReceipt){renderSweepReceipt();return;}
     clearSweep();sendDraft=null;
     const token=generation,source=envelope;
     const active=()=>token===generation&&source===envelope&&mode==='unlocked'&&location.hash==='#komodo-sweep'&&!document.hidden&&komodoEnabled();
-    const warning='<p class="subtle">KMD, other coins and Komodo HD accounts are not supported. Keep the old backup if it holds other assets.</p>';
+    const coin=receiveCoin,network=E.NETWORKS[coin];
+    const warning='<p class="subtle">Only the selected coin is recovered. KMD, other coins and Komodo HD accounts are not supported. Keep the old backup if it holds other assets.</p>';
     clearKomodo();
     document.body.classList.add('restore-mode');
-    $('main').innerHTML=button('restore-back','← Back','text-button')+title('Komodo recovery','<strong class="komodo-scope">Pepecoin (PEP) only</strong>')+
-      `<form id="komodo-sweep-form" class="form-panel" autocomplete="off"><div class="restore-length"><label for="restore-count">Old Komodo words</label><select id="restore-count"><option value="12">12 words</option><option value="24">24 words</option></select></div><input id="komodo-phrase" type="hidden" hidden><div id="restore-grid" class="restore-grid" role="group" aria-label="Old Komodo words in order"></div><p id="komodo-status" class="inline-info" aria-live="polite"></p><p class="subtle">Enter your old Komodo phrase exactly as backed up.</p><details id="restore-options"><summary>Recovery information</summary>${warning}<p class="subtle">Your phrase stays on this device and is not saved.</p></details><p class="inline-info" id="komodo-recovery-explainer">The recovered Pepecoin will be controlled by this wallet’s new seed phrase. Your old Komodo Pepecoin address will be emptied by the sweep. Do not reuse the old Komodo seed.</p><label class="check"><input id="komodo-backup-ack" type="checkbox" required><span>I have backed up this wallet’s new seed phrase and any extra passphrase.</span></label><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-komodo-sweep','Review Komodo sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form><div id="restore-keyboard" class="restore-keyboard" aria-label="Komodo word keyboard" hidden><div id="komodo-suggestions" class="restore-suggestions" role="group" aria-label="Komodo word suggestions"></div></div>`;
+    $('main').innerHTML=button('restore-back','← Back','text-button')+title('Komodo recovery',`<strong class="komodo-scope">${network.name} (${network.ticker}) only</strong>`)+
+      `<form id="komodo-sweep-form" class="form-panel" autocomplete="off"><div class="restore-length"><label for="restore-count">Old Komodo words</label><select id="restore-count"><option value="12">12 words</option><option value="24">24 words</option></select></div><input id="komodo-phrase" type="hidden" hidden><div id="restore-grid" class="restore-grid" role="group" aria-label="Old Komodo words in order"></div><p id="komodo-status" class="inline-info" aria-live="polite"></p><p class="subtle">Enter your old Komodo phrase exactly as backed up.</p><details id="restore-options"><summary>Recovery information</summary>${warning}<p class="subtle">Your phrase stays on this device and is not saved.</p></details><p class="inline-info" id="komodo-recovery-explainer">The recovered ${network.name} will be controlled by this wallet’s new seed phrase. Your old Komodo ${network.name} address will be emptied by the sweep. Do not reuse the old Komodo seed.</p><label class="check"><input id="komodo-backup-ack" type="checkbox" required><span>I have backed up this wallet’s new seed phrase and any extra passphrase.</span></label><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-komodo-sweep','Review Komodo sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form><div id="restore-keyboard" class="restore-keyboard" aria-label="Komodo word keyboard" hidden><div id="komodo-suggestions" class="restore-suggestions" role="group" aria-label="Komodo word suggestions"></div></div>`;
     $('restore-back').onclick=()=>go('receive');
     const submit=$('review-komodo-sweep');submit.type='submit';
     const entry=WalletRecovery.attachGrid(ethers,{input:$('komodo-phrase'),grid:$('restore-grid'),count:$('restore-count'),keyboard:$('restore-keyboard'),list:$('komodo-suggestions'),status:$('komodo-status'),mode:'komodo',onEdit:clearError,onValidity:valid=>submit.disabled=busy||!valid});
@@ -532,9 +552,9 @@
       if(!entry.valid()){error('Enter the exact 12 or 24 words from your legacy Komodo backup.');return;}
       busy=true;submit.disabled=true;
       try{
-        const key=WalletKomodo.key($('komodo-phrase').value,destinationFingerprint);
+        const key=WalletKomodo.key($('komodo-phrase').value,destinationFingerprint,coin);
         entry.destroy();komodoEntry=null;
-        const gate={source,epoch:networkEpoch,expires:Date.now()+600000};komodoGate=gate;
+        const gate={source,coin,epoch:networkEpoch,expires:Date.now()+600000};komodoGate=gate;
         gate.timer=setTimeout(()=>{if(komodoGate===gate){clearKomodo();clearSweep();sendDraft=null;generation++;busy=false;if(location.hash==='#komodo-sweep'){komodo();error('Recovery session expired. Enter the Komodo phrase again.');}}},600000);
         sweepProgress('Checking your receiving address. Please keep this page open…');
         await prepareSweepReview(key,()=>active()&&komodoVerified(),true);
@@ -549,7 +569,7 @@
     if(mode!=='unlocked'||!E.NETWORKS[coin]){go('receive');return;}
     const ticker=E.NETWORKS[coin].ticker,token=generation,source=envelope;
     const active=()=>token===generation&&source===envelope&&mode==='unlocked'&&location.hash==='#sweep'&&!document.hidden;
-    $('main').innerHTML='<div class="page-head"><h1>Sweep private key</h1></div>'+`<p>Move the full ${ticker} balance from one private key into this wallet.</p><p class="notice">Select the correct asset: PEP and WHT share the same private-key format. The key stays on this device and is not saved.</p><form id="sweep-form" class="form-panel"><label for="sweep-key">Private key (WIF)</label><div class="send-address-row"><input id="sweep-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="52" required><button id="scan-key" type="button" class="icon-button" aria-label="Scan private key QR code">${icon('camera')}</button></div><section id="scan-panel" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" role="status" hidden></p><p class="subtle">Standard WIF keys only. Deposits must be confirmed and mining rewards mature.</p><p class="subtle">Review the estimated network fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-sweep','Review sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form>`;
+    $('main').innerHTML='<div class="page-head"><h1>Sweep private key</h1></div>'+`<p>Move the full ${ticker} balance from one private key into this wallet.</p><p class="notice">Select the correct asset: PEP, SHIC, WHT and DOGE share the same private-key format. The key stays on this device and is not saved.</p><form id="sweep-form" class="form-panel"><label for="sweep-key">Private key (WIF)</label><div class="send-address-row"><input id="sweep-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="52" required><button id="scan-key" type="button" class="icon-button" aria-label="Scan private key QR code">${icon('camera')}</button></div><section id="scan-panel" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" role="status" hidden></p><p class="subtle">Standard WIF keys only. Deposits must be confirmed and mining rewards mature.</p><p class="subtle">Review the estimated network fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-sweep','Review sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form>`;
     const input=$('sweep-key'),submit=$('review-sweep'),scanButton=$('scan-key'),panel=$('scan-panel'),status=$('scan-status');submit.type='submit';
     let stopScan=null;
     scanButton.onclick=()=>{
@@ -575,15 +595,15 @@
     if (!sendDraft || mode !== 'unlocked') { go('wallet'); return; }
     const p = sendDraft.plan, ticker = E.NETWORKS[p.coin].ticker;
     const sweeping=sendDraft.sweep===true;
-    if(sendDraft.komodo&&(p.coin!=='pep'||!komodoVerified())){clearSweep();clearKomodo();sendDraft=null;go('security');return;}
+    if(sendDraft.komodo&&(!WalletKomodo.supports(p.coin)||!komodoVerified(p.coin))){clearSweep();clearKomodo();sendDraft=null;go('security');return;}
     $('main').innerHTML = title(sweeping?'Review sweep':'Review transaction', 'Nothing has been sent yet.', protectionIcon(protectedWallet(envelope))) +
       (sweeping?`<p class="subtle">From external ${ticker} address: <code>${escape(sweepState.key.address)}</code><br>Into your wallet, Address #${sweepState.destinationIndex+1}. The key will not be saved.</p><p class="subtle">Full source balance: ${T.format(p.budget)} ${ticker}.</p>`:'')+
       (sweeping?`<p class="notice" id="sweep-fee-estimate">Estimated network fee: <strong>${T.format(p.fee)} ${ticker}</strong>, deducted from the swept balance.</p>`:`<p class="notice">You are sending <strong>${T.format(p.amount)} ${ticker}</strong> to the recipient.</p>`)+`<div class="details send-review"><div class="detail-row"><span>Network</span><strong>${E.NETWORKS[p.coin].name} mainnet</strong></div><div class="detail-row"><span>Recipient</span><code>${escape(p.destination)}</code></div><div class="detail-row"><span>${sweeping?'Your wallet receives':'Recipient receives'}</span><strong>${T.format(p.amount)} ${ticker}</strong></div><div class="detail-row"><span>${sweeping?'Estimated network fee (included)':'Network fee (included)'}</span><strong>${T.format(p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Total deducted</span><strong>${T.format(p.amount+p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Change returned</span><strong>${T.format(p.change)} ${ticker}</strong></div>${p.change ? `<div class="detail-row"><span>Change address</span><code>${escape(p.changeAddress)}</code></div>` : ''}</div>
       <p class="subtle">${sweeping?'All source funds, minus the fee, go to your reviewed wallet address.':'Change returns to your first receiving address. This reuses an address.'} The review expires after 90 seconds.</p>
       <form id="broadcast-form" class="form-panel">${protectedWallet(envelope) ? '<label for="send-password">Wallet password</label><input id="send-password" type="password" required autocomplete="current-password">' : '<p class="notice">Password lock is off for this wallet.</p>'}<label class="check"><input id="send-ack" type="checkbox" required><span>${sweeping?'I checked the estimated fee and receiving address. Sweep into my wallet.':'I checked the address, network, amount and fee. Send this real test transaction.'}</span></label>${sweeping?'<p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>':''}${button('broadcast-send',sweeping?'Confirm sweep':'Confirm and send','primary wide')}<a class="text-button coin-empty-link" href="#wallet">Cancel</a></form>`;
     if(sendDraft.komodo){
-      $('broadcast-form').insertAdjacentHTML('beforebegin','<p class="notice" id="komodo-review-warning">This empties the displayed old Komodo PEP address of the reviewed spendable funds, minus the fee. Your current SafeCore seed controls the recovered PEP. Do not reuse the Komodo seed or address. Other coins and HD accounts are not moved; keep the old backup until they are recovered.</p>');
-      $('send-ack').nextElementSibling.textContent='I recognize my old Komodo PEP address, checked the destination and fee, and saved my SafeCore backup for the recovered funds. I will not reuse the old Komodo seed.';
+      $('broadcast-form').insertAdjacentHTML('beforebegin',`<p class="notice" id="komodo-review-warning">This empties the displayed old Komodo ${E.NETWORKS[p.coin].ticker} address of the reviewed spendable funds, minus the fee. Your current SafeCore seed controls the recovered ${E.NETWORKS[p.coin].ticker}. Do not reuse the Komodo seed or address. Other coins and HD accounts are not moved; keep the old backup until they are recovered.</p>`);
+      $('send-ack').nextElementSibling.textContent=`I recognize my old Komodo ${E.NETWORKS[p.coin].ticker} address, checked the destination and fee, and saved my SafeCore backup for the recovered funds. I will not reuse the old Komodo seed.`;
     }
     $('broadcast-send').type = 'submit';
     $('broadcast-form').onsubmit = async event => {
@@ -595,7 +615,7 @@
       let attempted = null;
       const attemptKey = 'corevault.send-attempts.' + WalletLibrary.id(source);
       try {
-        if(draft.komodo&&(p.coin!=='pep'||!komodoVerified()))throw Error('Komodo recovery is disabled or the session expired. Enter the Komodo phrase again.');
+        if(draft.komodo&&(!WalletKomodo.supports(p.coin)||!komodoVerified(p.coin)))throw Error('Komodo recovery is disabled or the session expired. Enter the Komodo phrase again.');
         if (draft.walletId !== WalletLibrary.id(source) || Date.now()-p.createdAt > 90000 || !liveEnabled()) throw Error('Review expired or wallet changed. Build a fresh transaction.');
         if(window.SafeCorePlatform?.authenticateWalletAction)await SafeCorePlatform.authenticateWalletAction('send');
         if(token!==generation||source!==envelope)return;
@@ -687,14 +707,17 @@
       try { attempts = sendAttempts(); } catch (e) { return `<p class="notice">${escape(e.message)}</p>`; }
       return coins.map(coin => {
         const snap = snapshots[coin];
-        // Reconcile saved sends against all history; limit only the rendered rows.
+        // Reconcile saved sends against all history; paginate only the display.
         const history = snap ? [...new Map(snap.rows.flatMap(r=>r.history).map(h=>[h.tx_hash,h])).values()].sort((a,b)=>(b.height>0?b.height:Infinity)-(a.height>0?a.height:Infinity)) : [];
         const seen = new Set(history.map(h=>h.tx_hash));
-        const txLink=hash=>coin==='pep'&&/^[0-9a-f]{64}$/i.test(hash)?`<a href="https://pepecoinservice.org/explorer/tx/${hash.toLowerCase()}/" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="View Pepecoin transaction ${hash}"><code>${hash}</code></a>`:`<code>${escape(hash)}</code>`;
+        const pages=Math.max(1,Math.ceil(history.length/10)),page=Math.max(1,Math.min(activityPages[coin]||1,pages));
+        activityPages[coin]=page;
+        const txLink=hash=>EXPLORERS[coin]&&/^[0-9a-f]{64}$/i.test(hash)?`<a href="${EXPLORERS[coin]}${hash.toLowerCase()}${coin==='pep'?'/':''}" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="View ${escape(E.NETWORKS[coin].name)} transaction ${hash}"><code>${hash}</code></a>`:`<code>${escape(hash)}</code>`;
         const outstanding=attempts.filter(a=>a.coin===coin&&!seen.has(a.txid));
         const recorded = outstanding.map(a=>`<div class="live-tx">${txLink(a.txid)}<small>${a.status==='unknown' ? 'Submission uncertain — do not resend until checked.' : 'Submitted — awaiting appearance in server history.'}</small></div>`).join('');
-        const rows=recorded+(snap ? (history.slice(0,30).map(h=>`<div class="live-tx">${txLink(h.tx_hash)}<small>${h.height>0 ? `${Math.max(0,snap.tip-h.height+1)} confirmations` : 'Pending'}</small></div>`).join('') || (!outstanding.length?'<p class="subtle">No transactions yet.</p>':'')) : `<p class="subtle">${networkErrors[coin] ? 'Unable to refresh. Try again shortly.' : 'Checking transactions…'}</p>`);
-        return `<details class="activity-asset" data-activity-coin="${coin}"><summary class="coin-picker">${coinMark(coin)}<span>${E.NETWORKS[coin].name}<small>${E.NETWORKS[coin].ticker}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="activity-list" tabindex="0" role="region" aria-label="${E.NETWORKS[coin].name} transaction history">${snap&&!fresh(coin)?`<p class="subtle">Last updated ${escape(new Date(snap.at).toLocaleString())}</p>`:''}${rows}</div></details>`;
+        const rows=snap ? (history.slice((page-1)*10,page*10).map(h=>`<div class="live-tx">${txLink(h.tx_hash)}<small>${h.height>0 ? `${Math.max(0,snap.tip-h.height+1)} confirmations` : 'Pending'}</small></div>`).join('') || (!outstanding.length?'<p class="subtle">No transactions yet.</p>':'')) : `<p class="subtle">${networkErrors[coin] ? 'Unable to refresh. Try again shortly.' : 'Checking transactions…'}</p>`;
+        const pager=pages>1?`<form class="activity-pager" data-page-coin="${coin}" aria-label="${E.NETWORKS[coin].name} history pages"><button type="button" data-page-step="-1" ${page===1?'disabled':''}>Previous</button><label>Page <input type="number" inputmode="numeric" min="1" max="${pages}" step="1" value="${page}" required aria-label="${E.NETWORKS[coin].name} history page"></label><span class="activity-page-total">of ${pages}</span><button type="submit">Go</button><button type="button" data-page-step="1" ${page===pages?'disabled':''}>Next</button></form>`:'';
+        return `<details class="activity-asset" data-activity-coin="${coin}"><summary class="coin-picker">${coinMark(coin)}<span>${E.NETWORKS[coin].name}<small>${E.NETWORKS[coin].ticker}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="activity-outstanding" ${recorded?'':'hidden'}>${recorded}</div><div class="activity-list" role="region" aria-label="${E.NETWORKS[coin].name} transaction history">${snap&&!fresh(coin)?`<p class="subtle">Last updated ${escape(new Date(snap.at).toLocaleString())}</p>`:''}${rows}</div>${pager}</details>`;
       }).join('');
     }
     return `<div class="empty">${icon('activity')}<br>Your transactions will appear here.</div>`;
@@ -702,22 +725,24 @@
   function overview() {
     const visible = visibleCoins();
     if (!visible.length) {
-      $('main').innerHTML = '<p class="subtle">No coins shown. Use Add coins above to choose assets.</p>';
+      $('main').innerHTML = '<p id="coin-empty" class="subtle">No coins shown. Use Add coins above to choose assets.</p>' + (mode === 'demo' ? '<a id="security-cta" href="#setup" class="text-button">Create or restore a wallet →</a>' : '');
       return;
     }
     const pepUsd=priceFresh()?pepPrice.value:null,usdtUsd=priceFresh()?pepPrice.usdt:null;
     const shicUsd=WalletReporting.freshShic(shicPrice)?shicPrice.value:null;
     const ltcUsd=WalletReporting.freshShic(ltcPrice)?ltcPrice.value:null;
-    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd);
+    const dogeUsd=WalletReporting.freshShic(dogePrice)?dogePrice.value:null;
+    const btcUsd=WalletReporting.freshShic(btcPrice)?btcPrice.value:null;
+    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd);
     const worth=WalletReporting.formatWorth(valuation.value);
     const hidden=balancesHidden();
     const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section></div>`;
     const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="primary overview-rescan" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
-      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd);
+      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd);
       const price=unitPrice!==null?unitPrice.toFixed(8).replace(/0+$/,'').replace(/\.$/,'')+' USDT':'*';
-      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd):null;
+      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
       const status=connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
       return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${n.comingSoon?n.name+' coming soon':'Receive '+n.name}" ${n.comingSoon?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
@@ -739,8 +764,7 @@
     $('main').innerHTML = `<div class="page-head"><h1>Coins</h1><a class="text-button" href="#wallet">Done</a></div>
       <label class="coin-search-label" for="coin-search">Find a coin</label><input id="coin-search" type="search" placeholder="Search name or symbol" autocomplete="off" maxlength="80">
       <p class="subtle coin-help">Show or hide coins on your home screen. Your keys and addresses stay unchanged.</p>
-      <div id="coin-results"></div><p id="coin-result-count" class="subtle" role="status" aria-live="polite"></p>
-      <p class="subtle coin-help">Coming-soon coins are display previews only, not usable wallets.</p>`;
+      <div id="coin-results"></div><p id="coin-result-count" class="subtle" role="status" aria-live="polite"></p>`;
     function results() {
       const query = $('coin-search').value.trim().toLowerCase();
       const matches = Object.entries(COINS).filter(([,n]) => `${n.name} ${n.ticker}`.toLowerCase().includes(query));
@@ -751,14 +775,14 @@
       document.querySelectorAll('[data-show-coin]').forEach(el => el.onchange = () => {
         const coin = el.dataset.showCoin;
         const next = el.checked ? hiddenCoins.filter(c => c !== coin) : [...hiddenCoins, coin];
-        try { localStorage.setItem(COIN_PREFS, JSON.stringify(next)); hiddenCoins = next; results(); document.querySelector(`[data-show-coin="${coin}"]`).focus(); }
+        try { localStorage.setItem(coinPrefsKey(), JSON.stringify(next)); hiddenCoins = next; results(); document.querySelector(`[data-show-coin="${coin}"]`).focus(); }
         catch (_) { el.checked = !el.checked; error('Could not save coin visibility on this browser.'); }
       });
       document.querySelectorAll('[data-select-coin]').forEach(el => el.onclick = () => {
         const coin = el.dataset.selectCoin;
         try {
           const next = hiddenCoins.filter(c => c !== coin);
-          localStorage.setItem(COIN_PREFS, JSON.stringify(next)); hiddenCoins = next;
+          localStorage.setItem(coinPrefsKey(), JSON.stringify(next)); hiddenCoins = next;
           go('wallet');
         } catch (_) { error('Could not save coin visibility on this browser.'); }
       });
@@ -793,7 +817,7 @@
     bindCoins();
     if($('sweep-open')){
       $('sweep-open').onclick=()=>go('sweep');
-      if(coin==='pep'&&komodoEnabled()){
+      if(WalletKomodo.supports(coin)&&komodoEnabled()){
         $('sweep-open').insertAdjacentHTML('afterend',button('komodo-open','Sweep Komodo seed','wide'));
         $('komodo-open').onclick=()=>go('komodo-sweep');
       }
@@ -819,11 +843,36 @@
     } else if ($('receive-setup')) $('receive-setup').onclick = () => go(mode === 'locked' ? 'unlock' : 'setup');
   }
   function activity() {
-    const previous=Object.fromEntries([...document.querySelectorAll('[data-activity-coin]')].map(el=>[el.dataset.activityCoin,{open:el.open,scroll:el.querySelector('.activity-list').scrollTop}]));
-    $('main').innerHTML = '<div class="page-head"><h1>Activity</h1></div>' + activityRows();
-    document.querySelectorAll('[data-activity-coin]').forEach(el=>{
-      const state=previous[el.dataset.activityCoin];if(!state)return;
-      el.open=state.open;el.querySelector('.activity-list').scrollTop=state.scroll;
+    const current=[...document.querySelectorAll('[data-activity-coin]')];
+    const content=document.createElement('template');
+    content.innerHTML='<div class="page-head"><h1>Activity</h1></div>'+activityRows();
+    const next=[...content.content.querySelectorAll('[data-activity-coin]')];
+    if(current.length&&current.length===next.length&&current.every((el,i)=>el.dataset.activityCoin===next[i].dataset.activityCoin)){
+      // Keep expanded sections and paging controls attached across refreshes,
+      // preserving the page position and focused input without nested scrolling.
+      current.forEach((el,i)=>{
+        const list=el.querySelector('.activity-list'),html=next[i].querySelector('.activity-list').innerHTML;
+        if(list.innerHTML!==html)list.innerHTML=html;
+        const outstanding=el.querySelector('.activity-outstanding'),updated=next[i].querySelector('.activity-outstanding');
+        if(outstanding.innerHTML!==updated.innerHTML)outstanding.innerHTML=updated.innerHTML;
+        outstanding.hidden=updated.hidden;
+        const pager=el.querySelector('.activity-pager'),nextPager=next[i].querySelector('.activity-pager');
+        if(pager&&nextPager){
+          for(const step of ['-1','1'])pager.querySelector(`[data-page-step="${step}"]`).disabled=nextPager.querySelector(`[data-page-step="${step}"]`).disabled;
+          const input=pager.querySelector('input'),nextInput=nextPager.querySelector('input');
+          input.max=nextInput.max;if(document.activeElement!==input)input.value=nextInput.value;
+          pager.querySelector('.activity-page-total').textContent=nextPager.querySelector('.activity-page-total').textContent;
+        }else if(pager)pager.remove();else if(nextPager)el.append(nextPager);
+      });
+    }else $('main').replaceChildren(content.content);
+    document.querySelectorAll('.activity-pager').forEach(form=>{
+      const coin=form.dataset.pageCoin,input=form.querySelector('input');
+      const jump=value=>{
+        if(!Number.isSafeInteger(value)||value<1||value>Number(input.max))return;
+        activityPages[coin]=value;input.value=String(value);activity();
+      };
+      form.onsubmit=event=>{event.preventDefault();if(input.checkValidity())jump(Number(input.value));};
+      form.querySelectorAll('[data-page-step]').forEach(button=>button.onclick=()=>jump(activityPages[coin]+Number(button.dataset.pageStep)));
     });
   }
   function security() {
@@ -839,13 +888,13 @@
       `<label class="check screenshot-setting"><input id="hide-balances" type="checkbox" ${balancesHidden()?'checked':''}><span><strong>Hide balances</strong><small>Payment amounts stay visible.</small></span></label>` +
       `<label class="check screenshot-setting"><input id="screen-protection" type="checkbox" disabled ${window.SafeCorePlatform?.getScreenProtection?'checked':''}><span><strong>Block screenshots</strong><small id="screen-protection-note">${window.SafeCorePlatform?.getScreenProtection?'Loading…':''}</small></span></label>` +
       `<div id="recovery-preferences"></div><section class="settings-connections">
-      <details id="custom-connections"><summary>Electrum connections</summary><p class="subtle">Use your own server if the default is unavailable. Choose a server you trust: it can see your address queries and IP address.</p><p class="inline-info" id="connection-error" role="status"></p>${assetOrder.map(coin=>`<form class="connection-form" data-connection="${coin}"><label for="endpoint-${coin}">${E.NETWORKS[coin].name}</label><input id="endpoint-${coin}" type="url" required maxlength="2048" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="wss://server:port/path"><small id="endpoint-current-${coin}" class="subtle"></small><div class="connection-actions"><button type="submit" data-test-connection="${coin}">Test connection</button><button type="button" data-use-connection="${coin}" disabled>Use connection</button></div><p class="inline-info" data-connection-status="${coin}" role="status"></p></form>`).join('')}<button id="restore-connections" class="text-button" type="button">Restore default connections</button></details>
+      <details id="custom-connections"><summary>Electrum connections</summary><p class="subtle">Automatic server failover when available. You can use your own server below. Servers can see your address queries and IP address.</p><p class="inline-info" id="connection-error" role="status"></p>${assetOrder.map(coin=>`<form class="connection-form" data-connection="${coin}"><label for="endpoint-${coin}">${E.NETWORKS[coin].name}</label><input id="endpoint-${coin}" type="url" required maxlength="2048" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="wss://server:port/path"><small id="endpoint-current-${coin}" class="subtle"></small><div class="connection-actions"><button type="submit" data-test-connection="${coin}">Test connection</button><button type="button" data-use-connection="${coin}" disabled>Use connection</button></div><p class="inline-info" data-connection-status="${coin}" role="status"></p></form>`).join('')}<button id="restore-connections" class="text-button" type="button">Restore default connections</button></details>
       ${['localhost','127.0.0.1'].includes(location.hostname)&&location.port==='8787'?'<a href="#reset-tests" class="text-button coin-empty-link">Reset all local test data</a>':''}<div class="settings-actions">${button('wallet-information','Information')}</div></section>`;
     bindConnections();
     if (exists) {
-      $('recovery-preferences').innerHTML=`<label class="check komodo-setting"><input id="komodo-recovery-enabled" type="checkbox" ${komodoEnabled()?'checked':''} ${mode!=='unlocked'?'disabled':''}><span><strong>Komodo recovery (PEP)</strong><small>Recover legacy Pepecoin funds.</small></span></label>`;
+      $('recovery-preferences').innerHTML=`<label class="check komodo-setting"><input id="komodo-recovery-enabled" type="checkbox" ${komodoEnabled()?'checked':''} ${mode!=='unlocked'?'disabled':''}><span><strong>Komodo recovery (PEP / SHIC)</strong><small>Recover legacy Pepecoin or Shibacoin funds.</small></span></label>`;
       $('komodo-recovery-enabled').onchange=event=>{
-        try{if(event.target.checked)localStorage.setItem(komodoPreference(),'true');else localStorage.removeItem(komodoPreference());clearKomodo();toast(event.target.checked?'Komodo Sweep enabled for this wallet’s Pepecoin.':'Komodo recovery disabled.');}
+        try{if(event.target.checked)localStorage.setItem(komodoPreference(),'true');else localStorage.removeItem(komodoPreference());clearKomodo();toast(event.target.checked?'Komodo Sweep enabled for this wallet’s Pepecoin and Shibacoin.':'Komodo recovery disabled.');}
         catch(_){event.target.checked=komodoEnabled();error('Could not save the recovery setting.');}
       };
       if($('unlock-security'))$('unlock-security').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
@@ -934,14 +983,14 @@
   function information() {
     $('main').innerHTML = title('Information', 'Wallet risks & disclaimer', icon('shield')) +
       `<section class="panel risk-copy">${riskContent()}</section>` +
-      `<p class="subtle">SHIC and LTC price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Logos: Shibacoin Core and Litecoin Core contributors (MIT).</p>` +
+      `<p class="subtle">SHIC, LTC, DOGE and BTC price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Logos: Shibacoin Core, Litecoin Core, Dogecoin Core and Bitcoin Core contributors (MIT).</p>` +
       button('information-back', 'Back to Settings', 'primary');
     $('information-back').onclick = () => go('security');
   }
   function iconGallery(choice=savedBrand()){
     applyBrand(choice);
     const tile=(name,i)=>`<button class="brand-option" data-brand="${i+1}" aria-label="Preview ${name}" aria-pressed="${choice===i+1}"><img src="${brandPath(i+1)}" alt=""><span><small>${String(i+1).padStart(2,'0')}</small>${name}</span></button>`;
-    const groups=[['Nodes & networks · New',20,30],['Coins & crypto',10,20],['Original designs',0,10]].map(([label,start,end])=>`<h2>${label}</h2><div class="brand-grid" aria-label="${label}">${BRAND_ICONS.slice(start,end).map((name,i)=>tile(name,i+start)).join('')}</div>`).join('');
+    const groups=[['SafeCore · New',30,31],['Nodes & networks',20,30],['Coins & crypto',10,20],['Original designs',0,10]].map(([label,start,end])=>`<h2>${label}</h2><div class="brand-grid" aria-label="${label}">${BRAND_ICONS.slice(start,end).map((name,i)=>tile(name,i+start)).join('')}</div>`).join('');
     $('main').innerHTML=title('Choose your icon',`${BRAND_ICONS.length} SafeCore designs. Tap one to preview it in the header.`)+
       `<div class="brand-preview"><img src="${brandPath(choice)}" alt="${escape(choice?BRAND_ICONS[choice-1]:'Original')} icon preview"><div><strong>SafeCore</strong><p class="subtle">${choice?`${String(choice).padStart(2,'0')} · ${BRAND_ICONS[choice-1]}`:'Original icon'}</p></div></div><div class="form-actions">${button('save-brand','Use this icon','primary')}<a href="#security" class="text-button">Cancel</a></div>${groups}${button('original-brand','Restore original icon','text-button')}`;
     document.querySelectorAll('[data-brand]').forEach(el=>el.onclick=()=>iconGallery(Number(el.dataset.brand)));
@@ -1147,6 +1196,9 @@
     await changeWallet(() => {
       if (token !== generation) throw new Error('Wallet changed or was closed. Please try again.');
       if (JSON.stringify(library.active()) !== JSON.stringify(envelope)) throw new Error('Another tab changed the active wallet. Reload before saving.');
+      if (!library.list().some(item => item.id === WalletLibrary.id(sealed))) {
+        localStorage.setItem(WALLET_COIN_PREFS + WalletLibrary.id(sealed), JSON.stringify(assetOrder));
+      }
       library.save(sealed, name);
     }, () => {
       if (token !== generation || document.hidden) { envelope = sealed; mode = 'locked'; lock(undefined, false); return; }
@@ -1159,8 +1211,37 @@
     $('main').innerHTML = title('Write down your recovery phrase', 'Keep the words in order. Never share them.', protectionIcon(protectedWallet(pending.sealed))) +
       `<section class="panel form-panel"><p class="notice" id="wallet-saved">Your wallet is saved on this device. Find these words again in Your wallets → select your wallet → View recovery phrase.</p><p class="subtle">Keep a separate backup of these words. You will need it if this device is lost or its browser data is cleared.</p><div class="word-grid" id="recovery-words">${pending.candidate.mnemonic.split(' ').map((word,i) => `<div class="word"><span>${i+1}</span>${escape(word)}</div>`).join('')}</div>
       ${pending.candidate.passphrase ? '<div class="notice">A BIP39 passphrase is set. Keep it with your recovery instructions; these words alone will recover different addresses.</div>' : ''}
-      <div class="form-actions">${button('finish','Continue to wallet','primary wide')}</div></section>`;
+      <section id="recovery-copy-question"><h2>Save an encrypted recovery copy on this device?</h2><p class="subtle">It can help you restore after reinstalling the app. A separate manual backup is strongly recommended.</p><div class="form-actions">${button('recovery-copy-yes','Yes','primary')}${button('finish','No, continue')}</div></section></section>`;
     $('finish').onclick = () => { pending = null; go('wallet'); };
+    $('recovery-copy-yes').onclick=()=>{
+      const source=pending,token=generation;
+      $('recovery-copy-question').innerHTML='<h2>Protect your recovery copy</h2><p class="subtle">Choose a local folder and a backup password. You need this password to restore the file. We do not save it. This copy cannot recover a lost or reset device; keep a separate manual backup.</p><form id="recovery-copy-form" autocomplete="off"><label for="recovery-copy-password">Backup password</label><input id="recovery-copy-password" type="password" minlength="12" maxlength="1000" required autocomplete="new-password"><label for="recovery-copy-confirm">Confirm backup password</label><input id="recovery-copy-confirm" type="password" minlength="12" maxlength="1000" required autocomplete="new-password"><div class="form-actions">'+button('save-recovery-copy','Choose location and save','primary')+button('skip-recovery-copy','No, continue')+'</div></form>';
+      $('skip-recovery-copy').type='button';$('skip-recovery-copy').onclick=()=>{pending=null;go('wallet');};
+      $('save-recovery-copy').type='submit';
+      $('recovery-copy-form').onsubmit=async event=>{
+        event.preventDefault();if(busy)return;clearError();
+        const password=$('recovery-copy-password').value;
+        if(password.length<12||password.length>1000){error('Use a backup password of at least 12 characters.');return;}
+        if(password!==$('recovery-copy-confirm').value){error('The backup passwords do not match.');return;}
+        $('recovery-copy-password').value='';$('recovery-copy-confirm').value='';busy=true;$('save-recovery-copy').disabled=true;
+        const active=()=>token===generation&&source===pending&&envelope===source.sealed&&!document.hidden&&location.hash==='#backup';
+        try{
+          const copy=await E.encrypt(crypto,source.candidate,password);
+          if(!active())return;
+          const data=JSON.stringify(copy,null,2)+'\n';
+          if(window.SafeCorePlatform){
+            if(!SafeCorePlatform.exportRecoveryCopy)throw Error('Update the Android app to save a local recovery copy.');
+            await SafeCorePlatform.exportRecoveryCopy(data);
+          }else{
+            const url=URL.createObjectURL(new Blob([data],{type:'application/json'})),a=document.createElement('a');
+            a.href=url;a.download='safecore-encrypted-recovery.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+          }
+          if(active()){pending=null;go('wallet');toast(window.SafeCorePlatform?'Encrypted recovery copy saved. Keep its password and a separate backup safe.':'Encrypted copy downloaded. Verify the file and keep a separate backup.');}
+        }catch(e){if(active())error(e.message);}
+        finally{busy=false;if($('save-recovery-copy'))$('save-recovery-copy').disabled=false;}
+      };
+      $('recovery-copy-password').focus();
+    };
   }
   function unlock() {
     if (!envelope) { go('setup'); return; }
@@ -1191,7 +1272,7 @@
       try{
         await withWalletLock(()=>{
           const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,BALANCE_PRIVACY];
-          const prefixes=['corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.'];
+          const prefixes=['corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.',WALLET_COIN_PREFS];
           const keys=Object.keys(localStorage).filter(k=>exact.includes(k)||prefixes.some(p=>k.startsWith(p)));
           for(const key of keys)localStorage.removeItem(key);
           envelope=null;mode='demo';lock();reloadConnections();loadCoinPrefs();applyTheme();
@@ -1229,7 +1310,7 @@
           if (!storageFailure) {
             try{
               for(const coin of Object.keys(E.NETWORKS))localStorage.removeItem('corevault.balance.'+target+'.'+coin);
-              for(const prefix of ['corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.'])localStorage.removeItem(prefix+target);
+              for(const prefix of ['corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.',WALLET_COIN_PREFS])localStorage.removeItem(prefix+target);
             }catch(_){cleanupFailed=true;}
           }
           if(isActive||storageFailure){envelope = null; mode = 'demo'; lock();}
@@ -1252,6 +1333,7 @@
   }
   function render() {
     if (walletStorage.failed || (nativeStorage && mode === 'storage-error')) { deviceStorageError(); return; }
+    loadCoinPrefs();
     cancelConnectionTests();
     let route = location.hash.slice(1) || 'wallet';
     if(route!=='export')exportSelection=null;
@@ -1344,7 +1426,7 @@
     }
     if(event.key===BRAND_PREF) {applyBrand(savedBrand());if(location.hash==='#icons')iconGallery();}
     if (event.key === 'corevault.theme'||event.key===null) applyTheme();
-    if (event.key === COIN_PREFS) { loadCoinPrefs(); if (['', '#wallet', '#coins'].includes(location.hash)) render(); }
+    if (event.key === COIN_PREFS || event.key === coinPrefsKey()) { loadCoinPrefs(); if (['', '#wallet', '#coins', '#receive'].includes(location.hash)) render(); }
     if (!nativeStorage && (event.key === STORE || event.key === WalletLibrary.COLLECTION || event.key === null)) { lock(undefined, false); try { const raw = walletStorage.getItem(STORE); envelope = raw ? E.validateEnvelope(JSON.parse(raw)) : null; mode = envelope ? 'locked' : 'demo'; if(!document.hidden)openUnprotected(); } catch (_) { envelope = null; mode = 'storage-error'; } render(); resetIdle(); }
   });
   for (const event of ['pointerdown','keydown']) document.addEventListener(event, resetIdle, {passive:true});

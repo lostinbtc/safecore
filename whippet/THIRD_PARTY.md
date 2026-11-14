@@ -16,6 +16,10 @@ Copied without modifying their contents:
 - `www/assets/litecoin.png`: unchanged Litecoin Core icon from revision
   `ec1b6489a900d09cf5991e220dce089c77a232a2`. MIT notice/provenance is bundled in
   `www/assets/litecoin.LICENSE`. Trademark rights remain with their owners.
+- `www/assets/bitcoin.png`: unchanged Bitcoin Core v30.0 icon from `src/qt/res/icons/bitcoin.png`; MIT, full notice in `www/assets/bitcoin.LICENSE`.
+- `www/assets/dogecoin.png`: unchanged Dogecoin Core icon from revision
+  `b38c83fbf10302b23ac6e7ad89bc83068efe2fd8`. Its MIT notice and provenance are
+  bundled in `www/assets/dogecoin.LICENSE`; trademark rights remain with their owners.
 - `bech32` 2.0.0 (bitcoinjs, MIT) is a development-only independent address-test
   encoder. It is not bundled into the wallet or offline recovery tool.
 - `www/assets/whippet-legacy.js`: this project's
