@@ -172,6 +172,23 @@ receiving address after restoration. Core `wallet.dat` files are not supported.
 
 ### Local Bitcoin integration
 
+Bitcoin key/address checks do not require real BTC. In addition to the ordinary
+unit tests, an optional independent Bitcoin Core check derives all 200 receiving
+addresses and validates SafeCore signatures on a fresh, private regtest chain:
+
+```sh
+BITCOIND_BIN=/absolute/path/to/verified/bitcoind node whippet/tests/bitcoin_core.cjs
+```
+
+Run from the repository root after verifying the Core executable using its
+[official download instructions](https://bitcoincore.org/en/download/).
+Verified locally with Bitcoin Core 30.4. The test disables peer networking, uses
+only a public disposable recovery fixture and fake coins, checks all supported
+destination types plus Max/multiple inputs and tamper rejection, and mines a
+local confirmation. It never attaches to an existing node and removes its own
+temporary chain afterward. This validates transaction/address compatibility,
+not a funded mainnet end-to-end test or an independent security audit.
+
 BTC uses legacy P2PKH receiving addresses on `m/44'/0'/0'/0/{index}`, WIF 128
 and eight decimals. Missing BTC paths in old SafeCore backups adopt this fixed
 path; explicit alternate paths are rejected. Existing addresses/passwords stay

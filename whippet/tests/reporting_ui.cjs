@@ -21,6 +21,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   await p.locator('[data-setup="import"]').click();await p.locator('[data-restore-word="0"]').fill(vault.recipe.mnemonic);await p.locator('#restore-done').click();
   const restoredAt=await p.evaluate(()=>Date.now());
   await p.locator('#submit-setup').click();await p.waitForFunction(()=>__calls.pep&&__calls.wht);
+  await require('./coin-selection-helper.cjs')(p,['pep','wht']);
   await p.waitForFunction(()=>document.querySelector('[data-overview-coin=pep] .holding-balance')?.textContent==='1,000 PEP');
   assert.ok(await p.evaluate(t=>Date.now()-t<4000,restoredAt),'restore must not wait for the reporting delay');
   assert.equal(await p.evaluate(()=>__calls.pep),1);assert.equal(await p.evaluate(()=>__calls.wht),1);

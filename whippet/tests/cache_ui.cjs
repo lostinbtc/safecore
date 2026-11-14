@@ -9,6 +9,8 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
     page.on('pageerror',e=>errors.push(e.message));
     await context.addInitScript(()=>{window.fetch=async()=>{throw Error('Fixture offline');};window.WebSocket=class{constructor(){throw Error('Fixture offline');}};});
     await page.goto('http://localhost:8787/');
+    await page.locator('#coin-empty').waitFor();
+    await require('./coin-selection-helper.cjs')(page,['pep']);
     assert.equal(await page.locator('[data-overview-coin=pep] .holding-balance').innerText(),'* PEP');
     await page.locator('[data-nav="activity"]').click();await expect(page.locator('#main')).toContainText(/transactions will appear/);
     const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
