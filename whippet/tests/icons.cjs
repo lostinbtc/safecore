@@ -24,7 +24,7 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
   await page.locator('.brand-grid').first().waitFor({state:'detached'});
   assert.equal(await page.locator('.mobile-brand img').getAttribute('src'),'assets/safecore.png');
   await page.goto('http://localhost:8787/#icons');await page.locator('[data-brand="30"]').click();await page.locator('#save-brand').click();
-  await page.locator('.holdings').waitFor();await page.reload();
+  await page.locator('#coin-empty').waitFor();await page.reload();
   assert.equal(await page.locator('.mobile-brand img').getAttribute('src'),'assets/icons/safecore-30.svg');
   assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'),'assets/icons/safecore-30.svg');
   assert.equal(await page.locator('link[rel="icon"]').getAttribute('type'),'image/svg+xml');
