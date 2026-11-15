@@ -1,6 +1,6 @@
 # SafeCore wallet guide
 
-Local-first Android and browser wallet for **PEP, DOGE, LTC, SHIC, WHT and BTC**.
+Local-first Android and browser wallet for **BELLS, BTC, DINGO, DOGE, LTC, PEP, SHIC and WHT**.
 Keys and signing stay on-device. This is unaudited development software; keep
 independent backups and use expendable amounts.
 
@@ -93,145 +93,62 @@ receiving address after restoration. Core `wallet.dat` files are not supported.
 
 | Coin | P2PKH version byte | Receive path |
 | --- | --- | --- |
-| Pepecoin | 56 / `0x38` | `m/44'/3434'/0'/0/{index}` |
-| Dogecoin (DOGE) | 30 / `0x1e` | `m/44'/3'/0'/0/{index}` |
-| Litecoin (LTC) | 48 / `0x30` | `m/44'/2'/0'/0/{index}` |
-| Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
-| Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
+| Bellscoin (BELLS) | 25 / `0x19` | `m/44'/762'/0'/0/{index}` |
 | Bitcoin (BTC) | 0 / `0x00` | `m/44'/0'/0'/0/{index}` |
+| Bitcoin Cash (BCH, CashAddr) | 0 / `0x00` | `m/44'/145'/0'/0/{index}` |
+| Bonkcoin (BONC, legacy opt-in) | 25 / `0x19` | `m/0'/0'/{index}'` |
+| Catcoin (CAT, legacy opt-in) | 21 / `0x15` | `m/44'/760'/0'/0/{index}` |
+| Dash (DASH) | 76 / `0x4c` | `m/44'/5'/0'/0/{index}` |
+| DigiByte (DGB) | 30 / `0x1e` | `m/44'/20'/0'/0/{index}` |
+| Dingocoin (DINGO) | 30 / `0x1e` | `m/44'/3'/0'/0/{index}` |
+| Dogecoin (DOGE) | 30 / `0x1e` | `m/44'/3'/0'/0/{index}` |
+| Flopcoin (FLOP, legacy opt-in) | 35 / `0x23` | `m/44'/3'/0'/0/{index}` |
+| Junkcoin (JKC, legacy opt-in) | 16 / `0x10` | `m/44'/2013'/0'/0/{index}` |
+| Litecoin (LTC) | 48 / `0x30` | `m/44'/2'/0'/0/{index}` |
+| Luckycoin (LKY, legacy opt-in) | 47 / `0x2f` | `m/44'/790'/0'/0/{index}` |
+| Pepecoin | 56 / `0x38` | `m/44'/3434'/0'/0/{index}` |
+| Ravencoin (RVN) | 60 / `0x3c` | `m/44'/175'/0'/0/{index}` |
+| Shibacoin (SHIC) | 63 / `0x3f` | `m/44'/4474'/0'/0/{index}` |
+| TrumPOW (TRMP) | 65 / `0x41` | `m/44'/1707'/0'/0/{index}` |
+| Whippet | 73 / `0x49` | `m/0'/3'/{index}'` |
 
-### Pepecoin (PEP)
+### Bellscoin (BELLS)
 
-Pepecoin is the native PEP proof-of-work chain, not an Ethereum token. It uses
-eight decimals, compressed legacy P2PKH receiving addresses on the path above,
-and WIF version 158. Standard sends and private-key sweeps verify previous
-transaction outputs and sign locally. Newly mined block rewards (coinbase outputs)
-have a 240-block maturity rule in
-[Pepecoin Core](https://github.com/pepecoinppc/pepecoin/blob/master/src/chainparams.cpp).
-SafeCore waits for 240 confirmations before spending those outputs. This does
-not apply to ordinary incoming transfers or typical mining-pool payouts;
-ordinary outputs become eligible after one confirmation, subject to the other
-send checks.
-The default fee for ordinary small sends is 0.01 PEP; the optional 1 PEP total-fee
-checkbox supports larger input sets within the documented limits.
+Uses the registered BIP44 coin type 762: `m/44'/762'/0'/0/{index}`.
+Receiving keys are compressed legacy P2PKH (version 25), with WIF version 153.
+Sending also accepts Bellscoin P2SH and established SegWit/Taproot destinations.
+The P2SH prefix overlaps Dogecoin P2PKH: an address checksum cannot distinguish
+those networks, so confirm with the recipient that the destination is for BELLS.
+Mining outputs require 30 confirmations. Komodo recovery remains PEP/SHIC only.
 
-Pepecoin has a default server and an automatic fallback. Connections
-validate the pinned Pepecoin genesis; a fallback is not an uptime guarantee.
-PEP/USD and USD/USDT display estimates use Kraken. The offline recovery tool
-supports PEP JSON/WIF/TXT/CSV, and legacy Komodo recovery is opt-in for PEP/SHIC
-only. This does not discover unrelated derivation paths or Core wallet.dat files.
+Bellscoin's default connection is an HTTPS Esplora-style API adapter, not a
+public Electrum socket. It verifies genesis, preserves integer base units,
+pages history, resolves missing output heights and verifies raw previous
+transactions before spending. Requests have deadlines, bounded response sizes,
+no credentials/referrers and at most four concurrent HTTP requests. Broadcasts
+are attempted once; a lost response retains the uncertain-send safeguard.
+This is not full-node/SPV validation: a server can still omit data or misreport
+confirmation heights. There is no verified independent default backup server.
+Settings can select a user-supplied, tested Electrum WSS server instead.
 
-### Dogecoin (DOGE)
+Fees are automatic and size-based. A valid six-block API estimate is used when
+available, never below the Core wallet minimum of 10 sat/byte. An empty estimate
+table uses that minimum and is identified in Send; an unavailable or invalid
+response does not authorize a fallback spend. Rates above 1,000 sat/byte and
+total fees above 0.01 BELLS are blocked. The all-coin USD safeguards also apply.
 
-DOGE uses BIP44 coin type 3, P2PKH version 30, P2SH version 22 and WIF version
-158, with eight decimals. Existing backups without `paths.doge` derive the fixed
-path above; explicit alternate paths are rejected. Existing coin addresses and
-protection preferences are unchanged. UI order is PEP, DOGE, LTC, SHIC, WHT, BTC.
-A previously hidden DOGE entry stays hidden; enable it through **Add coins**.
+The offline tool uses the same path and supports `bellscoin-seed-v1` bundles and
+SafeCore plain/encrypted JSON. Old SafeCore backups remain compatible. Nintondo's
+older wallet used coin type 0, so its phrase alone may not restore the same
+addresses here; always compare a known address. This is a coin wallet, not an
+inscription/collectible wallet: do not import wallets holding Bellinals or tokens
+whose outputs must be preserved. The bag icon comes unchanged from Bells Core;
+its source revision and upstream notice are bundled with the asset.
 
-Ordinary small sends retain the reviewed 0.01 DOGE fee, 0.01 DOGE minimum output
-and 1,000-byte limit. An optional, default-off 1 DOGE total-fee checkbox supports
-up to 40 verified inputs within the documented bounds. Sweeps use at least 0.01 DOGE/kB proportionally plus the
-existing 25% cushion. Mining rewards require 240 confirmations. No SegWit or
-Dogecoin token/inscription handling is implemented. Coin-specific genesis checks,
-raw-prevout verification and uncertain-broadcast protection remain mandatory.
-
-The default and backup WSS servers passed live metadata checks. Both share an
-operator, so the automatic fallback is not independent-operator redundancy or
-an uptime guarantee. DOGE quotes
-share the display-only CoinGecko request with SHIC/LTC. Offline JSON/WIF/TXT/CSV
-recovery makes no network requests. A real DOGE receive/send test is still needed.
-
-Network parameters, icon and fee guidance: [Dogecoin Core](https://github.com/dogecoin/dogecoin/tree/b38c83fbf10302b23ac6e7ad89bc83068efe2fd8),
-`src/chainparams.cpp` and `doc/fee-recommendation.md`.
-
-### Litecoin (LTC)
-
-LTC receives to legacy BIP44 `L…` addresses with compressed keys and WIF version
-176. Existing backups without an LTC path use the fixed path above; explicit
-alternate paths are rejected. Existing coin addresses and format names do not change.
-This is not automatic discovery of BIP49/BIP84 accounts or other wallets' change branches.
-
-Sending accepts checksum-validated Litecoin P2PKH, P2SH (`M…` and legacy `3…`),
-native SegWit v0 and Taproot v1 addresses. Legacy `3…` addresses share Bitcoin's
-version byte, so the encoding alone cannot prove the intended chain. Confirm
-the recipient requested Litecoin. Future witness versions and MWEB privacy
-addresses are rejected. No MWEB keys or private balances are generated/scanned.
-When checking a transparent previous output, its Litecoin txid excludes witness
-and MWEB extension data, matching Core's `ComputeHash`; the extension is not
-interpreted or used for signing. Recognized HogEx withdrawals require six
-confirmations; mining rewards require 100. Only legacy wallet inputs are signed.
-
-The default and backup WSS servers passed certificate, genesis, height and
-read-only RPC checks during local integration. They share an operator, so the
-automatic fallback is not independent-operator redundancy or an uptime guarantee.
-Users can test/select a different WSS server in Settings.
-
-LTC fees use a six-block Electrum estimate, at least the live relay minimum
-and 1,000 litoshis/kB, calculated proportionally by byte, with a
-100,000-litoshi/kB rate cap and a 0.001 LTC total-fee cap. The conservative output
-minimum is 5,460 litoshis; small change handling remains explicit. LTC does not
-use the other coins' 0.01 flat fee. Sweeps retain the 25% fee cushion and absolute
-LTC fee cap. Missing or invalid estimates block sends/sweeps without hiding balances.
-Price estimates use CoinGecko's `litecoin` ID in the same five-minute
-public request as SHIC, with per-asset validation and expiry. No wallet data is sent.
-The offline tool supports LTC JSON/WIF/TXT/CSV without network requests.
-
-Parameters and logo source: Litecoin Core revision
-`ec1b6489a900d09cf5991e220dce089c77a232a2`, `src/chainparams.cpp`,
-`src/policy/policy.h`, `src/consensus/consensus.h` and
-`src/primitives/transaction.cpp`. Test.19 promotes the local LTC integration.
-Automated checks passed; real-funds LTC receive/send testing remains pending.
-
-### Shibacoin (SHIC)
-
-Shibacoin is the native SHIC proof-of-work chain, not the SHIB token. Its mainnet
-parameters were checked against Shibacoin Core revision
-`0af632dfa466c62d77a1b9a4358cf4d64d1fbd4b` (`src/chainparams.cpp`,
-`src/amount.h`, and `doc/fee-recommendation.md`) and SLIP-0044 coin type 4474.
-SHIC uses a third-party WSS server by default.
-Certificate validation and the pinned genesis
-`ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f`
-are mandatory. This server is not operated by SafeCore; availability and chain
-reports remain third-party dependencies. Custom WSS connections remain available.
-No SHIC node/indexer deployment is included in this change.
-
-SHIC uses eight decimal places, compressed P2PKH addresses, WIF version 158 and
-the existing conservative fee/dust/maturity guards. Old SafeCore JSON backups
-without a SHIC path derive this fixed path; an explicitly different SHIC path is
-rejected. PEP/WHT paths, wallet IDs and existing backup format names are unchanged.
-The offline recovery tool supports SHIC JSON, WIF/TXT and CSV without networking.
-
-Ordinary small sends default to 0.01 SHIC. The optional 1 SHIC total-fee checkbox
-supports larger input sets within the documented bounds; it starts off and does
-not change sweep fees. Legacy Komodo recovery is opt-in for PEP and SHIC only.
-
-SHIC USD estimates come from CoinGecko's `shibacoin` ID, no more than once per
-five minutes while the wallet is unlocked/foregrounded. The request contains no
-wallet address, balance, seed or credentials. CoinGecko sees the client's IP.
-Missing, malformed, future-dated or more-than-ten-minute-old provider quotes are
-rejected; fetched quotes expire after five minutes. HTTP failures/rate limits
-leave balances and spending unaffected. USDT conversion uses the same Kraken
-USD/USDT quote as PEP; no 1:1 USD/USDT assumption is made.
-Native HTTP access remains restricted to the exact public quote requests;
-remote scripts remain blocked. SHIC support is included in test.18; earlier APKs remain unchanged.
-
-### Whippet (WHT)
-
-Whippet preserves its legacy hardened receiving path `m/0'/3'/{index}'`,
-P2PKH version 73 and WIF version 158. It uses eight decimals and legacy P2PKH
-wallet inputs. Old generator backups and offline JSON/WIF/TXT/CSV recovery remain
-compatible with that path. Assets/covenants and legacy Komodo recovery are not
-supported. Mining rewards require 240 confirmations.
-
-Ordinary small sends keep the 0.01 WHT default. The optional 1 WHT total-fee
-checkbox is separate, off by default, and intended for larger input sets.
-Existing proportional sweep fees and their review remain unchanged. There is
-currently no configured Whippet explorer or reliable USD price feed.
-
-Whippet has one default WSS server. No second public server has been verified;
-retries are not independent redundancy.
-Users can choose their own WSS server in Settings.
+References: [Bells Core chain parameters](https://github.com/BellsChain/bellscoin/blob/fccdc6736fe81abc0b2b175bdacc58369c08845b/src/kernel/chainparams.cpp),
+[Core wallet fee policy](https://github.com/BellsChain/bellscoin/blob/fccdc6736fe81abc0b2b175bdacc58369c08845b/src/wallet/wallet.h),
+[coinbase maturity](https://github.com/BellsChain/bellscoin/blob/fccdc6736fe81abc0b2b175bdacc58369c08845b/src/consensus/consensus.h),
+[SLIP44 registry](https://github.com/satoshilabs/slips/blob/master/slip-0044.md).
 
 ### Bitcoin (BTC)
 
@@ -282,6 +199,279 @@ full-balance sweeps with their fee cushion, and mines a local confirmation.
 It never attaches to an existing node and removes its own
 temporary chain afterward. This validates transaction/address compatibility,
 not a funded mainnet end-to-end test or an independent security audit.
+
+### Bitcoin Cash (BCH)
+
+Uses CashAddr and replay-protected ForkID signatures, with a post-fork chain
+checkpoint and automatic size-based fees. Native BCH only; no CashTokens/SLP.
+See [chain-specific verification and limits](docs/layer1-validation.md).
+
+### Bonkcoin (BONC) — opt-in legacy asset
+
+Native proof-of-work Bonkcoin, not Solana BONK. Hidden by default. Enable it in
+**Settings → Legacy assets**, then test and use a custom secure Electrum
+connection in **Network connections**. There is no default server, fallback,
+explorer link or price feed. Enabling the switch alone makes no BONC queries and
+does not enable receiving/sending. Every connection verifies BONC's genesis before
+address queries. Disabling the asset closes its connection, cancels pending
+reviews and hides it without deleting its saved endpoint or recovery material.
+
+SafeCore uses BIP39 with the explicit recipe `m/0'/0'/{index}'`, compressed P2PKH
+version 25, P2SH version 28 and WIF version 151. This path follows the actual
+[Core child derivation code](https://github.com/Bonkcoin/Bonkcoin-core/blob/d7a036ff48473622bb08f1c133c4af08df3cb518/src/wallet/wallet.cpp),
+not its inconsistent `hdKeypath` metadata, which says `m/0'/3'/…`.
+Core uses a random master seed, not BIP39: a Core `wallet.dat` is not recoverable
+from SafeCore words. This is SafeCore's documented BONC recipe, not a claim of
+compatibility with other mnemonic wallets. The offline tool supports plain and
+encrypted SafeCore JSON plus `bonkcoin-seed-v1` bundles. Existing coin paths and
+stored wallet files are unchanged; mismatched explicit BONC paths are rejected.
+
+Automatic fees use exact transaction size at a minimum of 0.01 BONC/kB or the
+fresh live relay rate, whichever is higher. A valid six-block estimate can raise
+that rate. An explicit `-1` estimate uses the Core/relay minimum; malformed,
+failed or oversized estimates block spending. Recipient/change minimum: 0.01
+BONC; maximum rate: 0.1 BONC/kB; total-fee cap: 0.1 BONC. No override. Mined
+outputs require 240 confirmations; the transaction value limit is 10 billion
+BONC. No SegWit or Komodo recovery. BONC and Bellscoin share their P2PKH version,
+so a bare address cannot prove which coin the recipient expects.
+
+Chain identity and address versions were cross-checked against
+[Bonkcoin Core](https://github.com/Bonkcoin/Bonkcoin-core/blob/d7a036ff48473622bb08f1c133c4af08df3cb518/src/chainparams.cpp)
+and its [ElectrumX implementation](https://github.com/Bonkcoin/electrumx-bonc/blob/5dc841963c802c158676066f61dd071b1bf63cbd/electrumx/lib/coins.py).
+Independent key/WIF/signature tests and synthetic Electrum/send tests cover the
+local implementation. No working public server or funded BONC mainnet transfer
+has been verified. Test only expendable amounts after configuring a trusted node.
+
+### Catcoin (CAT) — opt-in legacy asset
+
+Enable in Legacy assets and test your own secure WebSocket Electrum server.
+The verified public TLS server is not a WebSocket endpoint. Catcoin uses the
+Electrum-CAT BIP39 legacy path shown above, compressed P2PKH keys and WIF 149.
+Native Electrum seed phrases are not BIP39 and are not accepted as substitutes.
+Sends use automatic size-based fees with a 0.01 CAT/kB minimum, 0.1 CAT/kB rate
+cap, 0.1 CAT total cap, 0.000546 CAT dust floor and 100-block mining maturity.
+No SegWit/MWEB destinations or Komodo recovery are enabled. Offline recovery works
+without a server. See the chain-specific validation notes for sources and limits.
+
+### Dash (DASH)
+
+Standard Dash receiving and sends, automatic fees, and special-transaction prevout
+parsing. No Platform accounts or CoinJoin. See [verification and limits](docs/layer1-validation.md).
+
+### DigiByte (DGB)
+
+Legacy BIP44 receiving, P2SH/SegWit destinations and automatic fees. No DigiAsset
+support; metadata-bearing prevouts are blocked. See [verification and limits](docs/layer1-validation.md).
+
+### Dingocoin (DINGO)
+
+Uses `m/44'/3'/0'/0/{index}`, matching the
+official Dingocoin browser wallet/recovery tool: compressed P2PKH version 30,
+P2SH version 22 and WIF version 158. SegWit destinations and Komodo recovery
+are not supported. Mined outputs require 240 confirmations. The offline tool
+supports `dingocoin-seed-v1` bundles and existing plain/encrypted SafeCore JSON.
+
+DOGE and DINGO share genesis, their address format and this derivation path.
+The same seed therefore produces matching address text, **not shared funds**.
+Every DOGE connection checks the pinned Dogecoin block 104679; every DINGO
+connection checks Dingocoin block 1 before address queries or broadcasts.
+Balances, history/cache records, send attempts and connection settings remain
+keyed by coin. Changing the Send asset clears its draft and review. An address
+checksum cannot identify which of these coins a recipient expects. These checks
+prevent accidental chain mixups, not a malicious server lying about chain data;
+SafeCore is not a full node or SPV verifier.
+
+Three verified public WSS endpoints use the existing failover/cooldown logic.
+Custom connections remain pinned. Only public hashes and signed transactions
+leave the device, and a broadcast is never automatically retried.
+
+DINGO fees are automatic at the greater of 1 DINGO/kB, the current relay rate and
+a valid six-block estimate. Electrum's explicit `-1` (no estimate) uses the
+fresh relay rate/Core minimum; malformed responses, errors or timeouts do not
+authorize a fallback spend. Unlike BTC/LTC/BELLS, the billed size rounds **up to
+whole kilobytes**, as Dingocoin Core requires. Recipient and change outputs must
+be at least 1 DINGO. A small remainder triggers a Max hint rather than silently
+increasing the fee. Rates over 10 DINGO/kB and total fees over 20 DINGO are blocked.
+The ordinary planner selects at most eight inputs; no manual 1-coin override.
+Sweeps apply the existing 25% cushion to the whole-kB requirement. Live relay
+rates are checked again against the signed transaction; a higher requirement
+stops the send instead of changing the approved fee. The all-coin USD safeguards also apply.
+Core's 10-billion-DINGO per-transaction amount limit is enforced.
+
+References: [pinned Core parameters and checkpoints](https://github.com/dingocoin/dingocoin/blob/c3c396cb71b55a3864a00badb6a24142179848bd/src/chainparams.cpp),
+[fee rounding](https://github.com/dingocoin/dingocoin/blob/c3c396cb71b55a3864a00badb6a24142179848bd/src/amount.cpp),
+[dust rule](https://github.com/dingocoin/dingocoin/blob/c3c396cb71b55a3864a00badb6a24142179848bd/src/primitives/transaction.h),
+[official wallet recovery format](https://github.com/dingocoin/dingobrowserwallet).
+
+### Dogecoin (DOGE)
+
+DOGE uses BIP44 coin type 3, P2PKH version 30, P2SH version 22 and WIF version
+158, with eight decimals. Existing backups without `paths.doge` derive the fixed
+path above; explicit alternate paths are rejected. Existing coin addresses and
+protection preferences are unchanged. Asset lists are alphabetical by coin name.
+A previously hidden DOGE entry stays hidden; enable it through **Add coins**.
+
+Ordinary small sends retain the reviewed 0.01 DOGE fee, 0.01 DOGE minimum output
+and 1,000-byte limit. An optional, default-off 1 DOGE total-fee checkbox supports
+up to 40 verified inputs within the documented bounds. Sweeps use at least 0.01 DOGE/kB proportionally plus the
+existing 25% cushion. Mining rewards require 240 confirmations. No SegWit or
+Dogecoin token/inscription handling is implemented. Coin-specific genesis checks,
+raw-prevout verification and uncertain-broadcast protection remain mandatory.
+
+The default and backup WSS servers passed live metadata checks. Both share an
+operator, so the automatic fallback is not independent-operator redundancy or
+an uptime guarantee. DOGE quotes
+share the display-only CoinGecko request with SHIC/LTC. Offline JSON/WIF/TXT/CSV
+recovery makes no network requests. A real DOGE receive/send test is still needed.
+
+Network parameters, icon and fee guidance: [Dogecoin Core](https://github.com/dogecoin/dogecoin/tree/b38c83fbf10302b23ac6e7ad89bc83068efe2fd8),
+`src/chainparams.cpp` and `doc/fee-recommendation.md`.
+
+### Flopcoin (FLOP) — opt-in legacy asset
+
+FLOP uses compressed P2PKH version 35, P2SH 22, WIF 158 and the BIP39 path
+`m/44'/3'/0'/0/{index}`, following the Komodo coin registry's HD coin type.
+This is not the non-BIP39 Komodo sweep recipe; no Komodo sweep is enabled.
+Both published WSS servers were unreachable, so a tested custom endpoint is
+required. Automatic fees use a 0.01 FLOP/kB floor and 0.1 FLOP rate/total caps,
+0.01 FLOP dust and 240-block mining maturity. No verified USD feed is configured:
+sending requires the explicit missing-price acknowledgment. Offline recovery works
+without a server; this does not restore Core's random-seed wallet.dat from words.
+
+### Junkcoin (JKC) — opt-in legacy asset
+
+Enable in Settings → Legacy assets and test a custom secure Electrum connection.
+No default endpoint is configured. Automatic fees, registered BIP44 receiving and
+offline recovery are supported. See [verification and limits](docs/layer1-validation.md).
+
+### Litecoin (LTC)
+
+LTC receives to legacy BIP44 `L…` addresses with compressed keys and WIF version
+176. Existing backups without an LTC path use the fixed path above; explicit
+alternate paths are rejected. Existing coin addresses and format names do not change.
+This is not automatic discovery of BIP49/BIP84 accounts or other wallets' change branches.
+
+Sending accepts checksum-validated Litecoin P2PKH, P2SH (`M…` and legacy `3…`),
+native SegWit v0 and Taproot v1 addresses. Legacy `3…` addresses share Bitcoin's
+version byte, so the encoding alone cannot prove the intended chain. Confirm
+the recipient requested Litecoin. Future witness versions and MWEB privacy
+addresses are rejected. No MWEB keys or private balances are generated/scanned.
+When checking a transparent previous output, its Litecoin txid excludes witness
+and MWEB extension data, matching Core's `ComputeHash`; the extension is not
+interpreted or used for signing. Recognized HogEx withdrawals require six
+confirmations; mining rewards require 100. Only legacy wallet inputs are signed.
+
+The default and backup WSS servers passed certificate, genesis, height and
+read-only RPC checks during local integration. They share an operator, so the
+automatic fallback is not independent-operator redundancy or an uptime guarantee.
+Users can test/select a different WSS server in Settings.
+
+LTC fees use a six-block Electrum estimate, at least the live relay minimum
+and 1,000 litoshis/kB, calculated proportionally by byte, with a
+100,000-litoshi/kB rate cap and a 0.001 LTC total-fee cap. The conservative output
+minimum is 5,460 litoshis; small change handling remains explicit. LTC does not
+use the other coins' 0.01 flat fee. Sweeps retain the 25% fee cushion and absolute
+LTC fee cap. Missing or invalid estimates block sends/sweeps without hiding balances.
+Price estimates use CoinGecko's `litecoin` ID in the same five-minute
+public request as SHIC, with per-asset validation and expiry. No wallet data is sent.
+The offline tool supports LTC JSON/WIF/TXT/CSV without network requests.
+
+Parameters and logo source: Litecoin Core revision
+`ec1b6489a900d09cf5991e220dce089c77a232a2`, `src/chainparams.cpp`,
+`src/policy/policy.h`, `src/consensus/consensus.h` and
+`src/primitives/transaction.cpp`. Test.19 promotes the local LTC integration.
+Automated checks passed; real-funds LTC receive/send testing remains pending.
+
+### Luckycoin (LKY) — opt-in legacy asset
+
+Requires an enabled legacy option and tested custom Electrum connection. Uses the
+revival chain's replay-protected signatures, not legacy-chain signing. Automatic
+fees and offline recovery are supported. See [verification and limits](docs/layer1-validation.md).
+
+### Pepecoin (PEP)
+
+Pepecoin is the native PEP proof-of-work chain, not an Ethereum token. It uses
+eight decimals, compressed legacy P2PKH receiving addresses on the path above,
+and WIF version 158. Standard sends and private-key sweeps verify previous
+transaction outputs and sign locally. Newly mined block rewards (coinbase outputs)
+have a 240-block maturity rule in
+[Pepecoin Core](https://github.com/pepecoinppc/pepecoin/blob/master/src/chainparams.cpp).
+SafeCore waits for 240 confirmations before spending those outputs. This does
+not apply to ordinary incoming transfers or typical mining-pool payouts;
+ordinary outputs become eligible after one confirmation, subject to the other
+send checks.
+The default fee for ordinary small sends is 0.01 PEP; the optional 1 PEP total-fee
+checkbox supports larger input sets within the documented limits.
+
+Pepecoin has a default server and an automatic fallback. Connections
+validate the pinned Pepecoin genesis; a fallback is not an uptime guarantee.
+PEP/USD and USD/USDT display estimates use Kraken. The offline recovery tool
+supports PEP JSON/WIF/TXT/CSV, and legacy Komodo recovery is opt-in for PEP/SHIC
+only. This does not discover unrelated derivation paths or Core wallet.dat files.
+
+### Ravencoin (RVN)
+
+Native RVN only, with BIP44 receiving and automatic fees. Issued/restricted assets
+and NFTs are not supported. See [verification and limits](docs/layer1-validation.md).
+
+### Shibacoin (SHIC)
+
+Shibacoin is the native SHIC proof-of-work chain, not the SHIB token. Its mainnet
+parameters were checked against Shibacoin Core revision
+`0af632dfa466c62d77a1b9a4358cf4d64d1fbd4b` (`src/chainparams.cpp`,
+`src/amount.h`, and `doc/fee-recommendation.md`) and SLIP-0044 coin type 4474.
+SHIC uses a third-party WSS server by default.
+Certificate validation and the pinned genesis
+`ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f`
+are mandatory. This server is not operated by SafeCore; availability and chain
+reports remain third-party dependencies. Custom WSS connections remain available.
+No SHIC node/indexer deployment is included in this change.
+
+SHIC uses eight decimal places, compressed P2PKH addresses, WIF version 158 and
+the existing conservative fee/dust/maturity guards. Old SafeCore JSON backups
+without a SHIC path derive this fixed path; an explicitly different SHIC path is
+rejected. PEP/WHT paths, wallet IDs and existing backup format names are unchanged.
+The offline recovery tool supports SHIC JSON, WIF/TXT and CSV without networking.
+
+Ordinary small sends default to 0.01 SHIC. The optional 1 SHIC total-fee checkbox
+supports larger input sets within the documented bounds; it starts off and does
+not change sweep fees. Legacy Komodo recovery is opt-in for PEP and SHIC only.
+
+SHIC USD estimates come from CoinGecko's `shibacoin` ID, no more than once per
+five minutes while the wallet is unlocked/foregrounded. The request contains no
+wallet address, balance, seed or credentials. CoinGecko sees the client's IP.
+Missing, malformed, future-dated or more-than-ten-minute-old provider quotes are
+rejected; fetched quotes expire after five minutes. HTTP failures/rate limits
+leave balances and spending unaffected. USDT conversion uses the same Kraken
+USD/USDT quote as PEP; no 1:1 USD/USDT assumption is made.
+Native HTTP access remains restricted to the exact public quote requests;
+remote scripts remain blocked. SHIC support is included in test.18; earlier APKs remain unchanged.
+
+### TrumPOW (TRMP)
+
+TrumPOW is the independent proof-of-work chain, not a TRUMP token. It uses
+compressed P2PKH keys, WIF 151 and the SLIP-0044 path shown above. One default
+WSS server was verified; the other listed server was unavailable and is not used
+as a pretend backup. Fees are automatic by serialized size: minimum 0.01 TRMP/kB,
+rate/total caps of 0.1 TRMP, and a 0.01 TRMP dust floor. Coinbase maturity is 240
+blocks. No Komodo recovery. The offline tool supports the same recipe.
+
+### Whippet (WHT)
+
+Whippet preserves its legacy hardened receiving path `m/0'/3'/{index}'`,
+P2PKH version 73 and WIF version 158. It uses eight decimals and legacy P2PKH
+wallet inputs. Old generator backups and offline JSON/WIF/TXT/CSV recovery remain
+compatible with that path. Assets/covenants and legacy Komodo recovery are not
+supported. Mining rewards require 240 confirmations.
+
+Ordinary small sends keep the 0.01 WHT default. The optional 1 WHT total-fee
+checkbox is separate, off by default, and intended for larger input sets.
+Existing proportional sweep fees and their review remain unchanged. There is
+currently no configured Whippet explorer or reliable USD price feed.
+
+Whippet has one default WSS server. No second public server has been verified;
+retries are not independent redundancy.
+Users can choose their own WSS server in Settings.
 
 ### Recovery-path compatibility
 
@@ -463,10 +653,10 @@ estimate incomplete (`*`), not worth zero. Whippet currently has no price feed.
 
 Overview requests Kraken prices at most once per minute and the combined
 CoinGecko quote at most once per five minutes. Quotes expire after five minutes.
-BTC/LTC fee review can request a missing/expired CoinGecko quote sooner, with at
+Fee review can request a missing/expired configured USD quote sooner, with at
 least ten seconds between attempts and an eight-second request timeout. A missing
-quote never changes the actual coin balance; BTC/LTC sending still requires the
-fresh USD quote described below.
+quote never changes the actual coin balance; sending without one requires the
+explicit per-review risk acknowledgment described below.
 
 ## Sending and QR scanning
 
@@ -510,7 +700,7 @@ transaction size: if the approved fee is insufficient, sending stops and require
 a new review. Fees are never silently increased. Sweeps keep their separate fee
 calculation and review rules.
 
-All six supported assets use eight coin decimals. Amount parsing, Max, fees and
+All eighteen supported assets use eight coin decimals. Amount parsing, Max, fees and
 signed outputs use integer base units, independent of market-price changes.
 Values beyond the supported signed 64-bit output range or with excess decimals
 are rejected. Fiat values are display estimates; very small positive unit prices
@@ -521,22 +711,29 @@ support before they can be enabled; precision is never guessed from a price.
 ### Fee safety and USD limits
 
 Every coin requires an explicit fee/address/amount acknowledgment and confirmation;
-there is no automatic send. For BTC and LTC, ordinary sends and WIF sweeps also show
-the network fee in **USD**, independently of the Overview's USDT valuation:
+there is no automatic send. Every coin's ordinary sends, WIF sweeps and supported
+Komodo sweeps use the same USD safeguards, independently of Overview's USDT valuation.
+Normal fee reviews stay compact; threshold notices appear only when needed:
 
 - Above **$5 USD**: a prominent high-fee warning; check the amount and confirm,
   or cancel and try again later.
 - Above **$100 USD**: sending is blocked. The review shows the estimated coin/USD
   fee and suggests trying again later. **No override is offered.** Exactly $100
   is not above this limit, but other safety caps still apply.
-- Missing, invalid or stale price: sending is blocked, not treated as a zero fee.
-  Try again later with a new review. Receiving and balance visibility remain available.
+- Missing, invalid or stale price: the USD value is unknown, never zero. A separate,
+  unchecked override is shown **only** in this state. Explicitly acknowledge that
+  the dollar fee could exceed $100 to proceed with this transaction, or try later.
+  This choice is never saved or carried into another review. Whippet has no silent
+  exemption. A fresh returning quote removes the override and reapplies both limits.
+- Invalid/missing network fee estimates still block sending. No USD override can
+  bypass the coin's fee-rate/total caps, live relay, input or signing checks.
 
-CoinGecko's per-coin USD quote must have been fetched less than five minutes ago,
+Kraken PEP quotes use their fetch time. CoinGecko's per-coin USD quote must have been fetched less than five minutes ago,
 with a provider timestamp no more than ten minutes old (at most 30 seconds ahead).
 The quote is checked at review, confirmation, and immediately before reserving
-inputs for broadcast. If the displayed USD fee increases during checks, another
-acknowledgment is required; expiry or a newly exceeded cap blocks submission.
+inputs for broadcast. A newly high or increased high USD fee requires another
+acknowledgment; a newly exceeded $100 cap blocks submission. Price expiry requires
+a new explicit missing-price acknowledgment.
 Thresholds use exact integer/decimal arithmetic, not rounded display dollars.
 USD display rounds up to the next cent; positive sub-cent fees display as
 `<$0.01 USD`. Price-provider errors or market changes
@@ -624,7 +821,9 @@ The fee is based on a conservative signed-size estimate (including compressed or
 uncompressed public keys and CompactSize counts), charged proportionally by byte,
 not rounded to whole kilobytes. The rate is the greater of the live relay floor
 and 0.01 coin/kB for PEP/WHT/SHIC/DOGE. BTC/LTC additionally require the six-block
-estimate, with a 0.00001-coin/kB floor. A 25% fee cushion is applied once. Calculation uses integers:
+estimate, with a 0.00001-coin/kB floor. BELLS uses its API estimate or the
+documented empty-table fallback, with a 0.0001-coin/kB wallet floor; its API does
+not report a live relay floor. A 25% fee cushion is applied once. Calculation uses integers:
 `ceil(estimatedBytes * rateInBaseUnitsPerKB * 125 / 100000)`.
 Only the final fractional base unit is rounded up. For example, a one-input
 compressed-key sweep estimated at 193 bytes pays 0.0024125 coin at the default
@@ -736,20 +935,21 @@ never stored in wallet backups, settings, logs or network requests.
 | Rule | Current value |
 | --- | --- |
 | Entered total | Limited by verified, confirmed spendable outputs; no 100-coin cap |
-| Minimum recipient amount | PEP/WHT/SHIC/DOGE: 0.01 coin; LTC: 0.00005460; BTC: 0.00000546 |
-| Fee | PEP/DOGE/SHIC/WHT: 0.01 coin default or optional exact 1-coin fee; BTC/LTC: six-block estimate, size-based, at least 0.00001 coin/kB |
-| Flat-fee transaction size | Default: at most 1,000 bytes; explicit 1-coin option: at most 10,000 bytes; not used for BTC/LTC |
+| Minimum recipient amount | PEP/WHT/SHIC/DOGE: 0.01 coin; LTC: 0.00005460; BELLS/BTC: 0.00000546; DINGO: 1 coin |
+| Fee | PEP/DOGE/SHIC/WHT: 0.01 coin default or optional exact 1-coin fee; BTC/LTC: six-block estimate, size-based, at least 0.00001 coin/kB; BELLS: size-based, at least 0.0001 coin/kB; DINGO: automatic, at least 1 coin per started kB |
+| Flat-fee transaction size | Default: at most 1,000 bytes; explicit 1-coin option: at most 10,000 bytes; not used for BTC/LTC/BELLS/DINGO |
 | Planner input limit | 8 normally; 40 with the explicit PEP/DOGE/SHIC/WHT 1-coin option; size rules can reject fewer |
-| Max input selection | Default PEP/WHT/SHIC/DOGE: conservatively up to 6; BTC/LTC: up to 8; explicit 1-coin option: up to 40 |
+| Max input selection | Default PEP/WHT/SHIC/DOGE: conservatively up to 6; BTC/LTC/BELLS/DINGO: up to 8; explicit 1-coin option: up to 40 |
 | Wallet output count | No 40-output wallet-wide block; selected transaction inputs remain limited as above |
-| General fee ceiling | PEP/DOGE/SHIC/WHT: 0.1 coin (default flat path exactly 0.01), or exactly 1 coin with explicit selection; BTC/LTC: 0.001 coin plus USD guard |
-| USD fee guard | BTC/LTC only: warn above $5; block above $100 or without a fresh USD quote; no override |
-| Newly mined block rewards (coinbase outputs) | SafeCore waits for 240 confirmations for PEP/WHT/SHIC/DOGE; 100 for BTC/LTC. Ordinary transfers do not have this wait. LTC MWEB withdrawals separately require 6. |
+| General fee ceiling | PEP/DOGE/SHIC/WHT: 0.1 coin (default flat path exactly 0.01), or exactly 1 coin with explicit selection; BTC/LTC: 0.001 coin plus USD guard; BELLS: 0.01 coin; DINGO: 20 coins |
+| USD fee guard | All coins: warn above $5; block above $100 with no override; missing/stale USD price alone permits a per-review explicit risk acknowledgment |
+| Newly mined block rewards (coinbase outputs) | SafeCore waits for 240 confirmations for PEP/WHT/SHIC/DOGE/DINGO; 100 for BTC/LTC; 30 for BELLS. Ordinary transfers do not have this wait. LTC MWEB withdrawals separately require 6. |
 | Review expiry | 90 seconds |
 
 Only confirmed, mature outputs are spendable. Raw previous transactions must
 match their transaction IDs, claimed values and wallet-owned scripts.
-The live relay minimum is checked. A higher required fee or oversized transaction
+The live relay minimum is checked where exposed; BELLS uses the documented
+Core floor instead. A higher required fee or oversized transaction
 is rejected rather than silently underpaying.
 
 For PEP/WHT/SHIC/DOGE, a total of 5 coins and a 0.01 fee leaves 4.99 for the recipient. Tiny change below

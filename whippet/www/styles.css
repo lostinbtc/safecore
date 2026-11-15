@@ -158,6 +158,11 @@ main .receive-card { padding: 10px 0; }
 .settings-connections > .settings-actions { margin-top: 12px; }
 #custom-connections > summary { min-height: 44px; padding: 10px 0; cursor: pointer; font-size: 14px; font-weight: 600; }
 #custom-connections > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+#legacy-assets { margin-top: 8px; }
+#legacy-assets > summary { min-height: 44px; padding: 10px 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+#legacy-assets > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+#legacy-assets strong, #legacy-assets small { display: block; }
+#legacy-assets small, #legacy-assets > p { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .connection-form { margin: 10px 0; }
 .connection-form > label { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 600; }
 .connection-form > input { width: 100%; min-width: 0; height: 44px; min-height: 44px; padding: 6px 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 0; font-size: 16px; line-height: 20px; }

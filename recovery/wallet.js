@@ -1,12 +1,24 @@
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module === 'object' && module.exports ? require('./wallet-format.js') : root.WalletEngine);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.WhippetWallet = api;
-})(typeof globalThis === 'object' ? globalThis : this, function () {
+})(typeof globalThis === 'object' ? globalThis : this, function (E) {
   'use strict';
   const NETWORK = Object.freeze({ name: 'Whippet mainnet', pubKeyHash: 73, scriptHash: 22, wif: 158 });
   const PATH_TEMPLATE = "m/0'/3'/{index}'";
   const NETWORKS = Object.freeze({
+    flop: Object.freeze({ network: Object.freeze({ name: 'Flopcoin mainnet', pubKeyHash: 35, scriptHash: 22, wif: 158 }), path: "m/44'/3'/0'/0/{index}", format: 'flopcoin-seed-v1' }),
+    cat: Object.freeze({ network: Object.freeze({ name: 'Catcoin mainnet', pubKeyHash: 21, scriptHash: 88, wif: 149 }), path: "m/44'/760'/0'/0/{index}", format: 'catcoin-seed-v1' }),
+    trmp: Object.freeze({ network: Object.freeze({ name: 'TrumPOW mainnet', pubKeyHash: 65, scriptHash: 28, wif: 151 }), path: "m/44'/1707'/0'/0/{index}", format: 'trumpow-seed-v1' }),
+    bch: Object.freeze({ network: Object.freeze({ name: 'Bitcoin Cash mainnet', pubKeyHash: 0, scriptHash: 5, wif: 128 }), path: "m/44'/145'/0'/0/{index}", format: 'bitcoincash-seed-v1' }),
+    dash: Object.freeze({ network: Object.freeze({ name: 'Dash mainnet', pubKeyHash: 76, scriptHash: 16, wif: 204 }), path: "m/44'/5'/0'/0/{index}", format: 'dash-seed-v1' }),
+    dgb: Object.freeze({ network: Object.freeze({ name: 'DigiByte mainnet', pubKeyHash: 30, scriptHash: 63, wif: 128 }), path: "m/44'/20'/0'/0/{index}", format: 'digibyte-seed-v1' }),
+    jkc: Object.freeze({ network: Object.freeze({ name: 'Junkcoin mainnet', pubKeyHash: 16, scriptHash: 5, wif: 144 }), path: "m/44'/2013'/0'/0/{index}", format: 'junkcoin-seed-v1' }),
+    lky: Object.freeze({ network: Object.freeze({ name: 'Luckycoin mainnet', pubKeyHash: 47, scriptHash: 5, wif: 175 }), path: "m/44'/790'/0'/0/{index}", format: 'luckycoin-seed-v1' }),
+    rvn: Object.freeze({ network: Object.freeze({ name: 'Ravencoin mainnet', pubKeyHash: 60, scriptHash: 122, wif: 128 }), path: "m/44'/175'/0'/0/{index}", format: 'ravencoin-seed-v1' }),
+    bonc: Object.freeze({ network: Object.freeze({ name: 'Bonkcoin mainnet', pubKeyHash: 25, scriptHash: 28, wif: 151 }), path: "m/0'/0'/{index}'", format: 'bonkcoin-seed-v1' }),
+    dingo: Object.freeze({ network: Object.freeze({ name: 'Dingocoin mainnet', pubKeyHash: 30, scriptHash: 22, wif: 158 }), path: "m/44'/3'/0'/0/{index}", format: 'dingocoin-seed-v1' }),
+    bel: Object.freeze({ network: Object.freeze({ name: 'Bellscoin mainnet', pubKeyHash: 25, scriptHash: 30, wif: 153 }), path: "m/44'/762'/0'/0/{index}", format: 'bellscoin-seed-v1' }),
     wht: Object.freeze({ network: NETWORK, path: PATH_TEMPLATE, format: 'whippet-seed-v1' }),
     pep: Object.freeze({ network: Object.freeze({ name: 'Pepecoin mainnet', pubKeyHash: 56, scriptHash: 22, wif: 158 }), path: "m/44'/3434'/0'/0/{index}", format: 'pepecoin-seed-v1' }),
     doge: Object.freeze({ network: Object.freeze({ name: 'Dogecoin mainnet', pubKeyHash: 30, scriptHash: 22, wif: 158 }), path: "m/44'/3'/0'/0/{index}", format: 'dogecoin-seed-v1' }),
@@ -15,7 +27,7 @@
     shic: Object.freeze({ network: Object.freeze({ name: 'Shibacoin mainnet', pubKeyHash: 63, scriptHash: 22, wif: 158 }), path: "m/44'/4474'/0'/0/{index}", format: 'shibacoin-seed-v1' }),
   });
   function config(coin = 'wht') {
-    if (!Object.hasOwn(NETWORKS, coin)) throw new Error('Choose Pepecoin, Bitcoin, Dogecoin, Litecoin, Shibacoin or Whippet.');
+    if (!Object.hasOwn(NETWORKS, coin)) throw new Error('Choose a supported asset.');
     return NETWORKS[coin];
   }
   function backupCoin(backup) {
@@ -44,7 +56,7 @@
     const publicKey = ethers.utils.computePublicKey(privateKey, true);
     const hash = ethers.utils.ripemd160(ethers.utils.sha256(publicKey));
     return {
-      address: encodeChecked(ethers, ethers.utils.concat([[network.pubKeyHash], hash])),
+      address: coin==='bch'?E.cashAddress(hash.slice(2)):encodeChecked(ethers, ethers.utils.concat([[network.pubKeyHash], hash])),
       wif: encodeChecked(ethers, ethers.utils.concat([[network.wif], bytes, [1]])),
       publicKey: publicKey.slice(2),
     };

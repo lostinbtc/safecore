@@ -3,7 +3,12 @@
 A self-custodial Android wallet with a browser preview and offline recovery tool.
 Keys and transaction signing stay on your device.
 
-Supports **Pepecoin, Dogecoin, Litecoin, Shibacoin, Whippet and Bitcoin**.
+Supports **Bellscoin, Bitcoin, Bitcoin Cash, Dash, DigiByte, Dingocoin, Dogecoin, Litecoin, Pepecoin, Ravencoin, Shibacoin, TrumPOW and Whippet**.
+Bonkcoin (BONC), Catcoin (CAT), Flopcoin (FLOP), Junkcoin (JKC) and Luckycoin (LKY) are opt-in legacy assets: enable them in **Settings → Legacy assets**
+and supply your own secure Electrum endpoint. No default server is provided for
+these five; BONC and FLOP also have no verified price feed. Local signing/recovery tests do not replace
+funded mainnet tests. The latest additions are documented in the
+[chain-specific validation notes](whippet/docs/layer1-validation.md).
 This is an unaudited development prerelease: use expendable amounts and keep an
 independent recovery backup. Check release notes—the downloadable APK may lag
 behind this source.
@@ -29,15 +34,35 @@ python3 whippet/scripts/serve.py
 Open `http://localhost:8787`. Use a disposable wallet for testing.
 Password-free browser wallets are not encrypted; browser storage is not a backup.
 
+Balance notifications and four-second fallback polling remain active while the wallet is open. Unchanged balances do not rebuild the overview; changed balances retain the existing fresh-observation safety check.
+
 ## Sending and fees
 
 Enter one **Total to spend**, including the fee. Max uses the available balance;
 the review separates the recipient amount from the network fee.
 
+For **every coin**, a fee above **$5 USD** shows a warning and above **$100 USD**
+blocks sending with no override. These notices stay hidden below the thresholds.
+Only a missing/stale USD price exposes a separate, unchecked **one-transaction
+risk acknowledgment**; it waives the dollar check, not network-fee validation or
+coin-denominated caps. Whippet, BONC and FLOP currently need this acknowledgment.
+Receiving is unaffected. Automatic fee amounts cannot be edited.
+
 - **BTC/LTC:** automatic, read-only size-based fees. Estimates are held for up to
-  five minutes; transaction reviews expire after 90 seconds. Fees above **$5 USD**
-  require a warning; above **$100 USD**, or without a fresh USD price, sending is
-  blocked. There is no override, and other safety caps still apply.
+  five minutes; transaction reviews expire after 90 seconds.
+- **BELLS:** automatic size-based fees. If the API supplies no estimates, use
+  Bells Core’s wallet minimum of 10 sat/byte; this does not guarantee confirmation.
+  The rate cap is 1,000 sat/byte and the total-fee cap is 0.01 BELLS. No fee override.
+- **DINGO:** automatic fees per started kilobyte, at least 1 DINGO/kB and the
+  live relay rate. Recipient/change outputs must be at least 1 DINGO. Maximum
+  rate: 10 DINGO/kB; total fee: 20 DINGO. No fee override.
+- **CAT/FLOP/TRMP:** automatic size-based fees, minimum 0.01 coin/kB plus current relay requirements; total-fee cap 0.1 coin. No manual override. Catcoin and Flopcoin require user-supplied WSS servers.
+- **BONC:** automatic size-based fees, at least 0.01 BONC/kB and the live relay
+  rate. Recipient/change outputs must be at least 0.01 BONC. Maximum rate:
+  0.1 BONC/kB; total fee: 0.1 BONC. No fee override.
+- **BCH/DASH/DGB/JKC/LKY/RVN:** automatic size-based fees with per-chain
+  minimums and hard caps. Invalid estimates block spending; no fee override.
+  See the [rate and total-fee limits](whippet/docs/layer1-validation.md#automatic-fees).
 - **PEP/DOGE/SHIC/WHT:** default **0.01-coin** fee within transaction-size limits.
   An optional **1-coin total fee** replaces it for larger input sets; off by default.
 - Every send requires confirmation. Live input/fee checks remain mandatory, and
@@ -47,16 +72,20 @@ See [fee details and limits](whippet/README.md#fee-safety-and-usd-limits).
 
 ## Connections and recovery
 
-Settings supports a custom secure Electrum connection for each coin. Defaults
+Bellscoin uses a public HTTPS explorer API; other coins use Electrum. Settings
+supports a custom secure Electrum connection for each coin. Defaults
 retry and use verified backups where available; custom connections stay pinned.
 Servers see your public address queries and IP address, not recovery secrets.
+DOGE and DINGO share their official recovery path and address format, but have
+separate balances and networks. Distinct historical block checks keep their
+connections separate; always confirm which coin the recipient expects.
 
 An optional encrypted JSON recovery copy uses a separate password. Save it in a
 local folder and keep an independent backup. After reinstalling, restore the file
 manually with its password.
 
 For offline recovery, open **`recovery/index.html`** from an extracted repository.
-It supports all six coins and plain/encrypted wallet JSON. Private-key exports
+It supports the thirteen standard assets plus the five legacy assets and plain/encrypted wallet JSON. Private-key exports
 are unencrypted—keep them private. Legacy Komodo recovery is **PEP/SHIC only**;
 other wallets' derivation paths may differ.
 
@@ -81,7 +110,7 @@ change the component licenses listed in [third-party notices](THIRD_PARTY_NOTICE
 
 - `whippet/`: the SafeCore wallet, Android project, browser preview and tests.
   The directory name is historical; the app is named SafeCore.
-- `recovery/`: the self-contained offline recovery tool for all six supported coins.
+- `recovery/`: the self-contained offline recovery tool for all eighteen supported coins.
 - `services/electrumx/`: the ElectrumX fork with Pepecoin and Whippet support.
 - `services/blockbook/`: the Pepecoin Blockbook fork and its source.
 - `infra/`: self-hosted deployment templates and node configuration examples.

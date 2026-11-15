@@ -22,7 +22,7 @@ const password='Disposable-recovery-password-123';
       let rejected=false;try{await WalletEngine.decrypt(crypto,copy,'Incorrect-password');}catch{rejected=true;}
       const addresses=WalletEngine.accounts(ethers,restored),expected=WalletEngine.accounts(ethers,original);
       return rejected&&restored.mnemonic===original.mnemonic&&restored.passphrase===original.passphrase
-        &&['pep','btc','doge','ltc','shic','wht'].every(c=>addresses[c].address===expected[c].address)
+        &&Object.keys(WalletEngine.NETWORKS).every(c=>addresses[c].address===expected[c].address)
         &&!raw.includes(original.mnemonic)&&!raw.includes(password)&&!raw.includes(original.passphrase)
         &&!JSON.stringify(localStorage).includes(password)&&!JSON.stringify(localStorage).includes(original.mnemonic);
     },{raw,password}),true,'Portable encrypted copy restores every coin and passphrase, without plaintext storage');
@@ -66,5 +66,5 @@ const password='Disposable-recovery-password-123';
     await page.waitForFunction(()=>window.__encryptionFinished===true);
     assert.equal(await page.evaluate(()=>__copies.length),0);await context.close();
   }
-  console.log('PASS: opt-in/no-copy, password matching, encrypted download/native export, all-six-coin recovery, cancelled picker retry, no saved password, cancellation/background guards.');
+  console.log('PASS: opt-in/no-copy, password matching, encrypted download/native export, all-eighteen-coin recovery, cancelled picker retry, no saved password, cancellation/background guards.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

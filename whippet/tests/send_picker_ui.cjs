@@ -21,8 +21,8 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   for(const theme of ['dark','light'])for(const width of [320,390,430]){
    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await page.setViewportSize({width,height:844});
    const metrics=[];
-   for(const [route,selector] of [['send','[data-send-coin=pep]'],['receive','[data-coin=pep]'],['activity','[data-activity-coin=pep] > summary']]){
-    await page.locator(`[data-nav=${route}]`).click();const row=page.locator(selector);await row.waitFor();
+   for(const [route,selector] of [['send','[data-send-coin]'],['receive','[data-coin]'],['activity','[data-activity-coin] > summary']]){
+    await page.locator(`[data-nav=${route}]`).click();const row=page.locator(selector).first();await row.waitFor();
     metrics.push(await row.evaluate(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect(),i=el.querySelector('img').getBoundingClientRect();return {x:r.x,y:r.y,height:r.height,iconX:i.x,iconWidth:i.width,font:s.fontSize,weight:s.fontWeight};}));
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
     if(route==='activity')assert.equal(await row.evaluate(el=>getComputedStyle(el.parentElement).borderBottomWidth),'0px');
@@ -84,10 +84,11 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   for(const width of [320,390,430]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
   await page.reload();assert.match(await page.locator('#send-coin').innerText(),/Choose an asset/);
   await page.evaluate(()=>{for(const coin of Object.keys(__balances))__balances[coin]=coin==='wht'?6339444087:50;});await page.clock.runFor(8001);
-  await page.waitForFunction(()=>document.querySelectorAll('[data-send-coin]').length===6);
+  await page.waitForFunction(()=>document.querySelectorAll('[data-send-coin]').length===13);
+  assert.deepEqual(await page.locator('[data-send-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.sendCoin)),['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht'],'Send uses the same alphabetical order as the other screens');
   for(const theme of ['dark','light']){
    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
-   for(const coin of ['pep','doge','ltc','shic','wht','btc']){
+   for(const coin of ['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']){
     await choose(coin);
     assert.equal(await page.locator('#send-selected-coin').getAttribute('data-coin'),coin);
     assert.deepEqual(await page.locator('[data-send-coin][aria-pressed=true]').evaluateAll(rows=>rows.map(r=>r.dataset.sendCoin)),[coin]);
@@ -99,6 +100,6 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await page.screenshot({path:'/tmp/safecore-send-form-clean.png',fullPage:true});
   await page.locator('#change-send-coin').click();await page.screenshot({path:'/tmp/safecore-send-change-clean.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  console.log('PASS: stable taps/focus across polls; explicit selected asset/Change; all six coins/dark/light/narrow touch layout; cleared cross-coin drafts; late callback protection; preserved same-coin draft; zero/stub exclusion.');
+  console.log('PASS: stable taps/focus across polls; explicit selected asset/Change; all thirteen normal coins/dark/light/narrow touch layout; cleared cross-coin drafts; late callback protection; preserved same-coin draft; zero/stub exclusion.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

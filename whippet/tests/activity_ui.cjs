@@ -1,7 +1,7 @@
 // Synthetic history and an isolated browser. No wallet storage from real users.
 const assert=require('node:assert/strict'),{webcrypto}=require('node:crypto'),{chromium}=require('./browser-helper.cjs');
 const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min.js');
-const explorers={pep:'https://pepecoinservice.org/explorer/tx/',btc:'https://mempool.space/tx/',doge:'https://dogechain.com/tx/',ltc:'https://litecoinspace.org/tx/',shic:'https://explorer.shibacoinshic.org/tx/'};
+const explorers={bch:'https://blockchair.com/bitcoin-cash/transaction/',dash:'https://blockchair.com/dash/transaction/',dgb:'https://digiexplorer.info/tx/',rvn:'https://ravencoinexplorer.com/tx/',pep:'https://pepecoinservice.org/explorer/tx/',btc:'https://mempool.space/tx/',doge:'https://dogechain.com/tx/',ltc:'https://litecoinspace.org/tx/',shic:'https://explorer.shibacoinshic.org/tx/'};
 (async()=>{
  const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
  try{
@@ -27,7 +27,7 @@ const explorers={pep:'https://pepecoinservice.org/explorer/tx/',btc:'https://mem
   };
   await p.evaluate(installHistory);
   await p.clock.runFor(4001);await p.waitForFunction(()=>[...document.querySelectorAll('.live-tx code')].some(el=>el.textContent==='a'.repeat(62)+'00'));
-  assert.equal(await p.locator('.live-tx').count(),63);
+  assert.equal(await p.locator('.live-tx').count(),133);
   for(const txid of ['a'.repeat(62)+'27','b'.repeat(62)+'27','b'.repeat(62)+'26'])assert.equal(await p.getByText(txid,{exact:true}).count(),0,'Confirmed sends outside the first 10 must not appear as outstanding.');
   assert.equal(await p.getByText('Submission uncertain — do not resend until checked.',{exact:true}).count(),2);
   assert.equal(await p.getByText('Submitted — awaiting appearance in server history.',{exact:true}).count(),1);
@@ -97,14 +97,14 @@ const explorers={pep:'https://pepecoinservice.org/explorer/tx/',btc:'https://mem
    const popup=c.waitForEvent('page');await link.click();const explorer=await popup;await explorer.waitForLoadState();
    assert.equal(explorer.url(),expected);await explorer.close();
   }
-  assert.equal(visits.length,5);assert.equal(await wht.locator('a').count(),0);
+  assert.equal(visits.length,Object.keys(explorers).length);assert.equal(await wht.locator('a').count(),0);
   assert.equal(await p.evaluate(()=>location.hash),'#activity');
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
   await p.setViewportSize({width:320,height:844});await pep.screenshot({path:'whippet/test-results/activity-pagination.png'});
   await p.screenshot({path:'whippet/test-results/activity-assets.png',fullPage:true});
   await p.reload();await p.locator('.page-head').waitFor();await p.evaluate(installHistory);
   await p.clock.runFor(4001);await p.waitForFunction(()=>[...document.querySelectorAll('.live-tx code')].some(el=>el.textContent==='a'.repeat(62)+'00'));
-  assert.equal(await p.locator('.live-tx').count(),63);
+  assert.equal(await p.locator('.live-tx').count(),133);
   for(const txid of ['a'.repeat(62)+'27','b'.repeat(62)+'27','b'.repeat(62)+'26'])assert.equal(await p.getByText(txid,{exact:true}).count(),0,'Reload must not revive confirmed sends as outstanding.');
   assert.equal(await p.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('corevault.send-attempts.'))[1]).length),6,'Public send records must remain intact.');
   await pep.locator('summary').click();await pageInput.fill('4');await goPage.click();
@@ -118,7 +118,7 @@ const explorers={pep:'https://pepecoinservice.org/explorer/tx/',btc:'https://mem
   await p.locator('.activity-asset').first().waitFor();
   assert.ok(await p.locator('.live-tx a').evaluateAll(links=>links.length>0&&links.every(link=>link.target==='_self')),'Android routes tapped links to its external-browser guard');
   await p.evaluate(()=>{delete window.SafeCorePlatform;window.__badTxid='"><img src=x>';});await p.clock.runFor(4001);
-  await p.waitForFunction(()=>[...document.querySelectorAll('.activity-list > p.subtle')].filter(el=>el.textContent.startsWith('Last updated')).length===6);
+  await p.waitForFunction(()=>[...document.querySelectorAll('.activity-list > p.subtle')].filter(el=>el.textContent.startsWith('Last updated')).length===13);
   assert.equal(await p.locator('.live-tx code').filter({hasText:'<img'}).count(),0,'Malformed server IDs are rejected before rendering');
   assert.equal(await p.locator('.live-tx img').count(),0);assert.equal(await p.locator('.live-tx a').filter({hasText:'<img'}).count(),0);
   assert.deepEqual(errors,[]);console.log('PASS: 10 fully expanded rows, no inner scrolling, borderless controls in both themes/hover, Previous/Next/jump, refresh stability, page bounds, outstanding sends and explorer links.');

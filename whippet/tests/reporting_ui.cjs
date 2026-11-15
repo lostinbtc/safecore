@@ -8,11 +8,11 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   p.on('pageerror',e=>errors.push(e.message));
   const vault=E.unprotected(webcrypto,E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'));
   await c.addInitScript(v=>{
-   window.__balances={pep:1000,wht:1000,shic:0,ltc:0,doge:0,btc:0};window.__calls={};window.__quotes={pep:'.01',usdt:'.5'};
+   window.__balances={pep:1000,wht:1000,shic:0,ltc:0,doge:0,btc:0,bel:0,dingo:0};window.__calls={};window.__quotes={pep:'.01',usdt:'.5'};
    window.fetch=async(url,options)=>{if(!String(url).endsWith('?pair=PEPUSD,USDTUSD')||options.credentials!=='omit'||options.referrerPolicy!=='no-referrer')throw Error('Unexpected price request');return new Response(JSON.stringify({error:[],result:{PEPUSD:{c:[__quotes.pep]},USDTZUSD:{c:[__quotes.usdt]}}}));};
    window.WebSocket=class{constructor(){throw Error('Real connection prohibited');}};
    Object.defineProperty(window,'WalletNetwork',{configurable:true,set(N){Object.defineProperty(window,'WalletNetwork',{value:N,configurable:true});N.scan=async(coin,accounts)=>{
-    __calls[coin]=(__calls[coin]||0)+1;const amount=window.__baseBalances?.[coin]??BigInt(__balances[coin])*100000000n;
+    __calls[coin]=(__calls[coin]||0)+1;const amount=window.__baseBalances?.[coin]??BigInt(__balances[coin]??0)*100000000n;
     return {coin,tip:500,at:Date.now(),confirmed:amount,unconfirmed:0n,everUsed:amount?[0]:[],feeRate:1000000n,rows:accounts.map((account,i)=>({account,confirmed:i?0n:amount,unconfirmed:0n,history:[],utxos:[]}))};
    };}});
   },vault);
@@ -47,7 +47,9 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   assert.equal(await p.evaluate(()=>__calls.wht),3,'publication requires a fresh query at the 4-second boundary');
   assert.equal(await p.locator('#wallet-worth').innerText(),'≈ 20.00 USDT');
   await p.evaluate(()=>{window.__baseBalances={pep:470900000000n,wht:193992200111100n};});
-  await p.clock.runFor(8000);
+  // Allow each asynchronous polling batch to finish before the next matching
+  // observation; the exact four-second publication boundary is asserted above.
+  for(let i=0;i<3;i++)await p.clock.runFor(4001);
   await p.waitForFunction(()=>document.querySelector('[data-overview-coin=wht] .holding-balance').textContent==='1,939,922.001111 WHT');
   assert.equal(await p.locator('[data-overview-coin=pep] .holding-balance').innerText(),'4,709 PEP');
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
@@ -76,7 +78,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   await p.waitForFunction(()=>document.getElementById('rescan').getAnimations().some(a=>a.animationName==='control-glow'&&a.startTime===0));
   await p.evaluate(()=>{window.__oldRescan=document.getElementById('rescan');});
   await p.clock.runFor(4001);
-  assert.equal(await p.evaluate(()=>document.getElementById('rescan')!==window.__oldRescan),true,'Exercise an actual polling rebuild');
+  assert.equal(await p.evaluate(()=>document.getElementById('rescan')===window.__oldRescan),true,'Unchanged polling must preserve the control and its phase');
   const refreshedGlow=await p.evaluate(()=>{const el=document.getElementById('rescan');return {disabled:el.disabled,classes:el.className,css:getComputedStyle(el).animationName,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches,animations:el.getAnimations({subtree:true}).map(a=>({name:a.animationName,start:a.startTime}))};});
   assert.equal(refreshedGlow.animations.find(a=>a.name==='control-glow')?.start,0,'Polling retains shared phase: '+JSON.stringify(refreshedGlow));
   assert.equal(refreshedGlow.animations.find(a=>a.name==='control-haze')?.start,0,'Haze shares the same persistent phase');

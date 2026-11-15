@@ -38,4 +38,12 @@ for(const bad of [{},{shiba_inu:{usd:1,last_updated_at:now/1000}},...[-1,0,NaN,I
 assert.deepEqual(R.worth({pep:snap(1000),wht:snap(0),shic:snap(1)},.001,1),{value:1,incomplete:true});
 for(const rate of [null,0,-1,NaN,Infinity])assert.equal(R.valueInUsdt('pep',100000000n,.01,rate),null);
 assert.equal(R.formatWorth(0),'0.00');assert.equal(R.formatWorth(.009),'<0.01');assert.equal(R.formatWorth(null),'*');
+for(const [coin,id] of Object.entries({bch:'bitcoin-cash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin'})){
+ const at=1800000000000,q=R.marketQuote({[id]:{usd:2,last_updated_at:at/1000}},id,at);
+ assert.equal(R.freshShic(q,at+299999),true);assert.equal(R.freshShic(q,at+300000),false);
+ assert.equal(R.valueInUsdt(coin,300000000n,null,.5,null,null,null,null,null,null,{[coin]:q.value}),12);
+ assert.equal(R.valueInUsdt(coin,300000000n,null,.5),null);
+ for(const usd of [0,-1,NaN,Infinity,'2'])assert.throws(()=>R.marketQuote({[id]:{usd,last_updated_at:at/1000}},id,at));
+ assert.throws(()=>R.marketQuote({[id]:{usd:2,last_updated_at:at/1000-601}},id,at));
+}
 console.log('PASS: 4-second polling default, immediate first balance including zero, subsequent 4-second fresh-match gate, changed-candidate reset, no timer-only publication, cache continuity, USDT conversion, zero-balance exclusion and unpriced holdings.');

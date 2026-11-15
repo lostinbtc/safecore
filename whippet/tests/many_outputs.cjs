@@ -17,7 +17,8 @@ const accounts=E.accounts(ethers,recipe),destinations=E.accounts(ethers,recipe,1
    send(text){const q=JSON.parse(text);let result;
     if(q.method==='server.version')result=['fixture','1.4'];
     else if(q.method==='server.features')result={genesis_hash:N.CONFIG[coin].genesis};
-    else if(q.method==='blockchain.headers.subscribe')result={height:500};
+    else if(q.method==='blockchain.block.header')result=coin==='lky'?'LKY_TEST_HEADER':require('./chain-checkpoints.cjs')[coin];
+    else if(q.method==='blockchain.headers.subscribe')result={height:800000};
     else if(q.method==='blockchain.scripthash.subscribe')result=T.historyStatus(history);
     else if(q.method.endsWith('get_history'))result=history;
     else if(q.method.endsWith('get_balance'))result={confirmed:Number(value)*count,unconfirmed:0};
@@ -29,12 +30,15 @@ const accounts=E.accounts(ethers,recipe),destinations=E.accounts(ethers,recipe,1
     queueMicrotask(()=>this.onmessage({data:JSON.stringify({id:q.id,result})}));
    }
   }
-  const ctx={WebSocket:Socket,WalletTransactions:T,setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);N=ctx.WalletNetwork;
+  const ctx={WebSocket:Socket,WalletTransactions:{...T,blockHeaderHash:raw=>raw==='LKY_TEST_HEADER'?N.CONFIG.lky.checkpoint.hash:T.blockHeaderHash(raw)},URL,setTimeout,clearTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync('whippet/www/network.js','utf8'),ctx);N=ctx.WalletNetwork;
+  // Exercise the user-selected BELLS WSS alternative; HTTPS has its own suite.
+  if(coin==='bel')N.configure({bel:'wss://bells-fixture.invalid/'});
+  if(['bonc','jkc','lky','cat','flop'].includes(coin))N.configure({[coin]:`wss://${coin}-fixture.invalid/`});
   try{
    const snapshot=await N.scan(coin,[account]),utxos=await N.spendable(snapshot);
    assert.equal(utxos.length,count);assert.equal(rawCalls,1,'Shared funding transaction fetched once');
    const base={coin,destination:destinations[coin].address,changeAddress:account.address,utxos,feeRate:snapshot.feeRate,tip:snapshot.tip,feeIncluded:true,flatFee:T.policy(coin).flatFee};
-   const small=T.plan({...base,amount:'1'});assert.equal(small.inputs.length,1);
+   const small=T.plan({...base,amount:coin==='dingo'?'2':'1'});assert.equal(small.inputs.length,1);
    const signed=T.parse(T.sign(small,recipe).raw);assert.equal(signed.inputs.length,1);
    assert.equal(signed.outputs.reduce((n,o)=>n+o.value,0n)+small.fee,value);
    assert.throws(()=>T.plan({...base,amount:'130'}),/up to 8 inputs/,'No accidental whole-wallet transaction');
@@ -49,5 +53,5 @@ const accounts=E.accounts(ethers,recipe),destinations=E.accounts(ethers,recipe,1
    assert.equal(broadcasts,0);
   }finally{N.close();}
  }
- console.log('PASS: all six assets with 65 outputs can verify and sign small payments; 8/40-input limits, fee conservation, cache rejection and funding verification remain enforced. No broadcasts.');
+ console.log('PASS: all eighteen assets with 65 outputs can verify and sign small payments; 8/40-input limits, fee conservation, cache rejection and funding verification remain enforced. No broadcasts.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

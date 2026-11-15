@@ -1,11 +1,11 @@
-// Read-only public endpoint probe. Never derives keys or broadcasts.
+// Opt-in read-only public endpoint probe. Public fixtures only; never broadcasts.
 const assert=require('node:assert/strict');
 const {chromium}=require('./browser-helper.cjs');
 (async()=>{
   const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
   try{
     const page=await browser.newPage();await page.goto('http://localhost:8787/');
-    for(const coin of process.argv.slice(2).length?process.argv.slice(2):['pep','btc','doge','ltc','shic','wht']){
+    for(const coin of process.argv.slice(2).length?process.argv.slice(2):['pep','doge','ltc','bel','shic','wht','dingo','btc']){
       const result=await page.evaluate(async coin=>{
         const c=WalletNetwork.client(coin);
         const features=await c.call('server.features'),tip=await c.call('blockchain.headers.subscribe');
@@ -24,8 +24,8 @@ const {chromium}=require('./browser-helper.cjs');
         if(incremental.queried>Math.min(20,incremental.everUsed.length+1)||incremental.cached)throw Error('Incremental scan mismatch.');
         WalletNetwork.close();return {coin,genesis:features.genesis_hash,expected:WalletNetwork.CONFIG[coin].genesis,height:tip.height,balance,history,unspent,relay,scanned:snapshot.rows.length,incremental:incremental.queried};
       },coin);
-      assert.equal(result.genesis,result.expected);assert.ok(result.height>0);assert.deepEqual(result.balance,{confirmed:0,unconfirmed:0});assert.deepEqual(result.history,[]);assert.deepEqual(result.unspent,[]);assert.ok(result.relay>=0);
-      console.log(`PASS ${coin}: public browser WSS, certificate validation, chain identity, height ${result.height}, initial ${result.scanned}-address discovery, then ${result.incremental}-address incremental refresh.`);
+      assert.equal(result.genesis,result.expected);assert.ok(result.height>0);assert.equal(BigInt(result.balance.confirmed),0n);assert.equal(BigInt(result.balance.unconfirmed),0n);assert.deepEqual(result.history,[]);assert.deepEqual(result.unspent,[]);assert.ok(result.relay>=0);
+      console.log(`PASS ${coin}: public browser ${coin==='bel'?'HTTPS/CORS':'WSS'}, certificate validation, chain identity, height ${result.height}, initial ${result.scanned}-address discovery, then ${result.incremental}-address incremental refresh.`);
     }
   }finally{await browser.close();}
 })().catch(e=>{console.error(e.message);process.exitCode=1;});

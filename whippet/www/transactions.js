@@ -15,10 +15,33 @@
   const LEGACY_POLICY=Object.freeze({dust:DUST,minRate:1000000n,maxRate:MAX_FEE,maxFee:MAX_FEE,maturity:240,flatFee:true});
   const LTC_POLICY=Object.freeze({dust:5460n,minRate:1000n,maxRate:100000n,maxFee:100000n,maturity:100,flatFee:false});
   const BTC_POLICY=Object.freeze({dust:546n,minRate:1000n,maxRate:100000n,maxFee:100000n,maturity:100,flatFee:false});
-  const policy=coin=>{if(!E.NETWORKS[coin])throw Error('Unsupported coin.');return coin==='btc'?BTC_POLICY:coin==='ltc'?LTC_POLICY:LEGACY_POLICY;};
+  // Bells Core: 30-block coinbase maturity, 546-satoshi P2PKH dust,
+  // 10,000 sat/kB default wallet minimum. Rates are sat/kB, never coins/input.
+  const BEL_POLICY=Object.freeze({dust:546n,minRate:10000n,maxRate:1000000n,maxFee:1000000n,maturity:30,flatFee:false});
+  const DINGO_POLICY=Object.freeze({dust:COIN,minRate:COIN,maxRate:10n*COIN,maxFee:20n*COIN,maxMoney:10000000000n*COIN,maturity:240,flatFee:false,roundKilobyte:true});
+  // BONC Core recommends 0.01 coin/kB, exact bytes, with 0.01-coin soft dust.
+  const BONC_POLICY=Object.freeze({dust:DUST,minRate:1000000n,maxRate:10000000n,maxFee:10000000n,maxMoney:10000000000n*COIN,maturity:240,flatFee:false});
+  const EXTRA_POLICIES=Object.freeze({
+    cat:Object.freeze({dust:54600n,minRate:1000000n,maxRate:10000000n,maxFee:10000000n,maxMoney:21000000n*COIN,maturity:100,flatFee:false}),
+    trmp:BONC_POLICY,
+    flop:BONC_POLICY,
+    bch:Object.freeze({...BTC_POLICY,maxMoney:21000000n*COIN}),
+    dash:Object.freeze({...BTC_POLICY,maxMoney:21000000n*COIN}),
+    dgb:Object.freeze({dust:5460n,minRate:10000000n,maxRate:100000000n,maxFee:100000000n,maxMoney:21000000000n*COIN,maturity:100,flatFee:false}),
+    jkc:Object.freeze({dust:5460n,minRate:10000n,maxRate:1000000n,maxFee:1000000n,maxMoney:54000000n*COIN,maturity:70,flatFee:false}),
+    lky:Object.freeze({...BONC_POLICY,maxMoney:20000000n*COIN,maturity:70}),
+    rvn:Object.freeze({dust:546n,minRate:1000000n,maxRate:10000000n,maxFee:10000000n,maxMoney:21000000000n*COIN,maturity:100,flatFee:false})
+  });
+  const policy=coin=>{if(!E.NETWORKS[coin])throw Error('Unsupported coin.');return EXTRA_POLICIES[coin]||(coin==='btc'?BTC_POLICY:coin==='ltc'?LTC_POLICY:coin==='bel'?BEL_POLICY:coin==='dingo'?DINGO_POLICY:coin==='bonc'?BONC_POLICY:LEGACY_POLICY);};
+  const SCRIPT_PREFIXES=Object.freeze({flop:[22],cat:[88],trmp:[28],ltc:[50,5],btc:[5],doge:[22],dingo:[22],bel:[30],bonc:[28],dash:[16],dgb:[63,5],jkc:[5],lky:[5],rvn:[122]});
+  const WITNESS_HRP=Object.freeze({btc:'bc',ltc:'ltc',bel:'bel',dgb:'dgb',jkc:'jc'});
   const bytes=x=>U.arrayify(x), hex=x=>U.hexlify(x).slice(2), concat=parts=>U.concat(parts);
   const reverse=x=>Uint8Array.from(x).reverse();
   const hash256=x=>bytes(U.sha256(U.sha256(x)));
+  function blockHeaderHash(raw){
+    if(typeof raw!=='string'||!/^[a-f0-9]{160}$/i.test(raw))throw Error('Invalid checkpoint header.');
+    return hex(reverse(hash256(bytes('0x'+raw))));
+  }
   function integer(value,max=0x7fffffffffffffffn){ const n=BigInt(value);if(n<0n||n>max)throw Error('Invalid transaction integer.');return n; }
   function le(value,size){let n=integer(value,(1n<<BigInt(size*8))-1n);const a=new Uint8Array(size);for(let i=0;i<size;i++){a[i]=Number(n&255n);n>>=8n;}return a;}
   function vi(n){if(n<253)return le(n,1);if(n<=65535)return concat([le(253,1),le(n,2)]);return concat([le(254,1),le(n,4)]);}
@@ -29,17 +52,18 @@
   // to floating point. Editable amounts and transaction serialization use format.
   function formatDisplay(n){const [whole,fraction]=format(n).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(fraction?'.'+fraction:'');}
   function script(coin,address){
+    if(coin==='bch'){const a=E.readCashAddress(address);return a.type===0?'76a914'+a.hash+'88ac':'a914'+a.hash+'87';}
     if(coin==='ltc'&&typeof address==='string'&&address.toLowerCase().startsWith('ltcmweb'))throw Error('MWEB privacy addresses are not supported. Use a standard Litecoin address.');
-    if(['ltc','btc'].includes(coin)&&typeof address==='string'&&address.toLowerCase().startsWith(coin==='btc'?'bc1':'ltc1'))return witnessScript(address,coin);
+    if(WITNESS_HRP[coin]&&typeof address==='string'&&address.toLowerCase().startsWith(WITNESS_HRP[coin]+'1'))return witnessScript(address,coin);
     if(!E.NETWORKS[coin]||typeof address!=='string'||address.length<25||address.length>40)throw Error('Use a plain receiving address for the selected coin.');
     let a;try{a=U.base58.decode(address);}catch(_){throw Error('Invalid address.');}
-    if(a.length!==25||!([E.NETWORKS[coin].prefix,...(coin==='ltc'?[50,5]:coin==='btc'?[5]:coin==='doge'?[22]:[])].includes(a[0]))||hex(hash256(a.slice(0,21)).slice(0,4))!==hex(a.slice(21)))throw Error('Address checksum or coin network does not match.');
-    if(coin==='ltc'&&[50,5].includes(a[0])||coin==='doge'&&a[0]===22||coin==='btc'&&a[0]===5)return 'a914'+hex(a.slice(1,21))+'87';
+    if(a.length!==25||![E.NETWORKS[coin].prefix,...(SCRIPT_PREFIXES[coin]||[])].includes(a[0])||hex(hash256(a.slice(0,21)).slice(0,4))!==hex(a.slice(21)))throw Error('Address checksum or coin network does not match.');
+    if(SCRIPT_PREFIXES[coin]?.includes(a[0]))return 'a914'+hex(a.slice(1,21))+'87';
     return '76a914'+hex(a.slice(1,21))+'88ac';
   }
   // BIP173/BIP350 decoding only: wallet-owned keys remain legacy BIP44/P2PKH.
   function witnessScript(address,coin){
-    const hrp=coin==='btc'?'bc':'ltc',name=E.NETWORKS[coin].name;
+    const hrp=WITNESS_HRP[coin],name=E.NETWORKS[coin].name;
     if(address.length>90||address!==address.toLowerCase()&&address!==address.toUpperCase())throw Error(`Invalid ${name} SegWit address.`);
     const s=address.toLowerCase(),alphabet='qpzry9x8gf2tvdw0s3jn54khce6mua7l',words=[...s.slice(hrp.length+1)].map(c=>alphabet.indexOf(c));
     if(!s.startsWith(hrp+'1')||words.length<7||words.includes(-1))throw Error(`Invalid ${name} SegWit address.`);
@@ -51,13 +75,13 @@
     for(const v of words.slice(1,-6)){acc=((acc<<5)|v)&0xfff;bits+=5;if(bits>=8){bits-=8;program.push((acc>>>bits)&255);}}
     if(bits>=5||((acc<<(8-bits))&255)||program.length<2||program.length>40||version===0&&![20,32].includes(program.length))throw Error(`Invalid ${name} witness program.`);
     // Only established v0 and v1/32-byte destinations; reject future versions.
-    if(version!==0&&!(version===1&&program.length===32))throw Error(`Unsupported ${name} witness version.`);
+    if(version!==0&&!(version===1&&program.length===32&&['btc','ltc','bel','dgb'].includes(coin)))throw Error(`Unsupported ${name} witness version.`);
     return hex(concat([[version===0?0:0x50+version],[program.length],program]));
   }
   const scriptHash=(coin,address)=>hex(reverse(bytes(U.sha256('0x'+script(coin,address)))));
   const historyStatus=history=>history.length?U.sha256(U.toUtf8Bytes(history.map(h=>h.tx_hash+':'+h.height+':').join(''))).slice(2):null;
   function serialize(tx,scripts){
-    return concat([le(tx.version,4),vi(tx.inputs.length),...tx.inputs.flatMap((i,n)=>[reverse(bytes('0x'+i.txid)),le(i.pos,4),blob(scripts?scripts[n]:i.script||''),le(i.sequence??0xffffffff,4)]),vi(tx.outputs.length),...tx.outputs.flatMap(o=>[le(o.value,8),blob(o.script)]),le(tx.locktime||0,4)]);
+    return concat([le(tx.version,4),vi(tx.inputs.length),...tx.inputs.flatMap((i,n)=>[reverse(bytes('0x'+i.txid)),le(i.pos,4),blob(scripts?scripts[n]:i.script||''),le(i.sequence??0xffffffff,4)]),vi(tx.outputs.length),...tx.outputs.flatMap(o=>[le(o.value,8),blob(o.script)]),le(tx.locktime||0,4),...(tx.extraPayload!==undefined?[blob(tx.extraPayload)]:[])]);
   }
   function parse(raw,coin=null){
     if(typeof raw!=='string'||!/^(?:[0-9a-f]{2})+$/i.test(raw)||raw.length>2000000)throw Error('Invalid raw transaction.');
@@ -71,6 +95,7 @@
     const inputs=Array.from({length:n},()=>({txid:hex(reverse(take(32))),pos:Number(read(4)),script:hex(take(count())),sequence:Number(read(4))}));
     const outputs=Array.from({length:count()},()=>({value:read(8),script:hex(take(count()))}));
     if(!outputs.length)throw Error('No transaction outputs.');
+    if(coin&&policy(coin).maxMoney&&outputs.reduce((sum,o)=>sum+o.value,0n)>policy(coin).maxMoney)throw Error('Transaction amount exceeds its network limit.');
     if(witness)for(const input of inputs){const items=count();for(let i=0;i<items;i++)take(count());}
     if(mweb){
       // Litecoin Core ComputeHash excludes BOTH witness and the MWEB extension.
@@ -79,13 +104,22 @@
       const present=Number(read(1));if(present>1||present===0&&extension!==1||present===1&&extension===1)throw Error('Invalid MWEB extension.');
       hogex=present===0;take(extension-1);
     }
-    const locktime=Number(read(4));if(p!==a.length)throw Error('Trailing transaction bytes.');
-    const tx={version,inputs,outputs,locktime};
+    const locktime=Number(read(4));let extraPayload;
+    if(coin==='dash'&&(version&65535)>=3&&(version>>>16)!==0){
+      // Platform withdrawals have distinct txid rules; fail closed until supported.
+      if((version>>>16)>7)throw Error('Dash Platform transaction type is not supported.');
+      extraPayload=hex(take(count()));
+    }
+    if(p!==a.length)throw Error('Trailing transaction bytes.');
+    const tx={version,inputs,outputs,locktime,...(extraPayload!==undefined?{extraPayload}:{})};
     return {...tx,...(mweb?{mweb:true,hogex}:{}),txid:hex(reverse(hash256(serialize(tx)))),coinbase:inputs.length===1&&inputs[0].txid==='0'.repeat(64)&&inputs[0].pos===0xffffffff};
   }
   function verifyUTXO(coin,u,tip){
     if(!u||!Number.isInteger(u.index)||u.index<0||u.index>=200||!Number.isInteger(u.pos)||u.pos<0||!Number.isInteger(u.height)||u.height<=0||u.height>tip)throw Error('Only confirmed wallet outputs can be spent.');
     const prev=parse(u.raw,coin),out=prev.outputs[u.pos];
+    // Native-coin sends only. Never consume a DigiAsset/SLP metadata transaction.
+    // CashTokens/RVN asset outputs also fail the exact plain-P2PKH match below.
+    if(['dgb','bch'].includes(coin)&&prev.outputs.some(o=>o.script.startsWith('6a')&&(coin==='dgb'||o.script.toLowerCase().includes('534c5000'))))throw Error('Token-bearing or metadata outputs are not supported for spending.');
     if(prev.txid!==u.txid||!out||out.value!==integer(u.value)||out.script!==script(coin,u.address))throw Error('Previous transaction does not match the claimed wallet output.');
     const maturity=policy(coin).maturity;
     if(prev.coinbase&&tip-u.height+1<maturity)throw Error(`Mining reward is not mature yet (${maturity} confirmations required).`);
@@ -107,8 +141,9 @@
     for(const u of candidates){
       const key=u.txid+':'+u.pos;if(seen.has(key))throw Error('Duplicate transaction input.');seen.add(key);
       inputs.push(u);total+=u.value;
+      if(rules.maxMoney&&total>rules.maxMoney)throw Error('Transaction inputs exceed the selected network amount limit.');
       const size=10+149*inputs.length+18+(destinationScript.length+changeScript.length)/2;
-      fee=!rules.flatFee?(BigInt(size)*rate+999n)/1000n:BigInt(Math.ceil(size/1000))*rate;
+      fee=!rules.flatFee&&!rules.roundKilobyte?(BigInt(size)*rate+999n)/1000n:BigInt(Math.ceil(size/1000))*rate;
       if(oneCoinFee){if(fee>COIN)throw Error('The 1-coin total fee does not cover this transaction’s relay requirement.');fee=COIN;}
       if(total>=(feeIncluded?budget:value+fee)){change=total-(feeIncluded?budget:value+fee);break;}
       if(inputs.length>=maxInputs)break;
@@ -128,6 +163,8 @@
     return {coin,destination,changeAddress,amount:value,fee,change,inputs,outputs,tip,feeIncluded,flatFee,budget,oneCoinFee,...(oneCoinFee?{feeRate:rate}:{}),version:1,locktime:0,createdAt:Date.now()};
   }
   function signWith(p,keyForInput,limits={inputs:8,bytes:10000,fee:MAX_FEE}){
+    if(p.extraPayload!==undefined)throw Error('Special transaction creation is not supported.');
+    if(p.coin==='lky'&&p.tip<276500)throw Error('Luckycoin requires the revival chain with replay protection active.');
     if(p.version!==1||p.locktime!==0||p.inputs.length<1||p.inputs.length>limits.inputs||p.amount<policy(p.coin).dust||p.fee<0n||p.fee>limits.fee||!policy(p.coin).flatFee&&p.fee>policy(p.coin).maxFee)throw Error('Invalid send review.');
     if(p.feeIncluded&&p.amount+p.fee!==p.budget)throw Error('The reviewed total changed.');
     if(p.flatFee&&(!['pep','wht','shic','doge'].includes(p.coin)||p.fee!==1000000n))throw Error('The reviewed flat fee changed.');
@@ -141,20 +178,37 @@
       const ownScript='76a914'+U.ripemd160(U.sha256(node.publicKey)).slice(2)+'88ac';
       if(ownScript!==u.script)throw Error('Input is not owned by this seed.');
       const signingScripts=p.inputs.map((_,i)=>i===index?u.script:'');
-      const digest=U.hexlify(hash256(concat([serialize(p,signingScripts),le(1,4)])));
+      const sighash=p.coin==='bch'?0x41:1;
+      let preimage=concat([serialize(p,signingScripts),le(sighash,4)]);
+      if(p.coin==='bch'){
+        // ForkID 0 / SIGHASH_ALL: commits every outpoint, sequence, output,
+        // and the verified value of this input (BCH replay-protected digest).
+        preimage=concat([le(p.version,4),
+          hash256(concat(p.inputs.flatMap(i=>[reverse(bytes('0x'+i.txid)),le(i.pos,4)]))),
+          hash256(concat(p.inputs.map(i=>le(i.sequence??0xffffffff,4)))),
+          reverse(bytes('0x'+u.txid)),le(u.pos,4),blob(u.script),le(u.value,8),
+          le(u.sequence??0xffffffff,4),
+          hash256(concat(p.outputs.flatMap(o=>[le(o.value,8),blob(o.script)]))),
+          le(p.locktime,4),le(sighash,4)]);
+      }else if(p.coin==='lky'){
+        // Core serializes this uint256 little-endian before the legacy preimage.
+        preimage=concat([reverse(bytes('0x000000000000000000000000000000004c55434b59434f494e5f5245564956414c')),preimage]);
+      }
+      const digest=U.hexlify(hash256(preimage));
       const sig=new U.SigningKey(node.privateKey).signDigest(digest);
       function derInt(h){let v=h.slice(2).replace(/^(00)+/,'')||'00';if(parseInt(v.slice(0,2),16)&128)v='00'+v;return '02'+hex(le(v.length/2,1))+v;}
-      const body=derInt(sig.r)+derInt(sig.s),der='30'+hex(le(body.length/2,1))+body+'01';
+      const body=derInt(sig.r)+derInt(sig.s),der='30'+hex(le(body.length/2,1))+body+hex(le(sighash,1));
       return hex(le(der.length/2,1))+der+hex(le(bytes(node.publicKey).length,1))+node.publicKey.slice(2);
     });
     if(total!==p.amount+p.change+p.fee)throw Error('Transaction amounts do not balance.');
+    if(policy(p.coin).maxMoney&&total>policy(p.coin).maxMoney)throw Error('Transaction inputs exceed the selected network amount limit.');
     const raw=hex(serialize(p,scripts)),decoded=parse(raw);
     if(raw.length/2>limits.bytes)throw Error('Transaction exceeds the reviewed size limit.');
     if(p.flatFee&&raw.length/2>1000)throw Error('Transaction exceeds the flat-fee size limit.');
     return {raw,txid:decoded.txid};
   }
   function sign(p,recipe){
-    let limits;
+    let limits={inputs:8,bytes:10000,fee:policy(p.coin).maxFee};
     if(p.oneCoinFee){
       if(p.oneCoinFee!==true||!supportsOneCoinFee(p.coin)||p.sweep||p.flatFee!==false||p.feeIncluded!==true||p.fee!==COIN
         ||typeof p.feeRate!=='bigint'||p.feeRate<policy(p.coin).minRate||p.feeRate>policy(p.coin).maxRate)throw Error('Invalid 1-coin fee review.');
@@ -175,7 +229,7 @@
       const privateKey=U.hexlify(a.slice(1,33)),scalar=BigInt(privateKey);
       if(scalar===0n||scalar>=0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n)throw Error();
       const publicKey=U.computePublicKey(privateKey,compressed),payload=concat([[E.NETWORKS[coin].prefix],U.ripemd160(U.sha256(publicKey))]);
-      return {coin,privateKey,publicKey,compressed,address:U.base58.encode(concat([payload,hash256(payload).slice(0,4)]))};
+      return {coin,privateKey,publicKey,compressed,address:coin==='bch'?E.cashAddress(hex(payload.slice(1))):U.base58.encode(concat([payload,hash256(payload).slice(0,4)]))};
     }catch(_){throw Error('Use a valid mainnet WIF private key. Encrypted keys, hex keys and recovery phrases are not supported.');}
   }
   function sweepSize(count,compressed=true){
@@ -194,7 +248,8 @@
     if(rate>rules.maxRate)throw Error('Network fee rate exceeds the sweep safety limit.');
     // Prorate by bytes, apply the cushion once, then round up only to base units.
     // Keep the uncushioned requirement alongside it for the pre-broadcast check.
-    const numerator=BigInt(size)*rate,unit=BigInt(SWEEP_FEE_POLICY.bytesPerUnit),denominator=unit*100n;
+    const billedSize=rules.roundKilobyte?Math.ceil(size/1000)*1000:size;
+    const numerator=BigInt(billedSize)*rate,unit=BigInt(SWEEP_FEE_POLICY.bytesPerUnit),denominator=unit*100n;
     const fee=(numerator*BigInt(100+SWEEP_FEE_POLICY.cushionPercent)+denominator-1n)/denominator;
     if(!rules.flatFee&&fee>rules.maxFee)throw Error(`Sweep fee exceeds the ${E.NETWORKS[coin].name} safety limit.`);
     return {rate,requiredFee:(numerator+unit-1n)/unit,fee};
@@ -211,6 +266,7 @@
       return input;
     });
     const total=integer(inputs.reduce((n,u)=>n+u.value,0n)),value=total-fee;
+    if(policy(coin).maxMoney&&total>policy(coin).maxMoney)throw Error('Sweep exceeds the selected network amount limit.');
     if(value<policy(coin).dust)throw Error(`The balance must cover the ${format(fee)} network fee plus at least ${format(policy(coin).dust)} for your wallet. No coins have moved.`);
     return {coin,destination,changeAddress:destination,amount:value,fee,change:0n,inputs,outputs:[{value,script:destinationScript}],tip,feeIncluded:true,flatFee:false,budget:total,version:1,locktime:0,createdAt:Date.now(),sweep:true,compressed,feeRate:rate,estimatedBytes};
   }
@@ -222,5 +278,5 @@
     if(p.destination!==owned||p.changeAddress!==owned||key.address===owned)throw Error('Sweep destination must be a different address in your wallet.');
     return signWith(p,()=>key,{inputs:p.inputs.length,bytes:size,fee});
   }
-  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,ONE_COIN_MAX_INPUTS,supportsOneCoinFee,SWEEP_FEE_POLICY,policy,amount,format,formatDisplay,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
+  return {COIN,DUST,MAX_FEE,FLAT_MAX_INPUTS,ONE_COIN_MAX_INPUTS,supportsOneCoinFee,SWEEP_FEE_POLICY,policy,blockHeaderHash,amount,format,formatDisplay,script,scriptHash,historyStatus,parse,serialize,verifyUTXO,plan,sign,sweepKey,sweepSize,sweepFee,sweepPlan,signSweep};
 });

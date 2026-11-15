@@ -27,8 +27,8 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
   if(scenario==='expiry')await p.clock.install();
   await p.goto('http://localhost:8787/');
   if(scenario==='protected'){await p.locator('#lock').click();await p.locator('#unlock-password').fill(password);await p.locator('#unlock-submit').click();}
-  await p.waitForFunction(()=>__rescan.length===6);
-  await p.locator('#rescan').waitFor();await p.locator('#rescan').click();await p.waitForFunction(()=>__rescan.length===12);
+  await p.waitForFunction(()=>__rescan.length===13);
+  await p.locator('#rescan').waitFor();await p.locator('#rescan').click();await p.waitForFunction(()=>__rescan.length===26);
   assert.equal(await p.evaluate(()=>__rescan.every(c=>c.count===200)),true);
   if(scenario==='full')assert.match(await p.locator('#main').innerText(),/wallet addresses are full \(200 used\)/);
   await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();
@@ -63,8 +63,9 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
     assert.doesNotMatch(await p.locator('#main').innerText(),/25%|per estimated byte/);
     assert.equal(await p.locator('#sweep-fee-estimate').innerText(),`Estimated network fee: ${scenario==='many'?'0.2259125':'0.0024125'} ${coin.toUpperCase()}, deducted from the swept balance.`);
     assert.match(await p.locator('#main').innerText(),/Your wallet receives/);
+    await require('./accept_missing_price.cjs')(p);
     assert.equal(await p.locator('#broadcast-send').innerText(),'Confirm sweep');
-    await p.locator('#broadcast-send').click(); // Missing explicit acknowledgment must not submit.
+    await require('./accept_missing_price.cjs')(p);await p.locator('#broadcast-send').click(); // Missing explicit acknowledgment must not submit.
     assert.equal(await p.evaluate(()=>__broadcasts.length),0);
     assert.equal(await p.locator('#sweep-key').count(),0);
     if(scenario==='expiry'){
@@ -75,8 +76,8 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
      await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').click();assert.equal(await p.locator('#sweep-key').inputValue(),'');assert.equal(await p.evaluate(()=>__broadcasts.length),0);await c.close();continue;
     }
     await p.locator('#send-ack').check();
-    if(scenario==='protected'){await p.locator('#send-password').fill('wrong');await p.locator('#broadcast-send').click();await p.locator('#error').waitFor({state:'visible'});assert.equal(await p.evaluate(()=>__broadcasts.length),0);await p.locator('#send-password').fill(password);}
-    await p.locator('#broadcast-send').click();
+    if(scenario==='protected'){await p.locator('#send-password').fill('wrong');await require('./accept_missing_price.cjs')(p);await p.locator('#broadcast-send').click();await p.locator('#error').waitFor({state:'visible'});assert.equal(await p.evaluate(()=>__broadcasts.length),0);await p.locator('#send-password').fill(password);}
+    await require('./accept_missing_price.cjs')(p);await p.locator('#broadcast-send').click();
     if(scenario==='progress'){
      await p.waitForFunction(()=>typeof __finishSource==='function');assert.match(await p.locator('#sweep-progress').innerText(),/Rechecking/);assert.equal(await p.locator('#broadcast-send').isDisabled(),true);assert.equal(await p.evaluate(()=>__broadcasts.length),0);
      await p.evaluate(()=>__finishSource());await p.waitForFunction(()=>typeof __finishBroadcast==='function');assert.match(await p.locator('#sweep-progress').innerText(),/Submitting/);assert.equal(await p.locator('#broadcast-send').isDisabled(),true);

@@ -26,11 +26,11 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
   await page.goto('http://localhost:8787/');await page.locator('#rescan').waitFor();
   await page.locator('[data-nav=receive]').click();await page.locator('#receive-coin').click();await page.locator(`[data-coin=${coin}]`).click();
   await page.locator('#sweep-open').click();await page.locator('#sweep-key').fill(wif);await page.locator('#review-sweep').click();
-  await page.locator('#fee-usd-notice').waitFor();const notice=await page.locator('#fee-usd-notice').innerText();
+  await page.locator('#broadcast-send').waitFor();const notice=await page.locator('#fee-usd-notice').textContent();
   assert.equal(await page.evaluate(()=>__broadcasts.length),0);
   if(['blocked','missing'].includes(scenario)){
    assert.equal(await page.locator('#broadcast-send').isDisabled(),true);
-   assert.match(notice,scenario==='blocked'?/120\.63 USD.*blocked.*no override/:/fresh USD price.*blocked/);
+   assert.match(notice,scenario==='blocked'?/120\.63 USD.*blocked.*no override/:/fresh USD price.*unavailable/);
    // The policy must guard the handler too, not merely disable a UI button.
    await page.locator('#send-ack').check();
    await page.evaluate(()=>document.getElementById('broadcast-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
@@ -38,7 +38,7 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
    assert.equal(await page.evaluate(()=>__broadcasts.length),0);
    assert.equal(await page.locator('#broadcast-send').isDisabled(),true);
   }else{
-   assert.match(notice,scenario==='high'?/48\.25 USD.*High fee/:/0\.25 USD/);
+   if(scenario==='high')assert.match(notice,/48\.25 USD.*High fee/);else assert.equal(await page.locator('#fee-usd-notice').isHidden(),true);
    await page.locator('#broadcast-send').click();assert.equal(await page.evaluate(()=>__broadcasts.length),0);
    await page.locator('#send-ack').check();await page.locator('#broadcast-send').click();
    if(scenario==='stale'){

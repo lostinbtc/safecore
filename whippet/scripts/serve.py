@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1] / 'www'
-FILES = {'index.html', 'styles.css', 'engine.js', 'viewport.js', 'recovery.js', 'receive.js', 'library.js', 'transactions.js', 'komodo.js', 'scanner.js', 'network.js', 'reporting.js', 'app.js', 'native.js', 'storage.js',
+FILES = {'index.html', 'styles.css', 'engine.js', 'viewport.js', 'recovery.js', 'receive.js', 'library.js', 'transactions.js', 'komodo.js', 'scanner.js', 'network.js', 'esplora.js', 'assets/bellscoin.png', 'assets/bellscoin.LICENSE', 'assets/dingocoin.png', 'assets/dingocoin.LICENSE', 'assets/bitcoincash.svg', 'assets/bitcoincash.LICENSE', 'assets/dash.png', 'assets/dash.LICENSE', 'assets/digibyte.png', 'assets/digibyte.LICENSE', 'assets/junkcoin.png', 'assets/junkcoin.LICENSE', 'assets/luckycoin.png', 'assets/luckycoin.LICENSE', 'assets/flopcoin.png', 'assets/flopcoin.LICENSE', 'assets/catcoin.png', 'assets/catcoin.LICENSE', 'assets/trumpow.png', 'assets/trumpow.LICENSE', 'assets/ravencoin.png', 'assets/ravencoin.LICENSE', 'assets/bonkcoin.png', 'assets/bonkcoin.LICENSE', 'reporting.js', 'app.js', 'native.js', 'storage.js',
          'assets/pepecoin.png', 'assets/whippet.png', 'assets/shibacoin.png', 'assets/shibacoin.LICENSE', 'assets/litecoin.png', 'assets/litecoin.LICENSE', 'assets/dogecoin.png', 'assets/dogecoin.LICENSE', 'assets/bitcoin.png', 'assets/bitcoin.LICENSE', 'assets/corevault.svg', 'assets/safecore.png', 'assets/safecore.LICENSE', 'assets/ethers.umd.min.js',
          'assets/qrcode.min.js', 'assets/whippet-legacy.js', 'assets/jsQR.js', 'assets/jsQR.LICENSE', 'assets/ethers.LICENSE', 'assets/qrcode.LICENSE'}
 FILES |= {f'assets/icons/safecore-{i:02d}.svg' for i in range(1, 31)}

@@ -95,11 +95,16 @@
   const WALLET_COIN_PREFS = 'corevault.hidden-coins.v2.';
   const coinPrefsKey = () => envelope ? WALLET_COIN_PREFS + WalletLibrary.id(envelope) : COIN_PREFS;
   const CONNECTION_PREFS='corevault.connections.v1';
+  const LEGACY_ASSETS=Object.freeze({flop:'corevault.legacy-flop.v1',cat:'corevault.legacy-cat.v1',bonc:'corevault.legacy-bonc.v1',jkc:'corevault.legacy-jkc.v1',lky:'corevault.legacy-lky.v1'});
+  const legacyEnabled=coin=>{try{return localStorage.getItem(LEGACY_ASSETS[coin])==='true';}catch(_){return false;}};
+  const catalogEnabled=coin=>!LEGACY_ASSETS[coin]||legacyEnabled(coin);
+  const activeConnections=()=>{const values=savedConnections();for(const coin of Object.keys(LEGACY_ASSETS))if(!legacyEnabled(coin))delete values[coin];return values;};
+  const liveCoin=coin=>catalogEnabled(coin)&&Boolean(N.endpoint(coin));
   const connectionTests=new Set();
   const cancelConnectionTests=()=>{for(const controller of connectionTests)controller.abort();connectionTests.clear();};
   const savedConnections=()=>N.validateEndpoints(JSON.parse(localStorage.getItem(CONNECTION_PREFS)||'{}'));
   let connectionProblem=null;
-  try{N.configure(savedConnections());}catch(_){connectionProblem='Check your saved connections in Settings.';}
+  try{N.configure(activeConnections());}catch(_){connectionProblem='Check your saved connections in Settings.';}
   const BALANCE_PRIVACY = 'corevault.hide-balances.v1';
   const balancesHidden=()=>{try{return localStorage.getItem(BALANCE_PRIVACY)==='true';}catch(_){return true;}};
   const hiddenBalance='<span class="masked-balance" aria-label="Balance hidden">••••</span>';
@@ -111,14 +116,22 @@
   const brandPath = id => id===31 ? 'assets/safecore.png' : id ? `assets/icons/safecore-${String(id).padStart(2,'0')}.svg` : 'assets/corevault.svg';
   function savedBrand(){try{const raw=localStorage.getItem(BRAND_PREF);if(raw===null)return DEFAULT_BRAND;const id=Number(raw);return Number.isInteger(id)&&id>=0&&id<=BRAND_ICONS.length?id:DEFAULT_BRAND;}catch(_){return DEFAULT_BRAND;}}
   function applyBrand(id){document.querySelector('.mobile-brand img').src=brandPath(id);const favicon=document.querySelector('link[rel="icon"]');favicon.href=brandPath(id);favicon.type=id===31?'image/png':'image/svg+xml';}
-  // Display order is independent of the key engine's historical asset order.
-  const COINS = { pep: E.NETWORKS.pep, doge: E.NETWORKS.doge, ltc: E.NETWORKS.ltc, shic: E.NETWORKS.shic, wht: E.NETWORKS.wht, btc: E.NETWORKS.btc };
+  // One alphabetical presentation order for every screen. Never reorder the
+  // key engine, saved recipes or scanning queues to change the visual layout.
+  const COINS = Object.freeze(Object.fromEntries(Object.entries(E.NETWORKS)
+    .sort(([,a],[,b])=>a.name.localeCompare(b.name,'en'))));
   // Navigation only, never polled or loaded inside the wallet. WHT has no explorer.
   const EXPLORERS = Object.freeze({
+    bch:'https://blockchair.com/bitcoin-cash/transaction/',
+    dash:'https://blockchair.com/dash/transaction/',
+    dgb:'https://digiexplorer.info/tx/',
+    rvn:'https://ravencoinexplorer.com/tx/',
     pep:'https://pepecoinservice.org/explorer/tx/',
     btc:'https://mempool.space/tx/',
     doge:'https://dogechain.com/tx/',
     ltc:'https://litecoinspace.org/tx/',
+    bel:'https://nintondo.io/bells/explorer/tx/',
+    dingo:'https://explorer.dingocoin.com/tx/',
     shic:'https://explorer.shibacoinshic.org/tx/'
   });
   const assetOrder = Object.keys(COINS).filter(coin => Object.hasOwn(E.NETWORKS, coin));
@@ -132,7 +145,7 @@
       hiddenCoins = Array.isArray(saved) ? saved.filter(coin => Object.hasOwn(COINS, coin)) : [...assetOrder];
     } catch (_) { hiddenCoins = [...assetOrder]; }
   }
-  const visibleCoins = () => Object.keys(COINS).filter(coin => !hiddenCoins.includes(coin));
+  const visibleCoins = () => Object.keys(COINS).filter(coin => catalogEnabled(coin) && !hiddenCoins.includes(coin));
   const icons = {
     wallet: '<rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 8h15M17 12h4v5h-4a2.5 2.5 0 0 1 0-5Z"/>',
     receive: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
@@ -150,7 +163,7 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.wallet}</svg>`;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const coinImage = coin => `assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin'})[coin]}.png`;
+  const coinImage = coin => coin==='bch'?'assets/bitcoincash.svg':`assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin',bel:'bellscoin',bonc:'bonkcoin',dingo:'dingocoin',bch:'bitcoincash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow',flop:'flopcoin'})[coin]}.png`;
   const coinMark = coin => `<img src="${coinImage(coin)}" alt="">`;
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
   let receiveBooks = null, addingWallet = false, revealed = false;
@@ -177,28 +190,36 @@
   function clearSweep(){if(sweepState){clearTimeout(sweepState.timer);sweepState.key=null;sweepState=null;}const field=$('sweep-key');if(field)field.value='';}
   let reports={},reportTimers={},deleteTarget=null;
   let exportSelection=null;
-  function clearReports(){for(const timer of Object.values(reportTimers))clearTimeout(timer);reportTimers={};reports={};}
+  const balanceWrites=new Map();
+  function clearReports(){for(const timer of Object.values(reportTimers))clearTimeout(timer);reportTimers={};reports={};balanceWrites.clear();}
   const reported=coin=>reports[coin]?.value;
+  const EXTRA_PRICE_IDS=Object.freeze({bch:'bitcoin-cash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow'});
+  const extraQuotes={};
   let pepPrice=null,priceAttempt=0,priceBusy=false;
-  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
+  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,belPrice=null,dingoPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
   const priceFresh=()=>pepPrice&&Date.now()-pepPrice.at<300000;
   async function refreshShicPrice(forFee=false){
     if(shicPriceBusy||Date.now()-shicPriceAttempt<(forFee?10000:300000))return;
     shicPriceBusy=true;shicPriceAttempt=Date.now();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
-      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
+      const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin,bellscoin,dingocoin,bitcoin-cash,dash,digibyte,junkcoin,luckycoin,ravencoin,catcoin,trumpow&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('SHIC price unavailable');
       const quotes=await response.json();
-      try{shicPrice=WalletReporting.shicQuote(quotes);}catch(_){shicPrice=null;}
-      try{ltcPrice=WalletReporting.ltcQuote(quotes);}catch(_){ltcPrice=null;}
-      try{dogePrice=WalletReporting.dogeQuote(quotes);}catch(_){dogePrice=null;}
-      try{btcPrice=WalletReporting.btcQuote(quotes);}catch(_){btcPrice=null;}
-    }catch(_){/* Keep prior quotes; freshness checks block BTC/LTC sends when stale. */}
+      // A missing field must not erase a still-fresh known quote and expose a
+      // dollar-limit override. Retain it until the normal freshness deadline.
+      for(const [coin,id] of Object.entries(EXTRA_PRICE_IDS)){try{extraQuotes[coin]=WalletReporting.marketQuote(quotes,id);}catch(_){}}
+      try{shicPrice=WalletReporting.shicQuote(quotes);}catch(_){}
+      try{ltcPrice=WalletReporting.ltcQuote(quotes);}catch(_){}
+      try{dogePrice=WalletReporting.dogeQuote(quotes);}catch(_){}
+      try{btcPrice=WalletReporting.btcQuote(quotes);}catch(_){}
+      try{belPrice=WalletReporting.belQuote(quotes);}catch(_){}
+      try{dingoPrice=WalletReporting.dingoQuote(quotes);}catch(_){}
+    }catch(_){/* Keep prior quotes; missing/stale prices require a per-review acknowledgment. */}
     finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
   }
-  async function refreshPrice(){
-    if(!riskAccepted()||priceBusy||Date.now()-priceAttempt<60000||mode!=='unlocked'||document.hidden)return;
+  async function refreshPrice(forFee=false){
+    if(!riskAccepted()||priceBusy||Date.now()-priceAttempt<(forFee?10000:60000)||mode!=='unlocked'||document.hidden)return;
     priceBusy=true;priceAttempt=Date.now();
     void refreshShicPrice();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
@@ -208,7 +229,7 @@
       const data=await response.json(),value=Number(data.result?.PEPUSD?.c?.[0]),usdt=Number(data.result?.USDTZUSD?.c?.[0]);
       if(!Array.isArray(data.error)||data.error.length||!Number.isFinite(value)||value<=0)throw Error('Invalid price');
       pepPrice={value,usdt:Number.isFinite(usdt)&&usdt>0?usdt:null,at:Date.now()};
-    }catch(_){/* Price availability never changes coin balances or spending. */}
+    }catch(_){/* Keep the last quote; fee checks reject stale prices unless explicitly acknowledged. */}
     finally{clearTimeout(timer);priceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
   }
   let mode = 'demo', generation = 0, idleTimer = null, toastTimer = null;
@@ -228,7 +249,7 @@
     destinationFingerprint=WalletKomodo.fingerprint(candidate.mnemonic);
     const pools = E.cachedReceivePool(ethers, candidate, localStorage, WalletLibrary.id(vault), 200);
     N.close(); networkEpoch++; snapshots = {}; networkErrors = {}; scans = {}; lastRefresh = {}; sendDraft = null; receivePools = pools;
-    initialDiscovery = new Set(Object.keys(pools));
+    initialDiscovery = new Set(Object.keys(pools).filter(liveCoin));
     let prefs = {};
     try { prefs = JSON.parse(localStorage.getItem('corevault.receive.' + WalletLibrary.id(vault)) || '{}'); } catch (_) {}
     receiveBooks = Object.fromEntries(Object.entries(pools).map(([coin,pool]) => [coin, ReceiveBook.create(pool, prefs?.[coin] || {})]));
@@ -304,12 +325,31 @@
   }
   const liveSnapshot = coin => !connectionProblem && snapshots[coin] && !snapshots[coin].cached && N.isCurrent(snapshots[coin]) && !networkErrors[coin] && Date.now() - snapshots[coin].at < 45000;
   const fresh = coin => liveSnapshot(coin) && snapshots[coin].complete!==false;
+  let balanceViewQueued=false;
   function refreshBalanceViews(coin){
-    if (['', '#wallet', '#activity'].includes(location.hash) || coin === receiveCoin && location.hash === '#receive') render();
-    if (location.hash === '#send') updateSendPicker();
+    if(balanceViewQueued)return;
+    const epoch=networkEpoch,source=envelope,route=location.hash;
+    if(!['','#wallet','#activity','#send'].includes(route)&&!(coin===receiveCoin&&route==='#receive'))return;
+    balanceViewQueued=true;
+    queueMicrotask(()=>{
+      balanceViewQueued=false;
+      if(epoch!==networkEpoch||source!==envelope||route!==location.hash||mode!=='unlocked'||document.hidden)return;
+      // A balance notification must not rebuild the header or trigger more scans.
+      if(['','#wallet'].includes(route))overview();
+      else if(route==='#send')updateSendPicker();
+      else render();
+    });
+  }
+  function balanceFingerprint(snapshot){
+    // Public display cache only: timestamps, probe cursors and spendable UTXOs
+    // are deliberately excluded. Fresh spending checks still use live snapshots.
+    return JSON.stringify([snapshot.tip,snapshot.confirmed,snapshot.unconfirmed,
+      [...(snapshot.everUsed||[])].sort((a,b)=>a-b),snapshot.rows.map(r=>[
+        r.account.address,r.confirmed,r.unconfirmed,r.checked!==false,r.history])],
+      (_,v)=>typeof v==='bigint'?v.toString():v);
   }
   async function refreshLive(coin,full=false,indices=null) {
-    if (connectionProblem || !liveEnabled() || mode !== 'unlocked' || !receivePools?.[coin] || document.hidden) return null;
+    if (!liveCoin(coin) || connectionProblem || !liveEnabled() || mode !== 'unlocked' || !receivePools?.[coin] || document.hidden) return null;
     if(indices&&initialDiscovery.has(coin))return null;
     // Confirmed-send refreshes supersede slow scans instead of queuing behind them.
     // The version guard prevents those older results from restoring spent balances.
@@ -352,12 +392,16 @@
           return null;
         }
         try {
-          await withWalletLock(()=>{
+          const key='corevault.balance.'+WalletLibrary.id(source)+'.'+coin;
+          const fingerprint=balanceFingerprint(snapshot),written=balanceWrites.get(key);
+          // Changes are persisted immediately; unchanged observations get a
+          // bounded heartbeat instead of a synchronous storage write every poll.
+          if(!written||written.fingerprint!==fingerprint||Date.now()-written.at>=30000)await withWalletLock(()=>{
             if(epoch!==networkEpoch||version!==scanVersions[coin]||source!==envelope)return;
-            const key='corevault.balance.'+WalletLibrary.id(source)+'.'+coin;
             const existing=N.decode(localStorage.getItem(key),coin,receivePools[coin]);
             snapshot.everUsed=[...new Set([...(snapshot.everUsed||[]),...(existing?.everUsed||[])])];
             localStorage.setItem(key,N.encode(snapshot));
+            balanceWrites.set(key,{fingerprint:balanceFingerprint(snapshot),at:Date.now()});
           });
         } catch (_) { toast('Balance refreshed, but could not be saved on this device.'); }
         return epoch===networkEpoch&&version===scanVersions[coin]?snapshot:null;
@@ -410,6 +454,7 @@
     finally{if(sendRefreshRun===run)sendRefreshRun=null;}
   }
   const fundedCoins = () => assetOrder.filter(coin => {
+    if(!liveCoin(coin))return false;
     const value = reported(coin);
     return value && value.confirmed + value.unconfirmed > 0n;
   });
@@ -478,7 +523,7 @@
       el.querySelector('.send-choice-state').textContent = coin===sendCoin ? '✓ Selected' : '';
     }
     $('send-coins-empty').hidden = options.hidden || coins.length>0;
-    $('send-coins-empty').textContent = Object.keys(E.NETWORKS).some(coin=>!reported(coin)) ? 'Checking balances…' : 'No assets with a balance yet.';
+    $('send-coins-empty').textContent = assetOrder.filter(liveCoin).some(coin=>!reported(coin)) ? 'Checking balances…' : 'No assets with a balance yet.';
     $('send-form')?.dispatchEvent(new Event('safecore-send-refresh'));
   }
   function send() {
@@ -570,6 +615,9 @@
       void available().then(data=>{if(data&&activeView()){
         quote=data;
         if(automaticFee)feeQuote={rate:data.snapshot.feeRate,at:Date.now()};
+        if(coin==='dingo')$('send-form').querySelector('p.subtle').textContent='Automatic fee per started kB. Recipient minimum: 1 DINGO.';
+        if(['bel','bonc','bch','dash','dgb','jkc','lky','rvn','cat','trmp','flop'].includes(coin))$('send-form').querySelector('p.subtle').textContent=data.snapshot.feeSource==='core-minimum'
+          ?'Size-based fee using the Core minimum; live estimates unavailable.':'Includes the automatic network fee.';
         $('send-max').disabled=false;estimate();
       }}).catch(e=>{if(activeView()){$('send-estimate').textContent=e.message;if($('automatic-fee'))$('automatic-fee').textContent='Unavailable';}})
         .finally(()=>{quotePending=false;});
@@ -680,7 +728,7 @@
     if(mode!=='unlocked'||!E.NETWORKS[coin]){go('receive');return;}
     const ticker=E.NETWORKS[coin].ticker,token=generation,source=envelope;
     const active=()=>token===generation&&source===envelope&&mode==='unlocked'&&location.hash==='#sweep'&&!document.hidden;
-    $('main').innerHTML='<div class="page-head"><h1>Sweep private key</h1></div>'+`<p>Move the full ${ticker} balance from one private key into this wallet.</p><p class="notice">Select the correct asset: PEP, SHIC, WHT and DOGE share the same private-key format. The key stays on this device and is not saved.</p><form id="sweep-form" class="form-panel"><label for="sweep-key">Private key (WIF)</label><div class="send-address-row"><input id="sweep-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="52" required><button id="scan-key" type="button" class="icon-button" aria-label="Scan private key QR code">${icon('camera')}</button></div><section id="scan-panel" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" role="status" hidden></p><p class="subtle">Standard WIF keys only. Deposits must be confirmed and mining rewards mature.</p><p class="subtle">Review the estimated network fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-sweep','Review sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form>`;
+    $('main').innerHTML='<div class="page-head"><h1>Sweep private key</h1></div>'+`<p>Move the full ${ticker} balance from one private key into this wallet.</p><p class="notice">Select the correct asset. Several coins share the same private-key format. The key stays on this device and is not saved.</p><form id="sweep-form" class="form-panel"><label for="sweep-key">Private key (WIF)</label><div class="send-address-row"><input id="sweep-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="52" required><button id="scan-key" type="button" class="icon-button" aria-label="Scan private key QR code">${icon('camera')}</button></div><section id="scan-panel" hidden><div class="scan-view"><video id="scan-video" autoplay muted playsinline></video><span id="scan-hint" class="scan-hint">Starting camera…</span></div><button id="cancel-scan" type="button" class="text-button">Cancel scan</button></section><p id="scan-status" role="status" hidden></p><p class="subtle">Standard WIF keys only. Deposits must be confirmed and mining rewards mature.</p><p class="subtle">Review the estimated network fee before confirming.</p><p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>${button('review-sweep','Review sweep','primary wide')}<a href="#receive" class="text-button">Cancel</a></form>`;
     const input=$('sweep-key'),submit=$('review-sweep'),scanButton=$('scan-key'),panel=$('scan-panel'),status=$('scan-status');submit.type='submit';
     let stopScan=null;
     scanButton.onclick=()=>{
@@ -706,24 +754,45 @@
     if (!sendDraft || mode !== 'unlocked') { go('wallet'); return; }
     const reviewDraft=sendDraft,reviewToken=generation;
     const p = sendDraft.plan, ticker = E.NETWORKS[p.coin].ticker;
-    const priceQuote=()=>p.coin==='btc'?btcPrice:p.coin==='ltc'?ltcPrice:null;
-    const covered=['btc','ltc'].includes(p.coin);
-    if(covered&&!WalletReporting.freshShic(priceQuote()))await refreshShicPrice(true);
+    const priceQuote=()=>p.coin==='pep'&&pepPrice?{...pepPrice,updated:pepPrice.at}:
+      ({btc:btcPrice,ltc:ltcPrice,shic:shicPrice,doge:dogePrice,bel:belPrice,dingo:dingoPrice})[p.coin]||extraQuotes[p.coin]||null;
+    const automatic=!T.policy(p.coin).flatFee;
+    const refreshFeePrice=()=>p.coin==='pep'?refreshPrice(true):
+      ['btc','ltc','shic','doge','bel','dingo',...Object.keys(EXTRA_PRICE_IDS)].includes(p.coin)?refreshShicPrice(true):Promise.resolve();
+    if(!WalletReporting.freshShic(priceQuote()))await refreshFeePrice();
     if(reviewDraft!==sendDraft||reviewToken!==generation||mode!=='unlocked')return;
-    let approvedFee=null,feeProblem='';
-    try{approvedFee=WalletReporting.feeUsd(p.coin,p.fee,priceQuote());}catch(e){feeProblem=e.message;}
+    let approvedFee=null,feeProblem='',priceUnavailable=false,missingPriceAccepted=false;
+    try{approvedFee=WalletReporting.feeUsd(p.coin,p.fee,priceQuote());}
+    catch(e){feeProblem=e.message;priceUnavailable=e.code==='USD_PRICE_UNAVAILABLE';}
     const feeNotice=()=>feeProblem||(!approvedFee?'':
       `Estimated network fee: ${T.format(p.fee)} ${ticker} (approximately ${approvedFee.display}). `+
       (approvedFee.blocked?'Sending blocked: this fee exceeds $100 USD. Try again later. There is no override.':
        approvedFee.warning?'High fee: more than $5 USD. Check the fee carefully before confirming, or cancel and try again later.':'Check the fee before confirming.'));
+    function syncFeeUi(initial=false){
+      const notice=$('fee-usd-notice'),override=$('missing-price-option');
+      if(notice){notice.textContent=feeNotice();notice.hidden=!feeProblem&&!approvedFee?.warning;}
+      if(override){override.hidden=!priceUnavailable;if(!priceUnavailable){missingPriceAccepted=false;$('missing-price-ack').checked=false;}}
+      if($('broadcast-send')&&(!busy||initial)){
+        $('broadcast-send').disabled=Boolean(approvedFee?.blocked||feeProblem&&(!priceUnavailable||!missingPriceAccepted));
+        $('broadcast-send').textContent=approvedFee?.blocked?'Fee exceeds $100 — try again later':
+          feeProblem&&!missingPriceAccepted?'USD price unavailable — acknowledgment required':reviewDraft.sweep?'Confirm sweep':'Confirm and send';
+      }
+    }
     const checkFee=()=>{
-      if(covered&&!reviewDraft.sweep&&(!Number.isSafeInteger(p.feeQuoteExpiresAt)||Date.now()>=p.feeQuoteExpiresAt))throw Error('Fee estimate expired. Build a fresh transaction.');
+      if(automatic&&!reviewDraft.sweep&&(!Number.isSafeInteger(p.feeQuoteExpiresAt)||Date.now()>=p.feeQuoteExpiresAt))throw Error('Fee estimate expired. Build a fresh transaction.');
       let current;
       try{current=WalletReporting.feeUsd(p.coin,p.fee,priceQuote());}
-      catch(e){feeProblem=e.message;if($('fee-usd-notice'))$('fee-usd-notice').textContent=feeNotice();throw e;}
-      if(current?.blocked){approvedFee=current;$('fee-usd-notice').textContent=feeNotice();throw Error(feeNotice());}
-      if(current&&(!approvedFee||current.cents>approvedFee.cents||current.warning&&!approvedFee.warning)){
-        approvedFee=current;feeProblem='';$('fee-usd-notice').textContent=feeNotice();$('send-ack').checked=false;
+      catch(e){
+        feeProblem=e.message;priceUnavailable=e.code==='USD_PRICE_UNAVAILABLE';approvedFee=null;syncFeeUi();
+        if(!priceUnavailable||!missingPriceAccepted){$('send-ack').checked=false;throw e;}
+        return; // Only the USD comparison is waived, never network fee validation.
+      }
+      feeProblem='';priceUnavailable=false;
+      const increased=current.warning&&(!approvedFee||!approvedFee.warning||current.cents>approvedFee.cents);
+      approvedFee=current;syncFeeUi();
+      if(current.blocked)throw Error(feeNotice());
+      if(increased){
+        $('send-ack').checked=false;
         throw Error('The estimated USD fee increased. Check the updated fee and confirm again, or try again later.');
       }
     };
@@ -731,7 +800,7 @@
     if(sendDraft.komodo&&(!WalletKomodo.supports(p.coin)||!komodoVerified(p.coin))){clearSweep();clearKomodo();sendDraft=null;go('security');return;}
     $('main').innerHTML = title(sweeping?'Review sweep':'Review transaction', 'Nothing has been sent yet.', protectionIcon(protectedWallet(envelope))) +
       (sweeping?`<p class="subtle">From external ${ticker} address: <code>${escape(sweepState.key.address)}</code><br>Into your wallet, Address #${sweepState.destinationIndex+1}. The key will not be saved.</p><p class="subtle">Full source balance: ${T.format(p.budget)} ${ticker}.</p>`:'')+
-      (sweeping?`<p class="notice" id="sweep-fee-estimate">Estimated network fee: <strong>${T.format(p.fee)} ${ticker}</strong>, deducted from the swept balance.</p>`:`<p class="notice">You are sending <strong>${T.format(p.amount)} ${ticker}</strong> to the recipient.</p>`)+`<div class="details send-review"><div class="detail-row"><span>Network</span><strong>${E.NETWORKS[p.coin].name} mainnet</strong></div><div class="detail-row"><span>Recipient</span><code>${escape(p.destination)}</code></div><div class="detail-row"><span>${sweeping?'Your wallet receives':'Recipient receives'}</span><strong>${T.format(p.amount)} ${ticker}</strong></div><div class="detail-row"><span>${sweeping||covered?'Estimated network fee (included)':p.oneCoinFee?'Selected network fee (included)':'Default network fee (included)'}</span><strong>${T.format(p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Total deducted</span><strong>${T.format(p.amount+p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Change returned</span><strong>${T.format(p.change)} ${ticker}</strong></div>${p.change ? `<div class="detail-row"><span>Change address</span><code>${escape(p.changeAddress)}</code></div>` : ''}</div>
+      (sweeping?`<p class="notice" id="sweep-fee-estimate">Estimated network fee: <strong>${T.format(p.fee)} ${ticker}</strong>, deducted from the swept balance.</p>`:`<p class="notice">You are sending <strong>${T.format(p.amount)} ${ticker}</strong> to the recipient.</p>`)+`<div class="details send-review"><div class="detail-row"><span>Network</span><strong>${E.NETWORKS[p.coin].name} mainnet</strong></div><div class="detail-row"><span>Recipient</span><code>${escape(p.destination)}</code></div><div class="detail-row"><span>${sweeping?'Your wallet receives':'Recipient receives'}</span><strong>${T.format(p.amount)} ${ticker}</strong></div><div class="detail-row"><span>${sweeping||automatic?'Estimated network fee (included)':p.oneCoinFee?'Selected network fee (included)':'Default network fee (included)'}</span><strong>${T.format(p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Total deducted</span><strong>${T.format(p.amount+p.fee)} ${ticker}</strong></div><div class="detail-row"><span>Change returned</span><strong>${T.format(p.change)} ${ticker}</strong></div>${p.change ? `<div class="detail-row"><span>Change address</span><code>${escape(p.changeAddress)}</code></div>` : ''}</div>
       <p class="subtle">${sweeping?'All source funds, minus the fee, go to your reviewed wallet address.':'Change returns to your first receiving address. This reuses an address.'} The review expires after 90 seconds.</p>
       <form id="broadcast-form" class="form-panel">${protectedWallet(envelope) ? '<label for="send-password">Wallet password</label><input id="send-password" type="password" required autocomplete="current-password">' : '<p class="notice">Password lock is off for this wallet.</p>'}<label class="check"><input id="send-ack" type="checkbox" required><span>${sweeping?'I checked the estimated fee and receiving address. Sweep into my wallet.':'I checked the address, network, amount and fee. Send this real test transaction.'}</span></label>${sweeping?'<p id="sweep-progress" class="notice" role="status" aria-live="polite" hidden></p>':''}${button('broadcast-send',sweeping?'Confirm sweep':'Confirm and send','primary wide')}<a class="text-button coin-empty-link" href="#wallet">Cancel</a></form>`;
     if(sendDraft.komodo){
@@ -739,11 +808,10 @@
       $('send-ack').nextElementSibling.textContent=`I recognize my old Komodo ${E.NETWORKS[p.coin].ticker} address, checked the destination and fee, and saved my SafeCore backup for the recovered funds. I will not reuse the old Komodo seed.`;
     }
     if(p.oneCoinFee)$('broadcast-form').insertAdjacentHTML('beforebegin',`<p id="one-coin-fee-notice" class="notice">You selected a total network fee of <strong>1 ${ticker}</strong>, replacing the default 0.01 ${ticker}. This fee is included in the total deducted.</p>`);
-    if(covered)$('broadcast-form').insertAdjacentHTML('beforebegin',`<p id="fee-usd-notice" class="notice" role="alert">${escape(feeNotice())}</p>`);
-    $('broadcast-send').type = 'submit';
-    $('broadcast-send').disabled=Boolean(feeProblem||approvedFee?.blocked);
-    if(approvedFee?.blocked)$('broadcast-send').textContent='Fee exceeds $100 — try again later';
-    else if(feeProblem)$('broadcast-send').textContent='USD price unavailable — try again later';
+    $('broadcast-form').insertAdjacentHTML('beforebegin','<p id="fee-usd-notice" class="notice" role="alert" hidden></p>');
+    $('send-ack').closest('label').insertAdjacentHTML('beforebegin',`<label id="missing-price-option" class="check" hidden><input id="missing-price-ack" type="checkbox"><span>Override the unavailable USD fee check for this transaction.<small>I accept the displayed ${T.format(p.fee)} ${ticker} network fee without the $5 warning or $100 limit. Its dollar value could exceed $100.</small></span></label>`);
+    $('missing-price-ack').onchange=()=>{missingPriceAccepted=priceUnavailable&&$('missing-price-ack').checked;syncFeeUi();};
+    $('broadcast-send').type = 'submit';syncFeeUi(true);
     $('broadcast-form').onsubmit = async event => {
       event.preventDefault(); if (busy || !sendDraft || !$('send-ack').checked) return;
       const token = generation, source = envelope, draft = sendDraft;
@@ -755,6 +823,8 @@
       try {
         if(draft.komodo&&(!WalletKomodo.supports(p.coin)||!komodoVerified(p.coin)))throw Error('Komodo recovery is disabled or the session expired. Enter the Komodo phrase again.');
         if (draft.walletId !== WalletLibrary.id(source) || Date.now()-p.createdAt > 90000 || !liveEnabled()) throw Error('Review expired or wallet changed. Build a fresh transaction.');
+        if(priceUnavailable)await refreshFeePrice();
+        if(token!==generation||source!==envelope||draft!==sendDraft)return;
         checkFee();
         if(window.SafeCorePlatform?.authenticateWalletAction)await SafeCorePlatform.authenticateWalletAction('send');
         if(token!==generation||source!==envelope)return;
@@ -791,12 +861,13 @@
           if(draft.komodo&&!komodoVerified())throw Error('Komodo session expired or recovery was disabled.');
           signed=T.signSweep(p,state.key,candidate,state.destinationIndex);
         }else signed=T.sign(p,candidate);
-        if(covered&&!draft.sweep){
+        if(automatic&&!draft.sweep){
           const relay=await N.client(p.coin).call('blockchain.relayfee');
           if(token!==generation||source!==envelope||!liveEnabled())return;
           if(!Number.isFinite(relay)||relay<0||relay>Number(T.policy(p.coin).maxRate)/1e8)throw Error('Could not verify the current relay fee. Try again later.');
           const rate=BigInt(Math.max(Number(T.policy(p.coin).minRate),Math.ceil(relay*1e8)));
-          if((BigInt(signed.raw.length/2)*rate+999n)/1000n>p.fee)throw Error('The network now requires a higher fee. Build a fresh review; your fee has not been changed.');
+          const billedBytes=T.policy(p.coin).roundKilobyte?Math.ceil(signed.raw.length/2/1000)*1000:signed.raw.length/2;
+          if((BigInt(billedBytes)*rate+999n)/1000n>p.fee)throw Error('The network now requires a higher fee. Build a fresh review; your fee has not been changed.');
           checkFee();
         }
         // Record before the broadcast. An uncertain response must never auto-retry.
@@ -842,8 +913,8 @@
         if($('sweep-progress'))$('sweep-progress').hidden=true;
         busy = false;
         if ($('broadcast-send')) {
-          $('broadcast-send').disabled = Boolean(attempted||feeProblem||approvedFee?.blocked);
-          $('broadcast-send').textContent = attempted ? 'Check transaction status before retrying' : approvedFee?.blocked?'Fee exceeds $100 — try again later':feeProblem?'USD price unavailable — try again later':sweeping?'Confirm sweep':'Confirm and send';
+          syncFeeUi();
+          if(attempted){$('broadcast-send').disabled=true;$('broadcast-send').textContent='Check transaction status before retrying';}
         }
       }
     };
@@ -860,7 +931,7 @@
   }
   function activityRows(coinFilter = null) {
     if (mode !== 'demo' && liveEnabled()) {
-      const coins = coinFilter ? [coinFilter] : assetOrder;
+      const coins = (coinFilter ? [coinFilter] : assetOrder).filter(liveCoin);
       let attempts;
       try { attempts = sendAttempts(); } catch (e) { return `<p class="notice">${escape(e.message)}</p>`; }
       return coins.map(coin => {
@@ -880,6 +951,25 @@
     }
     return `<div class="empty">${icon('activity')}<br>Your transactions will appear here.</div>`;
   }
+  function patchOverview(html){
+    // Overview contains no editable fields. Patch its existing nodes so live
+    // balances don't discard keyboard focus, taps or running glow animations.
+    const next=document.createElement('template');next.innerHTML=html;
+    function patch(parent,desired){
+      for(let i=0;i<desired.childNodes.length;i++){
+        const b=desired.childNodes[i],a=parent.childNodes[i];
+        if(!a){parent.appendChild(b.cloneNode(true));continue;}
+        const same=a.nodeType===b.nodeType&&(a.nodeType!==1||a.tagName===b.tagName&&a.id===b.id&&a.getAttribute('data-overview-coin')===b.getAttribute('data-overview-coin'));
+        if(!same){a.replaceWith(b.cloneNode(true));continue;}
+        if(a.nodeType!==1){if(a.nodeValue!==b.nodeValue)a.nodeValue=b.nodeValue;continue;}
+        for(const attr of [...a.attributes])if(!b.hasAttribute(attr.name))a.removeAttribute(attr.name);
+        for(const attr of b.attributes)if(a.getAttribute(attr.name)!==attr.value)a.setAttribute(attr.name,attr.value);
+        patch(a,b);
+      }
+      while(parent.childNodes.length>desired.childNodes.length)parent.lastChild.remove();
+    }
+    patch($('main'),next.content);
+  }
   function overview() {
     const visible = visibleCoins();
     if (!visible.length) {
@@ -891,29 +981,32 @@
     const ltcUsd=WalletReporting.freshShic(ltcPrice)?ltcPrice.value:null;
     const dogeUsd=WalletReporting.freshShic(dogePrice)?dogePrice.value:null;
     const btcUsd=WalletReporting.freshShic(btcPrice)?btcPrice.value:null;
-    const valuation=WalletReporting.worth(Object.fromEntries(Object.keys(E.NETWORKS).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd);
+    const belUsd=WalletReporting.freshShic(belPrice)?belPrice.value:null;
+    const dingoUsd=WalletReporting.freshShic(dingoPrice)?dingoPrice.value:null;
+    const extraUsd=Object.fromEntries(Object.keys(EXTRA_PRICE_IDS).map(coin=>[coin,WalletReporting.freshShic(extraQuotes[coin])?extraQuotes[coin].value:null]));
+    const valuation=WalletReporting.worth(Object.fromEntries(assetOrder.filter(liveCoin).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd);
     const worth=WalletReporting.formatWorth(valuation.value);
     const hidden=balancesHidden();
     const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section></div>`;
     const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="overview-rescan glow-control" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
-      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd);
+      const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd);
       const price=unitPrice!==null?WalletReporting.formatUnitPrice(unitPrice)+' USDT':'*';
-      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd):null;
+      const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
-      const status=connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
-      return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${n.comingSoon?n.name+' coming soon':'Receive '+n.name}" ${n.comingSoon?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
+      const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
+      return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${!liveCoin(coin)?n.name+' connection required':'Receive '+n.name}" ${!liveCoin(coin)?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
     }).join('')}<p class="subtle holdings-note">* Price not available</p></section>`;
-    const full=Object.keys(E.NETWORKS).filter(c=>receiveBooks?.[c]?.view().exhausted);
-    $('main').innerHTML = heading + full.map(c=>`<p class="notice">${E.NETWORKS[c].ticker} wallet addresses are full (200 used). Existing addresses still receive funds. Create another wallet for new addresses.</p>`).join('') + holdings + rescanControl + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : '');
+    const full=assetOrder.filter(liveCoin).filter(c=>receiveBooks?.[c]?.view().exhausted);
+    patchOverview(heading + full.map(c=>`<p class="notice">${E.NETWORKS[c].ticker} wallet addresses are full (200 used). Existing addresses still receive funds. Create another wallet for new addresses.</p>`).join('') + holdings + rescanControl + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : ''));
     if($('rescan'))$('rescan').onclick=async()=>{
       if(rescanning)return;rescanning=true;const epoch=networkEpoch;clearError();overview();
-      try{let complete=true;for(const coin of Object.keys(E.NETWORKS)){if(epoch!==networkEpoch)return;const before=fullScanCompletions[coin]||0;await refreshLive(coin,true);if((fullScanCompletions[coin]||0)===before)complete=false;}if(epoch===networkEpoch)toast(!complete||Object.keys(networkErrors).length?'Rescan incomplete. Check your connection and try again.':'Rescan complete: checked 200 addresses per asset.');}
+      try{let complete=true;for(const coin of assetOrder.filter(liveCoin)){if(epoch!==networkEpoch)return;const before=fullScanCompletions[coin]||0;await refreshLive(coin,true);if((fullScanCompletions[coin]||0)===before)complete=false;}if(epoch===networkEpoch)toast(!complete||Object.keys(networkErrors).length?'Rescan incomplete. Check your connection and try again.':'Rescan complete: checked 200 addresses per asset.');}
       finally{if(epoch===networkEpoch){rescanning=false;if(['','#wallet'].includes(location.hash))render();}}
     };
     document.querySelectorAll('[data-overview-coin]').forEach(el=>el.onclick=()=>{
-      if(!E.NETWORKS[el.dataset.overviewCoin])return;
+      if(!E.NETWORKS[el.dataset.overviewCoin]||!liveCoin(el.dataset.overviewCoin))return;
       receiveCoin=el.dataset.overviewCoin;go('receive');
     });
     if ($('security-cta')) $('security-cta').onclick = () => go('setup');
@@ -925,10 +1018,10 @@
       <div id="coin-results"></div><p id="coin-result-count" class="subtle" role="status" aria-live="polite"></p>`;
     function results() {
       const query = $('coin-search').value.trim().toLowerCase();
-      const matches = Object.entries(COINS).filter(([,n]) => `${n.name} ${n.ticker}`.toLowerCase().includes(query));
+      const matches = Object.entries(COINS).filter(([coin])=>catalogEnabled(coin)).filter(([,n]) => `${n.name} ${n.ticker}`.toLowerCase().includes(query));
       $('coin-results').innerHTML = matches.map(([coin,n]) => `<div class="coin-row">
-        <button class="coin-choice" data-select-coin="${coin}" aria-label="Select ${n.name}">${coinMark(coin)}<span>${n.name}<small>${n.ticker}${n.comingSoon ? ' · Coming soon' : ''}</small></span></button>
-        <label class="coin-visibility"><input type="checkbox" data-show-coin="${coin}" ${hiddenCoins.includes(coin) ? '' : 'checked'}><span>Show ${n.name} on home</span></label></div>`).join('');
+        <button class="coin-choice" data-select-coin="${coin}" aria-label="Select ${n.name}" ${n.comingSoon?'disabled':''}>${coinMark(coin)}<span>${n.name}<small>${n.ticker}${n.comingSoon ? ' · Network unavailable' : ''}</small></span></button>
+        ${n.comingSoon?'<small class="subtle">Send and receive unavailable</small>':`<label class="coin-visibility"><input type="checkbox" data-show-coin="${coin}" ${hiddenCoins.includes(coin) ? '' : 'checked'}><span>Show ${n.name} on home</span></label>`}</div>`).join('');
       $('coin-result-count').textContent = matches.length ? `${matches.length} coin${matches.length === 1 ? '' : 's'}` : 'No coins match your search.';
       document.querySelectorAll('[data-show-coin]').forEach(el => el.onchange = () => {
         const coin = el.dataset.showCoin;
@@ -938,6 +1031,7 @@
       });
       document.querySelectorAll('[data-select-coin]').forEach(el => el.onclick = () => {
         const coin = el.dataset.selectCoin;
+        if (!Object.hasOwn(E.NETWORKS,coin)||!catalogEnabled(coin)) return;
         try {
           const next = hiddenCoins.filter(c => c !== coin);
           localStorage.setItem(coinPrefsKey(), JSON.stringify(next)); hiddenCoins = next;
@@ -949,7 +1043,7 @@
     results();
   }
   function receive() {
-    const visible = visibleCoins().filter(coin => E.NETWORKS[coin]);
+    const visible = visibleCoins().filter(liveCoin);
     if (!visible.length) {
       $('main').innerHTML = '<div class="page-head transfer-heading"><h1>Receive</h1></div><a class="text-button" href="#coins">Add coins →</a>'; return;
     }
@@ -1049,9 +1143,17 @@
       `<label class="check screenshot-setting"><input id="hide-balances" type="checkbox" ${balancesHidden()?'checked':''}><span><strong>Hide balances</strong><small>Payment amounts stay visible.</small></span></label>` +
       `<label class="check screenshot-setting"><input id="screen-protection" type="checkbox" disabled ${window.SafeCorePlatform?.getScreenProtection?'checked':''}><span><strong>Block screenshots</strong><small id="screen-protection-note">${window.SafeCorePlatform?.getScreenProtection?'Loading…':''}</small></span></label>` +
       `<div id="recovery-preferences"></div><section class="settings-connections">
-      <details id="custom-connections"><summary>Electrum connections</summary><p class="subtle">Automatic server failover when available. You can use your own server below. Servers can see your address queries and IP address.</p><p class="inline-info" id="connection-error" role="status"></p>${assetOrder.map(coin=>`<form class="connection-form" data-connection="${coin}"><label for="endpoint-${coin}">${E.NETWORKS[coin].name}</label><input id="endpoint-${coin}" type="url" required maxlength="2048" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="wss://server:port/path"><small id="endpoint-current-${coin}" class="subtle"></small><div class="connection-actions"><button type="submit" data-test-connection="${coin}">Test connection</button><button type="button" data-use-connection="${coin}" disabled>Use connection</button></div><p class="inline-info" data-connection-status="${coin}" role="status"></p></form>`).join('')}<button id="restore-connections" class="text-button" type="button">Restore default connections</button></details>
+      <details id="legacy-assets"><summary>Legacy assets</summary>${Object.keys(LEGACY_ASSETS).sort((a,b)=>COINS[a].name.localeCompare(COINS[b].name,'en')).map(coin=>`<label class="check screenshot-setting"><input id="enable-${coin}" type="checkbox" ${legacyEnabled(coin)?'checked':''}><span><strong>${COINS[coin].name} (${COINS[coin].ticker})</strong><small>Show in Add coins. Your own secure Electrum endpoint is required.</small></span></label>`).join('')}<p class="subtle">No default servers. Configure and test a connection below before receiving or sending.</p></details>
+      <details id="custom-connections"><summary>Network connections</summary><p class="subtle">Automatic server failover when available. Bellscoin uses an HTTPS API by default. You can use your own Electrum server below. Servers can see your address queries and IP address.</p><p class="inline-info" id="connection-error" role="status"></p>${assetOrder.filter(catalogEnabled).map(coin=>`<form class="connection-form" data-connection="${coin}"><label for="endpoint-${coin}">${E.NETWORKS[coin].name}</label><input id="endpoint-${coin}" type="url" required maxlength="2048" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="wss://server:port/path"><small id="endpoint-current-${coin}" class="subtle"></small><div class="connection-actions"><button type="submit" data-test-connection="${coin}">Test connection</button><button type="button" data-use-connection="${coin}" disabled>Use connection</button></div><p class="inline-info" data-connection-status="${coin}" role="status"></p></form>`).join('')}<button id="restore-connections" class="text-button" type="button">Restore default connections</button></details>
       ${['localhost','127.0.0.1'].includes(location.hostname)&&location.port==='8787'?'<a href="#reset-tests" class="text-button coin-empty-link">Reset all local test data</a>':''}<div class="settings-actions">${button('wallet-information','Information')}</div></section>`;
     bindConnections();
+    for(const coin of Object.keys(LEGACY_ASSETS))$('enable-'+coin).onchange=event=>{
+      try{
+        localStorage.setItem(LEGACY_ASSETS[coin],String(event.target.checked));
+        reloadConnections();render();$('legacy-assets').open=true;
+        if(legacyEnabled(coin))$('custom-connections').open=true;
+      }catch(_){event.target.checked=legacyEnabled(coin);error('Could not save the legacy asset setting.');}
+    };
     document.querySelectorAll('.connection-actions button, #restore-connections').forEach(el=>el.classList.add('glow-control'));
     if (exists) {
       $('recovery-preferences').innerHTML=`<label class="check komodo-setting"><input id="komodo-recovery-enabled" type="checkbox" ${komodoEnabled()?'checked':''} ${mode!=='unlocked'?'disabled':''}><span><strong>Komodo recovery (PEP / SHIC)</strong><small>Recover legacy Pepecoin or Shibacoin funds.</small></span></label>`;
@@ -1102,19 +1204,19 @@
     cancelConnectionTests();generation++;pending=null;busy=false;sendDraft=null;sendCoin=null;
     clearSweep();clearKomodo();clearSweepReceipt();clearReports();rescanning=false;sendRefreshRun=null;
     N.close();networkEpoch++;snapshots={};networkErrors={};scans={};lastRefresh={};
-    try{N.configure(savedConnections());connectionProblem=null;}
+    try{N.configure(activeConnections());connectionProblem=null;}
     catch(_){connectionProblem='Check your saved connections in Settings.';}
-    initialDiscovery=new Set(Object.keys(receivePools||{}));
+    initialDiscovery=new Set(Object.keys(receivePools||{}).filter(liveCoin));
     if(receivePools)for(const coin of Object.keys(receivePools))receiveBooks[coin]=ReceiveBook.create(receivePools[coin],receiveBooks[coin].preferences());
     if(mode==='unlocked'&&!connectionProblem)for(const coin of initialDiscovery)void refreshLive(coin);
   }
   function bindConnections(){
     $('connection-error').textContent=connectionProblem||'';
-    for(const coin of Object.keys(E.NETWORKS)){
+    for(const coin of assetOrder.filter(catalogEnabled)){
       const form=document.querySelector(`[data-connection="${coin}"]`),input=$('endpoint-'+coin),test=form.querySelector('[data-test-connection]'),use=form.querySelector('[data-use-connection]'),status=form.querySelector('[data-connection-status]');
       let tested=null,controller=null;
-      const isDefault=N.endpoint(coin)===N.CONFIG[coin].url;
-      input.value=isDefault?'':N.endpoint(coin);$('endpoint-current-'+coin).textContent=connectionProblem?'Saved connection needs attention.':isDefault?'Using default server':'Using custom server';
+      const configured=N.endpoint(coin),isDefault=configured===N.CONFIG[coin].url;
+      input.value=isDefault?'':N.endpoint(coin);$('endpoint-current-'+coin).textContent=connectionProblem?'Saved connection needs attention.':!configured?'Custom endpoint required':isDefault?'Using default server':'Using custom server';
       input.oninput=()=>{controller?.abort();tested=null;use.disabled=true;test.disabled=false;test.textContent='Test connection';status.textContent='';};
       form.onsubmit=async event=>{
         event.preventDefault();controller?.abort();tested=null;use.disabled=true;
@@ -1144,7 +1246,7 @@
   function information() {
     $('main').innerHTML = title('Information', 'Wallet risks & disclaimer', icon('shield')) +
       `<section class="panel risk-copy">${riskContent()}</section>` +
-      `<p class="subtle">SHIC, LTC, DOGE and BTC price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Logos: Shibacoin Core, Litecoin Core, Dogecoin Core and Bitcoin Core contributors (MIT).</p>` +
+      `<p class="subtle">Market price data provided by <a href="https://www.coingecko.com/en/coins/shibacoin" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer">CoinGecko</a>. Coin logos identify their respective projects; upstream copyright/license notices are included in the source and APK assets.</p>` +
       button('information-back', 'Back to Settings', 'primary');
     $('information-back').onclick = () => go('security');
   }
@@ -1432,7 +1534,7 @@
       if(!$('reset-backup').checked){error('Confirm your backups before resetting.');return;}
       try{
         await withWalletLock(()=>{
-          const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,BALANCE_PRIVACY];
+          const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,...Object.values(LEGACY_ASSETS),BALANCE_PRIVACY];
           const prefixes=[E.PUBLIC_CACHE_PREFIX,'corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.',WALLET_COIN_PREFS];
           const keys=Object.keys(localStorage).filter(k=>exact.includes(k)||prefixes.some(p=>k.startsWith(p)));
           for(const key of keys)localStorage.removeItem(key);
@@ -1573,7 +1675,7 @@
     input.files=transfer.files;input.dispatchEvent(new Event('change'));
   });
   window.addEventListener('storage', event => {
-    if(event.key===CONNECTION_PREFS){reloadConnections();render();return;}
+    if(event.key===CONNECTION_PREFS||Object.values(LEGACY_ASSETS).includes(event.key)){reloadConnections();render();return;}
     if(event.key===null){lock(undefined,false);reloadConnections();}
     if(event.key===BALANCE_PRIVACY){
       if(['','#wallet'].includes(location.hash))render();
