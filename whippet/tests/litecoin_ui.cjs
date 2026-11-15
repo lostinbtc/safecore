@@ -32,8 +32,10 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.locator('#review-send').click();await p.locator('#broadcast-send').waitFor();
  assert.match(await p.locator('.send-review').innerText(),/0\.99999776/);assert.match(await p.locator('.send-review').innerText(),/0\.00000224/);
  await p.locator('[data-nav=wallet]').click();await p.evaluate(()=>__stale=true);await p.clock.runFor(305000);
- assert.equal(await row.locator('.holding-values > small').innerText(),'*');assert.equal(await row.locator('.holding-balance').innerText(),'1 LTC');
- await p.evaluate(()=>{__stale=false;__offline=true;});await p.clock.runFor(305000);assert.equal(await row.locator('.holding-values > small').innerText(),'*');
+ assert.equal(await row.locator('.holding-values > small').innerText(),'100.00 USDT');assert.equal(await row.locator('.holding-balance').innerText(),'1 LTC');
+ assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known · 5 minutes ago/);
+ await p.evaluate(()=>{__stale=false;__offline=true;});await p.clock.runFor(305000);assert.equal(await row.locator('.holding-values > small').innerText(),'100.00 USDT');
+ assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known · 10 minutes ago/);
  await p.locator('[data-nav=security]').click();await p.locator('#custom-connections > summary').click();assert.equal(await p.locator('#endpoint-ltc').inputValue(),'');
  assert.doesNotMatch(await p.locator('#custom-connections').innerText(),/cipig/);assert.deepEqual(errors,[]);
  console.log('PASS: LTC old backup, logo/receive, price/USDT/staleness, SegWit destination, Max fee-inclusive review, hidden default and no broadcast.');

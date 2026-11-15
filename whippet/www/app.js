@@ -195,26 +195,44 @@
   const reported=coin=>reports[coin]?.value;
   const EXTRA_PRICE_IDS=Object.freeze({bch:'bitcoin-cash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow'});
   const extraQuotes={};
-  let pepPrice=null,priceAttempt=0,priceBusy=false;
-  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,belPrice=null,dingoPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
-  const priceFresh=()=>pepPrice&&Date.now()-pepPrice.at<300000;
+  let pepPrice=null,usdtPrice=null,priceAttempt=0,priceBusy=false;
+  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,belPrice=null,dingoPrice=null,shicPriceAttempt=0,shicPriceBusy=false,shicPriceRetry=240000;
+  const DISPLAY_PRICE_STORE='corevault.display-prices.v1';
+  let displayPrices={},displayPricesSaved='',priceEpoch=0;
+  try{displayPricesSaved=localStorage.getItem(DISPLAY_PRICE_STORE)||'';displayPrices=WalletReporting.readDisplayPrices(displayPricesSaved);}catch(_){}
+  function rememberDisplayPrices(){
+    // Public prices only, no wallet identifiers. Never hydrate live fee quotes
+    // from this untrusted display cache, even if its timestamps appear fresh.
+    for(const [coin,q]of Object.entries({pep:pepPrice,usdt:usdtPrice,shic:shicPrice,ltc:ltcPrice,doge:dogePrice,btc:btcPrice,bel:belPrice,dingo:dingoPrice,...extraQuotes})){
+      if(q&&WalletReporting.displayQuote(q).value!==null)displayPrices[coin]={value:q.value,at:q.at,updated:q.updated};
+    }
+    const saved=JSON.stringify({version:1,quotes:displayPrices});
+    if(saved!==displayPricesSaved)try{localStorage.setItem(DISPLAY_PRICE_STORE,saved);displayPricesSaved=saved;}catch(_){}
+  }
   async function refreshShicPrice(forFee=false){
-    if(shicPriceBusy||Date.now()-shicPriceAttempt<(forFee?10000:300000))return;
+    if(shicPriceBusy||Date.now()-shicPriceAttempt<(forFee?10000:shicPriceRetry))return;
     shicPriceBusy=true;shicPriceAttempt=Date.now();
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    // Refresh before the five-minute freshness deadline; retry failed requests
+    // once per minute, independently of the four-second balance polling.
+    shicPriceRetry=60000;
+    const epoch=priceEpoch,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
       const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin,bellscoin,dingocoin,bitcoin-cash,dash,digibyte,junkcoin,luckycoin,ravencoin,catcoin,trumpow&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('SHIC price unavailable');
       const quotes=await response.json();
+      if(epoch!==priceEpoch)return;
+      let accepted=false;
+      const readQuote=id=>{const quote=WalletReporting.marketQuote(quotes,id);accepted=true;return quote;};
       // A missing field must not erase a still-fresh known quote and expose a
       // dollar-limit override. Retain it until the normal freshness deadline.
-      for(const [coin,id] of Object.entries(EXTRA_PRICE_IDS)){try{extraQuotes[coin]=WalletReporting.marketQuote(quotes,id);}catch(_){}}
-      try{shicPrice=WalletReporting.shicQuote(quotes);}catch(_){}
-      try{ltcPrice=WalletReporting.ltcQuote(quotes);}catch(_){}
-      try{dogePrice=WalletReporting.dogeQuote(quotes);}catch(_){}
-      try{btcPrice=WalletReporting.btcQuote(quotes);}catch(_){}
-      try{belPrice=WalletReporting.belQuote(quotes);}catch(_){}
-      try{dingoPrice=WalletReporting.dingoQuote(quotes);}catch(_){}
+      for(const [coin,id] of Object.entries(EXTRA_PRICE_IDS)){try{extraQuotes[coin]=readQuote(id);}catch(_){}}
+      try{shicPrice=readQuote('shibacoin');}catch(_){}
+      try{ltcPrice=readQuote('litecoin');}catch(_){}
+      try{dogePrice=readQuote('dogecoin');}catch(_){}
+      try{btcPrice=readQuote('bitcoin');}catch(_){}
+      try{belPrice=readQuote('bellscoin');}catch(_){}
+      try{dingoPrice=readQuote('dingocoin');}catch(_){}
+      if(accepted){shicPriceRetry=240000;rememberDisplayPrices();}
     }catch(_){/* Keep prior quotes; missing/stale prices require a per-review acknowledgment. */}
     finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
   }
@@ -222,13 +240,19 @@
     if(!riskAccepted()||priceBusy||Date.now()-priceAttempt<(forFee?10000:60000)||mode!=='unlocked'||document.hidden)return;
     priceBusy=true;priceAttempt=Date.now();
     void refreshShicPrice();
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    const epoch=priceEpoch,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
       const response=await fetch('https://api.kraken.com/0/public/Ticker?pair=PEPUSD,USDTUSD',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('Price unavailable');
       const data=await response.json(),value=Number(data.result?.PEPUSD?.c?.[0]),usdt=Number(data.result?.USDTZUSD?.c?.[0]);
-      if(!Array.isArray(data.error)||data.error.length||!Number.isFinite(value)||value<=0)throw Error('Invalid price');
-      pepPrice={value,usdt:Number.isFinite(usdt)&&usdt>0?usdt:null,at:Date.now()};
+      if(epoch!==priceEpoch)return;
+      if(!Array.isArray(data.error)||data.error.length)throw Error('Invalid price');
+      const at=Date.now();
+      // PEP and USDT must age independently. A missing field must not erase or
+      // renew the other quote, nor make a stale quote acceptable for fee checks.
+      if(Number.isFinite(value)&&value>0)pepPrice={value,at,updated:at};
+      if(Number.isFinite(usdt)&&usdt>0)usdtPrice={value:usdt,at,updated:at};
+      if(Number.isFinite(value)&&value>0||Number.isFinite(usdt)&&usdt>0)rememberDisplayPrices();
     }catch(_){/* Keep the last quote; fee checks reject stale prices unless explicitly acknowledged. */}
     finally{clearTimeout(timer);priceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
   }
@@ -976,23 +1000,25 @@
       $('main').innerHTML = '<p id="coin-empty" class="subtle">No coins shown. Use Add coins above to choose assets.</p>' + (mode === 'demo' ? '<a id="security-cta" href="#setup" class="text-button">Create or restore a wallet →</a>' : '');
       return;
     }
-    const pepUsd=priceFresh()?pepPrice.value:null,usdtUsd=priceFresh()?pepPrice.usdt:null;
-    const shicUsd=WalletReporting.freshShic(shicPrice)?shicPrice.value:null;
-    const ltcUsd=WalletReporting.freshShic(ltcPrice)?ltcPrice.value:null;
-    const dogeUsd=WalletReporting.freshShic(dogePrice)?dogePrice.value:null;
-    const btcUsd=WalletReporting.freshShic(btcPrice)?btcPrice.value:null;
-    const belUsd=WalletReporting.freshShic(belPrice)?belPrice.value:null;
-    const dingoUsd=WalletReporting.freshShic(dingoPrice)?dingoPrice.value:null;
-    const extraUsd=Object.fromEntries(Object.keys(EXTRA_PRICE_IDS).map(coin=>[coin,WalletReporting.freshShic(extraQuotes[coin])?extraQuotes[coin].value:null]));
+    const now=Date.now(),conversion=WalletReporting.displayQuote(displayPrices.usdt,now);
+    const displayed=Object.fromEntries(assetOrder.map(coin=>[coin,WalletReporting.displayQuote(displayPrices[coin],now)]));
+    const pepUsd=displayed.pep.value,usdtUsd=conversion.value;
+    const shicUsd=displayed.shic.value,ltcUsd=displayed.ltc.value,dogeUsd=displayed.doge.value;
+    const btcUsd=displayed.btc.value,belUsd=displayed.bel.value,dingoUsd=displayed.dingo.value;
+    const extraUsd=Object.fromEntries(Object.keys(EXTRA_PRICE_IDS).map(coin=>[coin,displayed[coin]?.value??null]));
+    const lastKnown=coin=>usdtUsd!==null&&displayed[coin]?.value!=null&&(conversion.stale||displayed[coin].stale);
+    const oldestPrice=coin=>[displayPrices[coin],displayPrices.usdt].reduce((a,b)=>Math.min(a.at,a.updated)<=Math.min(b.at,b.updated)?a:b);
     const valuation=WalletReporting.worth(Object.fromEntries(assetOrder.filter(liveCoin).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd);
     const worth=WalletReporting.formatWorth(valuation.value);
     const hidden=balancesHidden();
-    const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section></div>`;
+    const stalePrices=assetOrder.filter(liveCoin).filter(coin=>{const s=reported(coin);return s&&s.confirmed+s.unconfirmed>0n&&lastKnown(coin);}).map(oldestPrice);
+    const oldest=stalePrices.sort((a,b)=>Math.min(a.at,a.updated)-Math.min(b.at,b.updated))[0];
+    const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div>${oldest&&!hidden?`<small id="wallet-price-status">Last known · ${WalletReporting.formatPriceAge(oldest,now)}</small>`:''}</section></div>`;
     const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="overview-rescan glow-control" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
       const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd);
-      const price=unitPrice!==null?WalletReporting.formatUnitPrice(unitPrice)+' USDT':'*';
+      const price=unitPrice!==null?WalletReporting.formatUnitPrice(unitPrice)+' USDT'+(lastKnown(coin)?` · Last known · ${WalletReporting.formatPriceAge(oldestPrice(coin),now)}`:''):'*';
       const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
       const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
@@ -1534,10 +1560,13 @@
       if(!$('reset-backup').checked){error('Confirm your backups before resetting.');return;}
       try{
         await withWalletLock(()=>{
-          const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,...Object.values(LEGACY_ASSETS),BALANCE_PRIVACY];
+          const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,...Object.values(LEGACY_ASSETS),BALANCE_PRIVACY,DISPLAY_PRICE_STORE];
           const prefixes=[E.PUBLIC_CACHE_PREFIX,'corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.',WALLET_COIN_PREFS];
           const keys=Object.keys(localStorage).filter(k=>exact.includes(k)||prefixes.some(p=>k.startsWith(p)));
           for(const key of keys)localStorage.removeItem(key);
+          priceEpoch++;displayPrices={};displayPricesSaved='';
+          pepPrice=usdtPrice=shicPrice=ltcPrice=dogePrice=btcPrice=belPrice=dingoPrice=null;
+          for(const coin of Object.keys(extraQuotes))delete extraQuotes[coin];
           envelope=null;mode='demo';lock();reloadConnections();loadCoinPrefs();applyTheme();
         });
         go('wallet');toast('Local test data removed. Restore a backup to recover an old wallet.');

@@ -36,6 +36,10 @@ Password-free browser wallets are not encrypted; browser storage is not a backup
 
 Balance notifications and four-second fallback polling remain active while the wallet is open. Unchanged balances do not rebuild the overview; changed balances retain the existing fresh-observation safety check.
 
+Prices refresh before expiry. After five minutes without a fresh quote, saved
+display prices show **Last known** with an age in minutes, hours, days or months.
+The age survives app restarts; these historical values never authorize fee checks.
+
 ## Sending and fees
 
 Enter one **Total to spend**, including the fee. Max uses the available balance;

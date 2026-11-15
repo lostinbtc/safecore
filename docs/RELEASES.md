@@ -34,6 +34,10 @@ not an independent security audit or proof that source is safe.
   dust and maturity rules. PEP/DOGE/SHIC/WHT keep their existing fixed-fee controls.
 - Reduces unnecessary screen rebuilds and cache writes while retaining live
   deposit notifications, four-second fallback polling and fresh-observation checks.
+- Refreshes prices before expiry and preserves coin/USDT quotes independently
+  through outages. After five minutes, historical display prices show a persistent
+  **Last known** age in minutes, hours, days or months, including after restarts.
+  Saved display prices never bypass the fresh-price requirement for fee checks.
 
 ### Interface and documentation
 

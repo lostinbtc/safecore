@@ -3,6 +3,8 @@
 const {spawnSync} = require('node:child_process');
 const path = require('node:path');
 process.chdir(path.resolve(__dirname, '..'));
+const priceResilience = spawnSync(process.execPath, ['whippet/tests/price_resilience_ui.cjs'], {stdio: 'inherit'});
+if (priceResilience.error || priceResilience.status !== 0) process.exit(priceResilience.status || 1);
 const recovery = spawnSync(process.execPath, ['recovery/ui-tests.cjs'], {stdio: 'inherit'});
 if (recovery.error || recovery.status !== 0) process.exit(recovery.status || 1);
 const coinDefaults = spawnSync(process.execPath, ['whippet/tests/coin_defaults_ui.cjs'], {stdio: 'inherit'});

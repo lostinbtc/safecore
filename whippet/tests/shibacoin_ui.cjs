@@ -12,7 +12,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
    localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));
    __balances={pep:5,wht:0,shic:1000000,ltc:0,doge:0,btc:0};window.__priceRequests=[];window.__priceMode='ok';
    window.fetch=async(url,options)=>{
-    __priceRequests.push({url,credentials:options.credentials,referrerPolicy:options.referrerPolicy});
+    __priceRequests.push({url,at:Date.now(),credentials:options.credentials,referrerPolicy:options.referrerPolicy});
     if(url==='https://api.kraken.com/0/public/Ticker?pair=PEPUSD,USDTUSD')return new Response(JSON.stringify({error:[],result:{PEPUSD:{c:['.01']},USDTZUSD:{c:['.5']}}}));
     if(url!=='https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin,bellscoin,dingocoin,bitcoin-cash,dash,digibyte,junkcoin,luckycoin,ravencoin,catcoin,trumpow&vs_currencies=usd&include_last_updated_at=true')throw Error('Unexpected external request');
     if(__priceMode==='rate-limit')return new Response('{}',{status:429});
@@ -34,15 +34,19 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).shic.address,'Funded first address advances to the next receiving address');
   await p.locator('[data-nav=wallet]').click();
   await p.evaluate(()=>__priceMode='rate-limit');await p.clock.runFor(305000);
-  assert.equal(await row.locator('.holding-values > small').innerText(),'*');
+  assert.equal(await row.locator('.holding-values > small').innerText(),'6.00 USDT');
+  assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known/);
   assert.equal(await row.locator('.holding-balance').innerText(),'1,000,000 SHIC');
   await p.evaluate(()=>__priceMode='stale');await p.clock.runFor(305000);
-  assert.equal(await row.locator('.holding-values > small').innerText(),'*');
+  assert.equal(await row.locator('.holding-values > small').innerText(),'6.00 USDT');
+  assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known/);
   await p.evaluate(()=>__priceMode='ok');await p.clock.runFor(305000);
   await p.waitForFunction(()=>document.querySelector('[data-overview-coin=shic] .holding-values > small')?.textContent==='6.00 USDT');
   const requests=await p.evaluate(()=>__priceRequests);
   assert.ok(requests.every(r=>r.credentials==='omit'&&r.referrerPolicy==='no-referrer'));
-  assert.equal(requests.filter(r=>r.url.includes('coingecko')).length,4,'One public SHIC quote per five-minute interval, not every balance poll');
+  const cg=requests.filter(r=>r.url.includes('coingecko'));
+  assert.ok(cg.length>=4&&cg.length<=16,'Refresh early, with bounded retries after a failed quote');
+  assert.ok(cg.slice(1).every((r,i)=>r.at-cg[i].at>=60000),'Never price-poll at the four-second balance cadence');
   await p.locator('[data-nav=security]').click();await p.locator('#custom-connections > summary').click();
   assert.deepEqual(await p.locator('[data-connection]').evaluateAll(rows=>rows.map(row=>row.dataset.connection)),['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']);
   assert.equal(await p.locator('#endpoint-shic').inputValue(),'');

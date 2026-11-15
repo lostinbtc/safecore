@@ -1,8 +1,8 @@
 {
   "tag": "v0.1.0-test.21",
   "filename": "SafeCore-0.1.0-test.21.apk",
-  "artifact_commit": "47a42a91c63c32417e18989726cc4429ec2888e4",
-  "sha256": "7a6fcf6384c1dfd0d2aec9ded90f186146b4974e027fa116dc46098dc527ec4b",
+  "artifact_commit": "fdc53bdd1e7355398343561f34b430b897b5edaa",
+  "sha256": "42968aeae9fac01f69258cc783facf6c49f4b112a8f11f506233df8586412c87",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
   "version_code": 21,
@@ -15,6 +15,7 @@
     "Missing prices: only an unavailable fresh USD price exposes a separate, unchecked one-transaction acknowledgment. It waives the dollar comparison, never network-fee checks or coin-denominated caps.",
     "Automatic fees: new assets use read-only size-based estimates and chain-specific fee, dust and maturity rules. PEP/DOGE/SHIC/WHT retain their existing fixed-fee controls.",
     "Balance updates: reduces unnecessary screen rebuilds and cache writes while retaining live deposit notifications, four-second fallback polling and fresh-observation checks.",
+    "Price reliability: refreshes before expiry and preserves valid coin/USDT quotes independently during outages. After five minutes, saved display prices show a persistent Last known age in minutes, hours, days or months. Saved prices never authorize transaction-fee checks.",
     "Interface: alphabetical coin lists, new coin logos, verified pricing where available, supported activity explorer links, and the tagline Your Keys. Your Coins. New wallets still start with no assets selected.",
     "Documentation and tests: updated README, chain-validation notes and third-party notices; expanded recovery, signing, fee, network-isolation and Android coverage. Wallet/packaging CI now allows 45 minutes.",
     "Verification: merged wallet/packaging and Android security checks passed; this APK passed build, lint, signing-identity and exact bundled-source checks. Funded testing remains pending for the newest assets; this is not an independent audit."
