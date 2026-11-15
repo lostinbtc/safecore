@@ -14,14 +14,14 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
   assert.equal(await p.locator('[data-nav="send"]').getAttribute('aria-current'),'page');
   // Manually entered bad addresses must never reach review, signing or broadcast.
   for(const coin of ['pep','wht']){
-   await p.locator('[data-nav="receive"]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin="${coin}"]`).click();await p.locator('[data-nav="send"]').click();
+   await p.locator('[data-nav="receive"]').click();await require('./open_receive_picker.cjs')(p);await p.locator(`[data-coin="${coin}"]`).click();await p.locator('[data-nav="send"]').click();
    await choose(coin);
    for(const address of [accounts[coin==='pep'?'wht':'pep'].address,'bad-address',accounts[coin].address.slice(0,-1)+'0']){
     await p.locator('#send-address').fill(address);await p.locator('#send-amount').fill('1');await p.locator('#review-send').click();
     await p.locator('#error').waitFor({state:'visible'});assert.equal(await p.locator('#broadcast-send').count(),0);assert.equal(await p.locator('.send-review').count(),0);
    }
   }
-  await p.locator('[data-nav="receive"]').click();await p.locator('#receive-coin').click();await p.locator('[data-coin="pep"]').click();await p.locator('[data-nav="send"]').click();
+  await p.locator('[data-nav="receive"]').click();await require('./open_receive_picker.cjs')(p);await p.locator('[data-coin="pep"]').click();await p.locator('[data-nav="send"]').click();
   await choose('pep');
   await p.evaluate(()=>{
    window.__scene=document.createElement('canvas');__scene.width=__scene.height=480;
@@ -83,7 +83,7 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
   assert.equal(await p.locator('#send-address').inputValue(),'');
   assert.equal(await p.locator('#send-amount').inputValue(),'');
   await p.locator('[data-nav="receive"]').click();await p.waitForFunction(()=>__tracks.every(t=>t.readyState==='ended'));
-  await p.locator('#receive-coin').click();await p.locator('[data-coin="wht"]').click();await p.locator('[data-nav="send"]').click();
+  await require('./open_receive_picker.cjs')(p);await p.locator('[data-coin="wht"]').click();await p.locator('[data-nav="send"]').click();
   await choose('wht');
   await p.evaluate(text=>__draw(text),`whippet:${accounts.wht.address}`);await p.locator('#scan-address').click();
   await p.waitForFunction(()=>document.getElementById('scan-status').textContent.includes('Address scanned'));

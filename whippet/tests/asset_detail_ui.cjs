@@ -38,7 +38,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),T
   assert.equal(await p.locator('#asset-name').innerText(),E.NETWORKS[coin].name);
   assert.equal(await p.locator('.asset-summary > img').evaluate(i=>i.complete&&i.naturalWidth>0),true);
   const amount=coin==='btc'?0n:coin==='wht'?633944408796438702n:123456789n;
-  assert.equal(await p.locator('#asset-balance').innerText(),T.formatDisplay(amount)+' '+E.NETWORKS[coin].ticker);
+  assert.equal(await p.locator('#asset-balance').innerText(),T.formatDisplay(amount),'Detail balance is number-only; the asset name above identifies the coin');
   assert.equal(await p.locator('#asset-worth').innerText(),overview==='*'?'Price unavailable':'≈ '+overview);
   assert.equal(await p.locator('#asset-send').isDisabled(),coin==='btc');
   assert.equal(await p.locator('[data-nav=wallet]').getAttribute('aria-current'),'page');
@@ -63,9 +63,20 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),T
    for(const selector of ['.asset-summary > img','#asset-balance','#asset-worth']){
     const box=await p.locator(selector).boundingBox();assert.ok(Math.abs(box.x+box.width/2-center)<1);
    }
-   assert.equal((await p.locator('.asset-summary > img').boundingBox()).width,88);
-   const focus=await p.locator('.asset-focus').boundingBox(),header=await p.locator('.topbar').boundingBox(),nav=await p.locator('.bottom-navigation').boundingBox();
-   assert.ok(Math.abs(focus.y+focus.height/2-(header.y+header.height+nav.y)/2)<1,'Asset group is vertically centered between header and navigation');
+   assert.ok(Math.abs((await p.locator('.asset-summary > img').boundingBox()).width-127.6)<1);
+   const mark=await p.locator('.asset-summary > img').boundingBox(),header=await p.locator('.topbar').boundingBox(),nav=await p.locator('.bottom-navigation').boundingBox();
+   assert.ok(Math.abs(mark.y+mark.height/2+74-(header.y+header.height+nav.y)/2)<1,'Enlarged asset icon floats above its previous centered position');
+   const title=await p.locator('#asset-name').boundingBox();assert.ok(title.y>=mark.y+mark.height,'Logo does not overlap asset name');
+   const unchanged=await p.evaluate(()=>{
+    const nodes=['#asset-balance','#asset-worth','.asset-actions'].map(s=>document.querySelector(s));
+    const before=nodes.map(n=>n.getBoundingClientRect().y);
+    const logo=document.querySelector('.asset-summary > img'),title=document.querySelector('#asset-name');
+    logo.style.transform=title.style.transform='none';
+    const after=nodes.map(n=>n.getBoundingClientRect().y);
+    logo.style.removeProperty('transform');title.style.removeProperty('transform');
+    return before.every((y,i)=>y===after[i]);
+   });
+   assert.equal(unchanged,true,'Floating logo/name must not move amount, price or actions');
    assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    assert.equal(await p.evaluate(()=>document.documentElement.scrollHeight>innerHeight),false,'No scrolling when asset details fit');
    for(const selector of ['#asset-receive','#asset-send'])assert.ok((await p.locator(selector).boundingBox()).height>=44);
@@ -82,7 +93,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),T
  // Shared live monitoring and stable controls, including hidden other assets.
  await p.evaluate(()=>{window.__receive=document.getElementById('asset-receive');__receive.focus();__amounts.pep=223456789n;__notify('pep');window.__beforeCalls=__calls.wht;});
  for(let i=0;i<3;i++)await p.clock.runFor(4001);
- assert.equal(await p.locator('#asset-balance').innerText(),'2.23456789 PEP');
+ assert.equal(await p.locator('#asset-balance').innerText(),'2.23456789');
  assert.equal(await p.locator('#asset-worth').innerText(),'≈ 8.94 USDT');
  assert.equal(await p.evaluate(()=>__receive===document.getElementById('asset-receive')&&document.activeElement===__receive),true);
  assert.equal(await p.evaluate(()=>__calls.wht>__beforeCalls),true);

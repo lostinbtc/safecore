@@ -31,7 +31,7 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
   await p.locator('#rescan').waitFor();await p.locator('#rescan').click();await p.waitForFunction(()=>__rescan.length===26);
   assert.equal(await p.evaluate(()=>__rescan.every(c=>c.count===200)),true);
   if(scenario==='full')assert.match(await p.locator('#main').innerText(),/wallet addresses are full \(200 used\)/);
-  await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();
+  await p.locator('[data-nav=receive]').click();await require('./open_receive_picker.cjs')(p);await p.locator(`[data-coin=${coin}]`).click();
   if(scenario==='wht-pinned')await p.locator('#reuse-first').check();
   await p.locator('#sweep-open').click();await p.locator('#sweep-key').waitFor();
   assert.equal(await p.locator('#sweep-key').getAttribute('type'),'password');
@@ -51,7 +51,7 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
   }else await p.locator('#sweep-key').fill(wif);
   if(scenario==='cancel'){
    await p.locator('#review-sweep').click();await p.getByRole('heading',{name:'Review sweep'}).waitFor();
-   await p.locator('[data-nav=wallet]').click();await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').click();
+   await p.locator('[data-nav=wallet]').click();await p.locator('[data-nav=receive]').click();await require('./open_receive_picker.cjs')(p);await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').click();
    assert.equal(await p.locator('#sweep-key').inputValue(),'');assert.equal(await p.evaluate(()=>__broadcasts.length),0);
   }else{
    await p.locator('#review-sweep').click();
@@ -73,7 +73,7 @@ const bytes=U.concat([[158],U.zeroPad([1],32),[1]]),wif=U.base58.encode(U.concat
     }
     if(scenario==='background'){
      await p.evaluate(()=>window.dispatchEvent(new Event('safecore-pause')));assert.equal(await p.locator('#broadcast-send').count(),0);
-     await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await p.locator('#receive-coin').click();await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').click();assert.equal(await p.locator('#sweep-key').inputValue(),'');assert.equal(await p.evaluate(()=>__broadcasts.length),0);await c.close();continue;
+     await p.evaluate(()=>window.dispatchEvent(new Event('safecore-resume')));await require('./open_receive_picker.cjs')(p);await p.locator(`[data-coin=${coin}]`).click();await p.locator('#sweep-open').click();assert.equal(await p.locator('#sweep-key').inputValue(),'');assert.equal(await p.evaluate(()=>__broadcasts.length),0);await c.close();continue;
     }
     await p.locator('#send-ack').check();
     if(scenario==='protected'){await p.locator('#send-password').fill('wrong');await require('./accept_missing_price.cjs')(p);await p.locator('#broadcast-send').click();await p.locator('#error').waitFor({state:'visible'});assert.equal(await p.evaluate(()=>__broadcasts.length),0);await p.locator('#send-password').fill(password);}

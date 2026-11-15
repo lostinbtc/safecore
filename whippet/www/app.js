@@ -952,12 +952,18 @@
   }
   const title = (name, description, action = '') => `<div class="page-head"><div><p class="eyebrow">SAFECORE · MULTI-COIN</p><h1>${name}</h1><p class="subtle">${description}</p></div>${action}</div>`;
   const protectionIcon = protectedMode => `<span id="seed-lock" class="seed-lock ${protectedMode ? 'protected' : 'unprotected'}" role="img" aria-label="${protectedMode ? 'Password protected' : 'No password protection'}" title="${protectedMode ? 'Password protected' : 'No password protection'}">${icon(protectedMode ? 'lock' : 'unlock')}</span>`;
-  const button = (id, text, kind = '', glyph = '') => `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
+  // Navigation and review utilities share one style; final approvals and
+  // destructive actions intentionally retain their primary/danger treatment.
+  const glowUtilities=new Set(['security-cta','add-wallet','setup-security','receive-setup','wallet-information','information-back','hide-seed','cancel-setup','review-sweep','review-komodo-sweep']);
+  const button = (id, text, kind = '', glyph = '') => {
+    if(glowUtilities.has(id))kind=[...new Set([...kind.split(/\s+/).filter(c=>c&&c!=='primary'),'glow-control'])].join(' ');
+    return `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
+  };
   const recoveryNotice = '<div class="notice">Your recovery phrase controls your funds. Keep a backup somewhere safe and never share it.</div>';
   function bindCoins() {
     document.querySelectorAll('[data-coin]').forEach(el => el.addEventListener('click', () => {
       receiveCoin = el.dataset.coin; render();
-      document.querySelector(`[data-coin="${receiveCoin}"]`)?.focus({preventScroll:true});
+      $('receive-selected-name')?.focus({preventScroll:true});window.scrollTo(0,0);
     }));
   }
   function activityRows(coinFilter = null) {
@@ -965,7 +971,7 @@
       const coins = (coinFilter ? [coinFilter] : assetOrder).filter(liveCoin);
       let attempts;
       try { attempts = sendAttempts(); } catch (e) { return `<p class="notice">${escape(e.message)}</p>`; }
-      return coins.map(coin => {
+      const listings=coins.map(coin => {
         const snap = snapshots[coin];
         // Reconcile saved sends against all history; paginate only the display.
         const history = snap ? [...new Map(snap.rows.flatMap(r=>r.history).map(h=>[h.tx_hash,h])).values()].sort((a,b)=>(b.height>0?b.height:Infinity)-(a.height>0?a.height:Infinity)) : [];
@@ -974,11 +980,14 @@
         activityPages[coin]=page;
         const txLink=hash=>EXPLORERS[coin]&&/^[0-9a-f]{64}$/i.test(hash)?`<a href="${EXPLORERS[coin]}${hash.toLowerCase()}${coin==='pep'?'/':''}" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="View ${escape(E.NETWORKS[coin].name)} transaction ${hash}"><code>${hash}</code></a>`:`<code>${escape(hash)}</code>`;
         const outstanding=attempts.filter(a=>a.coin===coin&&!seen.has(a.txid));
+        if(!history.length&&!outstanding.length)return '';
         const recorded = outstanding.map(a=>`<div class="live-tx">${txLink(a.txid)}<small>${a.status==='unknown' ? 'Submission uncertain — do not resend until checked.' : 'Submitted — awaiting appearance in server history.'}</small></div>`).join('');
         const rows=snap ? (history.slice((page-1)*10,page*10).map(h=>`<div class="live-tx">${txLink(h.tx_hash)}<small>${h.height>0 ? `${Math.max(0,snap.tip-h.height+1)} confirmations` : 'Pending'}</small></div>`).join('') || (!outstanding.length?'<p class="subtle">No transactions yet.</p>':'')) : `<p class="subtle">${networkErrors[coin] ? 'Unable to refresh. Try again shortly.' : 'Checking transactions…'}</p>`;
         const pager=pages>1?`<form class="activity-pager" data-page-coin="${coin}" aria-label="${E.NETWORKS[coin].name} history pages"><button type="button" data-page-step="-1" ${page===1?'disabled':''}>Previous</button><div class="activity-page-jump"><label>Page <input type="number" inputmode="numeric" min="1" max="${pages}" step="1" value="${page}" required aria-label="${E.NETWORKS[coin].name} history page"></label><span class="activity-page-total">of ${pages}</span><button type="submit">Go</button></div><button type="button" data-page-step="1" ${page===pages?'disabled':''}>Next</button></form>`:'';
         return `<details class="activity-asset" data-activity-coin="${coin}"><summary class="coin-picker">${coinMark(coin)}<span>${E.NETWORKS[coin].name}<small>${E.NETWORKS[coin].ticker}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="activity-outstanding" ${recorded?'':'hidden'}>${recorded}</div><div class="activity-list" role="region" aria-label="${E.NETWORKS[coin].name} transaction history">${snap&&!fresh(coin)?`<p class="subtle">Last updated ${escape(new Date(snap.at).toLocaleString())}</p>`:''}${rows}</div>${pager}</details>`;
       }).join('');
+      const status=mode==='locked'?'Unlock your wallet to refresh transaction history.':connectionProblem||coins.some(coin=>networkErrors[coin])?'Some transaction history could not be refreshed. Try again shortly.':coins.some(coin=>!fresh(coin))?'Checking transactions…':!listings?'No transactions yet.':'';
+      return listings+`<p id="activity-status" class="subtle" role="status" ${status?'':'hidden'}>${escape(status)}</p>`;
     }
     return `<div class="empty">${icon('activity')}<br>Your transactions will appear here.</div>`;
   }
@@ -1056,7 +1065,7 @@
     const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':mode!=='unlocked'?'Unlock your wallet to refresh.':networkErrors[coin]?'Unable to refresh balance. Showing the last available balance.':!s?'Checking balance…':s.unconfirmed?hidden?'Pending transaction':`${T.formatDisplay(s.unconfirmed)} ${n.ticker} pending`:'';
     patchOverview(`<div class="asset-detail" data-asset="${coin}"><a id="asset-back" href="#wallet" class="text-button">← Overview</a>
       <div class="asset-focus"><section class="asset-summary" aria-labelledby="asset-name">${coinMark(coin)}<h1 id="asset-name">${escape(n.name)}</h1>
-      <div id="asset-balance" class="asset-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'—'} <span>${n.ticker}</span></div>
+      <div id="asset-balance" class="asset-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'—'}</div>
       <div id="asset-worth" class="asset-worth">${hidden?hiddenBalance:value!==null?'≈ '+WalletReporting.formatWorth(value)+' USDT':'Price unavailable'}</div>
       <p id="asset-price-age" class="subtle" ${stale&&!hidden?'':'hidden'}>${stale&&!hidden?'Last known · '+WalletReporting.formatPriceAge(older,now):''}</p>
       <p id="asset-status" class="subtle" ${status?'':'hidden'}>${escape(status)}</p></section>
@@ -1116,18 +1125,18 @@
     // Ownership comes from local authenticated derivation, not Electrum history.
     // Unknown/stale history must not hide our own address or claim it is unused.
     const account = view && mode==='unlocked' && !(view.exhausted && view.automatic) ? view.account : null;
-    $('main').innerHTML = '<div class="page-head transfer-heading"><h1>Receive</h1></div>' + selector +
-      `<section class="receive-card"><div class="address-navigation">${button('previous-address','← Previous','text-button')}<span id="address-number">Address #${(view?.index || 0) + 1}</span>${button('next-address','Next →','text-button')}</div>
-      <div id="qr" class="qr">${account ? '' : `<div class="qr-empty">${icon('lock')}<span>${waitingLive ? escape(connectionProblem || networkErrors[coin] || 'Checking receiving-address history…') : view?.exhausted ? 'Wallet addresses are full (200 used). Existing addresses still work.' : mode === 'locked' ? 'Open your wallet to see its address' : 'Create or restore a wallet first'}</span></div>`}</div>
+    const selected=`<section class="receive-selected-coin" aria-labelledby="receive-selected-name"><a id="receive-overview" href="#wallet" class="text-button">← Overview</a><div class="receive-selected-label">${coinMark(coin)}<span><strong id="receive-selected-name" tabindex="-1">${escape(COINS[coin].name)}</strong><small>${COINS[coin].ticker}</small></span></div></section>`;
+    $('main').innerHTML = '<div class="page-head transfer-heading"><h1>Receive</h1></div>' + selected +
+      `<section class="receive-card"><div id="qr" class="qr">${account ? '' : `<div class="qr-empty">${icon('lock')}<span>${waitingLive ? escape(connectionProblem || networkErrors[coin] || 'Checking receiving-address history…') : view?.exhausted ? 'Wallet addresses are full (200 used). Existing addresses still work.' : mode === 'locked' ? 'Open your wallet to see its address' : 'Create or restore a wallet first'}</span></div>`}</div>
+      <div class="address-navigation">${button('previous-address','← Previous','text-button')}<span id="address-number">Address #${(view?.index || 0) + 1}</span>${button('next-address','Next →','text-button')}</div>
       ${account ? `<code class="address" id="address">${escape(account.address)}</code>${button('copy-address','Copy address','wide glow-control','copy')}` : `<h2>No payment address yet</h2>${view?.exhausted || waitingLive ? '' : button('receive-setup',mode === 'locked' ? 'Open wallet' : 'Create or restore','primary')}`}
       </section><label class="check reuse-check"><input id="reuse-first" type="checkbox" ${view?.pinned ? 'checked' : ''} ${!book ? 'disabled' : ''}><span><strong>Keep using the first address</strong><small>Use the same receiving address until you uncheck this.</small></span></label>
       ${view?.browsing ? button('latest-address','Return to current address','text-button') : ''}
       <p class="subtle">${view?.pinned ? 'Receiving is locked to Address #1 until you uncheck this.' : 'A new address becomes available after a payment arrives. Previous addresses still work.'}</p>${view?.exhausted?'<p class="notice">Wallet addresses are full (200 used). You can keep receiving at existing addresses, or create another wallet.</p>':''}${mode==='unlocked'?button('sweep-open','Sweep private key','wide glow-control'):''}`;
-    bindCoins();
     if($('sweep-open')){
       $('sweep-open').onclick=()=>go('sweep');
       if(WalletKomodo.supports(coin)&&komodoEnabled()){
-        $('sweep-open').insertAdjacentHTML('afterend',button('komodo-open','Sweep Komodo seed','wide'));
+        $('sweep-open').insertAdjacentHTML('afterend',button('komodo-open','Sweep Komodo seed','wide glow-control'));
         $('komodo-open').onclick=()=>go('komodo-sweep');
       }
     }
@@ -1154,6 +1163,7 @@
   }
   function activity() {
     const current=[...document.querySelectorAll('[data-activity-coin]')];
+    const expanded=new Set(current.filter(el=>el.open).map(el=>el.dataset.activityCoin));
     const content=document.createElement('template');
     content.innerHTML='<div class="page-head transfer-heading"><h1>Activity</h1></div><div class="wallet-coin-switch activity-coin-heading"><h2>Choose an asset</h2></div>'+activityRows();
     const next=[...content.content.querySelectorAll('[data-activity-coin]')];
@@ -1174,7 +1184,13 @@
           pager.querySelector('.activity-page-total').textContent=nextPager.querySelector('.activity-page-total').textContent;
         }else if(pager)pager.remove();else if(nextPager)el.append(nextPager);
       });
-    }else $('main').replaceChildren(content.content);
+      const status=$('activity-status'),nextStatus=content.content.querySelector('#activity-status');
+      if(status&&nextStatus){status.textContent=nextStatus.textContent;status.hidden=nextStatus.hidden;}
+    }else {
+      $('main').replaceChildren(content.content);
+      document.querySelectorAll('[data-activity-coin]').forEach(el=>{el.open=expanded.has(el.dataset.activityCoin);});
+    }
+    document.querySelector('.activity-coin-heading').hidden=!next.length;
     document.querySelectorAll('.activity-pager').forEach(form=>{
       const coin=form.dataset.pageCoin,input=form.querySelector('input');
       const jump=value=>{

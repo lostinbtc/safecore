@@ -24,7 +24,7 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
    }});
   },{coin,scenario,vault:E.unprotected(webcrypto,recipe),raw,txid,address:key.address});
   await page.goto('http://localhost:8787/');await page.locator('#rescan').waitFor();
-  await page.locator('[data-nav=receive]').click();await page.locator('#receive-coin').click();await page.locator(`[data-coin=${coin}]`).click();
+  await page.locator('[data-nav=receive]').click();await require('./open_receive_picker.cjs')(page);await page.locator(`[data-coin=${coin}]`).click();
   await page.locator('#sweep-open').click();await page.locator('#sweep-key').fill(wif);await page.locator('#review-sweep').click();
   await page.locator('#broadcast-send').waitFor();const notice=await page.locator('#fee-usd-notice').textContent();
   assert.equal(await page.evaluate(()=>__broadcasts.length),0);

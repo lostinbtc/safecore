@@ -3,6 +3,10 @@
 const {spawnSync} = require('node:child_process');
 const path = require('node:path');
 process.chdir(path.resolve(__dirname, '..'));
+const utilityControls = spawnSync(process.execPath, ['whippet/tests/utility_controls_ui.cjs'], {stdio: 'inherit'});
+if (utilityControls.error || utilityControls.status !== 0) process.exit(utilityControls.status || 1);
+const activityVisibility = spawnSync(process.execPath, ['whippet/tests/activity_visibility_ui.cjs'], {stdio: 'inherit'});
+if (activityVisibility.error || activityVisibility.status !== 0) process.exit(activityVisibility.status || 1);
 const assetDetail = spawnSync(process.execPath, ['whippet/tests/asset_detail_ui.cjs'], {stdio: 'inherit'});
 if (assetDetail.error || assetDetail.status !== 0) process.exit(assetDetail.status || 1);
 const priceResilience = spawnSync(process.execPath, ['whippet/tests/price_resilience_ui.cjs'], {stdio: 'inherit'});

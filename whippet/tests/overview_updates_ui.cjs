@@ -54,12 +54,16 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  // Use natural content height: a short list must fit without a scrollbar;
  // a long list or short viewport must remain scrollable, never clipped.
  await p.locator('#header-add-coins').click();
- for(const coin of Object.keys(E.NETWORKS)){
+ await p.locator('[data-show-coin=bel]').waitFor();
+ const selectable=await p.locator('[data-show-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.showCoin));
+ assert.equal(selectable.length,13,'Wait for the complete Add coins screen before changing the fixture selection');
+ for(const coin of selectable){
   const choice=p.locator(`[data-show-coin=${coin}]`);
-  if(await choice.count())await choice.setChecked(['pep','doge','ltc','shic','wht','btc'].includes(coin));
+  await choice.setChecked(['pep','doge','ltc','shic','wht','btc'].includes(coin));
  }
  await p.locator('[data-nav=wallet]').click();await p.locator('.holdings').waitFor();
- for(const height of [780,844]){
+ assert.deepEqual(await p.locator('[data-overview-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.overviewCoin)),['btc','doge','ltc','pep','shic','wht'],'Measure exactly the six intended assets');
+ for(const height of [700,780,844]){
   await p.setViewportSize({width:390,height});
   const layout=await p.evaluate(()=>({viewport:innerHeight,page:document.documentElement.scrollHeight,parts:Object.fromEntries(['.topbar','#main','.holdings','.overview-actions','.app-footer','.app-shell'].map(s=>[s,document.querySelector(s).getBoundingClientRect().height])),rows:document.querySelectorAll('[data-overview-coin]').length}));
   assert.ok(layout.page<=height,'Six assets fit without forced scrolling: '+JSON.stringify(layout));
@@ -71,10 +75,12 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  assert.ok(last.y+last.height<=rescan.y,'Last asset can scroll clear of fixed controls');
  await p.setViewportSize({width:390,height:844});
  await p.locator('#header-add-coins').click();
- for(const coin of Object.keys(E.NETWORKS)){
-  const choice=p.locator(`[data-show-coin=${coin}]`);if(await choice.count())await choice.check();
+ await p.locator('[data-show-coin=bel]').waitFor();
+ for(const coin of selectable){
+  await p.locator(`[data-show-coin=${coin}]`).check();
  }
  await p.locator('[data-nav=wallet]').click();await p.locator('.holdings').waitFor();
+ assert.equal(await p.locator('[data-overview-coin]').count(),13,'Long-list check contains all thirteen normal assets');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollHeight>innerHeight),true,'Long asset lists retain scrolling');
  assert.deepEqual(errors,[]);
  console.log('PASS: stable overview nodes/focus, no unchanged DOM or cache writes, push and fallback deposits, hidden-asset monitoring.');

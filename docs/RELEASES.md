@@ -41,12 +41,23 @@ not an independent security audit or proof that source is safe.
 
 ### Interface and documentation
 
-- Adds an asset screen when tapping a coin on Overview: a larger icon, centered
-  balance and estimated value, with direct Receive and Send controls. The group
-  is centered between the header and navigation, with scrolling on short screens. It respects
-  Hide balances and wallet locking, and keeps balance and price updates active.
+- Adds an asset screen when tapping a coin on Overview: a larger, raised logo
+  and asset name above a centered number-only balance and estimated value, with
+  direct Receive and Send controls. It respects Hide balances and wallet locking,
+  and keeps balance and price updates active.
+- Receive hides the other coins after selection to prevent accidental switching.
+  A left-aligned Overview link exits the screen while the selected asset stays
+  centered. The QR appears above Previous / Address number / Next; compact spacing
+  avoids unnecessary scrolling without shrinking the QR or clipping long screens.
 - Lists coins alphabetically throughout the wallet and recovery tool.
-- Overview scrolls only when its content exceeds the available screen height.
+- Activity lists only coins with recorded transactions or submitted/uncertain
+  sends, even when the balance is zero. Loading and refresh failures remain
+  distinct from an empty history; new transactions appear automatically.
+- Removes redundant Overview footer and control spacing; scrolling remains
+  available whenever content exceeds the screen height.
+- Unifies Create/Restore, Information, recovery utilities and sweep review
+  controls with the borderless glow style. Final approvals and destructive
+  actions retain their distinct styling.
 - Adds coin logos, live pricing where verified, and supported activity explorer links.
 - Updates the splash tagline to **Your Keys. Your Coins.**
 - Updates the README, chain-specific validation notes, artwork/license notices,

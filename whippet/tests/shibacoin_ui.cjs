@@ -5,7 +5,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
  const b=await chromium.launch();
  try{
   const c=await b.newContext({viewport:{width:390,height:844}});
-  await require('./funded_network.cjs')(c);
+  await require('./funded_network.cjs')(c,{history:true});
   const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
   delete recipe.paths.shic; // Upgrade an actual old-format plaintext recipe.
   await c.addInitScript(v=>{
@@ -54,7 +54,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.doesNotMatch(await p.locator('#custom-connections').innerText(),/shibacoinshic\.org/);
   await p.locator('[data-nav=activity]').click();
   await p.locator('[data-activity-coin=pep]').waitFor();
-  assert.deepEqual(await p.locator('[data-activity-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.activityCoin)),['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']);
+  assert.deepEqual(await p.locator('[data-activity-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.activityCoin)),['pep','shic'],'Activity excludes coins without recorded transactions');
   await p.locator('[data-nav=receive]').click();
   await p.locator('[data-coin=pep]').waitFor();
   assert.deepEqual(await p.locator('[data-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.coin)),['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']);

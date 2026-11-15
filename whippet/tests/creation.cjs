@@ -46,16 +46,16 @@ const store = 'whippet.dev.encrypted.v1';
     // New wallets start empty; explicitly choose Pepecoin before receiving.
     await require('./coin-selection-helper.cjs')(page,['pep']);
     await page.locator('[data-nav="receive"]').click();
-    await page.locator('#receive-coin').click();await page.locator('[data-coin="pep"]').click();
+    await require('./open_receive_picker.cjs')(page);await page.locator('[data-coin="pep"]').click();
     await page.locator('#address').waitFor();
     assert.equal(await page.locator('#recovery-words').count(),0);
     await page.waitForFunction(() => document.documentElement.dataset.walletState === 'unlocked');
     assert.ok(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).format === 'pepecoin-whippet-encrypted-v1',store));
     await page.reload();
-    await page.locator('#receive-coin').click();await page.locator('[data-coin="pep"]').click();
+    await require('./open_receive_picker.cjs')(page);await page.locator('[data-coin="pep"]').click();
     await page.locator('#receive-setup').click();await page.locator('#unlock-password').fill(password);await page.locator('#unlock-submit').click();
     await page.locator('.holdings').waitFor();
-    await page.locator('[data-nav="receive"]').click();await page.locator('#receive-coin').click();await page.locator('[data-coin="pep"]').click();await page.locator('#address').waitFor();
+    await page.locator('[data-nav="receive"]').click();await require('./open_receive_picker.cjs')(page);await page.locator('[data-coin="pep"]').click();await page.locator('#address').waitFor();
     // Remove only this disposable test context's own local vault.
     await page.evaluate(key => localStorage.removeItem(key),store);
     await page.reload();
@@ -70,9 +70,9 @@ const store = 'whippet.dev.encrypted.v1';
     await page.locator('#submit-setup').click();
     await page.waitForFunction(() => document.documentElement.dataset.walletState === 'unlocked');
     await require('./coin-selection-helper.cjs')(page,['pep','wht']);
-    await page.locator('[data-nav="receive"]').click();await page.locator('#receive-coin').click();await page.locator('[data-coin="wht"]').click();
+    await page.locator('[data-nav="receive"]').click();await require('./open_receive_picker.cjs')(page);await page.locator('[data-coin="wht"]').click();
     assert.equal(await page.locator('#address').textContent(),original.wallets[0].address);
-    await page.locator('#receive-coin').click(); await page.locator('[data-coin="pep"]').click();
+    await require('./open_receive_picker.cjs')(page); await page.locator('[data-coin="pep"]').click();
     assert.equal(await page.locator('#address').textContent(),E.accounts(ethers,E.recipe(ethers,phrase,'TREZOR')).pep.address);
     for (const width of [320,360,430,1440]) {
       await page.setViewportSize({width,height:800});

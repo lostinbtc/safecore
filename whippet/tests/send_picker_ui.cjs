@@ -5,7 +5,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
  const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
  try{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
-  await require('./funded_network.cjs')(context);
+  await require('./funded_network.cjs')(context,{history:true});
   const vault=E.unprotected(webcrypto,E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'));
   await context.addInitScript(v=>{if(!localStorage.getItem('whippet.dev.encrypted.v1'))localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));},vault);
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));

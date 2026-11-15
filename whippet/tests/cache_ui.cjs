@@ -30,7 +30,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
     await page.waitForFunction(()=>document.querySelector('[data-overview-coin=pep] .holding-status').textContent.includes('Unable to refresh'));
     assert.equal(await page.locator('[data-overview-coin=pep] .holding-balance').innerText(),'5 PEP');
     await page.locator('[data-nav="receive"]').click();
-    await page.locator('#receive-coin').click();await page.locator('[data-coin="pep"]').click();
+    await require('./open_receive_picker.cjs')(page);await page.locator('[data-coin="pep"]').click();
     assert.equal(await page.locator('#address-number').innerText(),'Address #2');
     assert.equal(await page.locator('#address').innerText(),E.accounts(ethers,recipe,1).pep.address); // Ownership is local; history remains stale.
     assert.match(await page.locator('#receive-history-status').innerText(),/History refresh pending/);

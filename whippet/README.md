@@ -532,7 +532,8 @@ An independent security audit has not been completed.
 ## Receiving and address discovery
 
 Receive starts with no asset selected. Choose a coin before an address, QR code,
-copy button or previous/next navigation appears. Only enabled, implemented coins
+copy button or previous/next navigation appears. Once selected, only that coin
+is shown; return to Overview before choosing another. Only enabled, implemented coins
 can receive, including coins with zero balance. This choice is independent of
 Overview and Send and resets when leaving Receive; address-pin preferences do not.
 Tapping a supported coin row on Overview opens its asset screen, with a larger
