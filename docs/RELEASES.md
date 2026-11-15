@@ -9,6 +9,54 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.21
+
+### New coins and recovery
+
+- Expands support from six to eighteen coins. Adds Bellscoin, Bitcoin Cash,
+  Bonkcoin, Catcoin, Dash, DigiByte, Dingocoin, Flopcoin, Junkcoin, Luckycoin,
+  Ravencoin and TrumPOW.
+- Adds offline recovery and compatible JSON/key exports for every supported coin.
+- Adds **Settings → Legacy assets** for Bonkcoin, Catcoin, Flopcoin, Junkcoin and
+  Luckycoin. These stay hidden until enabled and connected to a user-supplied,
+  tested secure Electrum server; no default server is provided.
+- Adds the Bellscoin HTTPS adapter, chain-specific connection checks, and
+  verified default/fallback servers where available. Custom connections stay pinned.
+
+### Fees and balance updates
+
+- Extends the **$5 fee warning / $100 fee block** to every coin. Notices stay
+  hidden below the thresholds; known fees above $100 cannot be overridden.
+- Adds a separate, unchecked acknowledgment only when a fresh USD price is
+  unavailable. It applies to one transaction and waives only the dollar check,
+  never network-fee validation or coin-denominated caps.
+- Adds read-only, size-based fees for the new assets, using each chain's fee,
+  dust and maturity rules. PEP/DOGE/SHIC/WHT keep their existing fixed-fee controls.
+- Reduces unnecessary screen rebuilds and cache writes while retaining live
+  deposit notifications, four-second fallback polling and fresh-observation checks.
+
+### Interface and documentation
+
+- Lists coins alphabetically throughout the wallet and recovery tool.
+- Adds coin logos, live pricing where verified, and supported activity explorer links.
+- Updates the splash tagline to **Your Keys. Your Coins.**
+- Updates the README, chain-specific validation notes, artwork/license notices,
+  and automated tests for recovery, signing, fees, connection isolation and Android.
+- Extends the wallet/packaging CI timeout to 45 minutes for the expanded suite.
+
+### Compatibility and verification
+
+Existing recovery paths, backups and wallet selections remain compatible. New
+wallets still start with no assets selected; Komodo recovery remains PEP/SHIC only.
+Android versionCode 21 / versionName `0.1.0-test.21`, debugging disabled, using
+the existing development signing identity. Wallet/packaging and Android security
+checks passed for the merged implementation; the release APK passed build, lint,
+signature and bundled-source checks. Funded send/receive testing remains pending
+for the newest assets. This is not an independent security audit.
+
+Keep separate recovery backups. Test.20 remains available; update in place and
+never uninstall or clear wallet data to bypass a signing error.
+
 ## Test.20
 
 Adds Bitcoin and Dogecoin, bringing the wallet and offline recovery tool to six

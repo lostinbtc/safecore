@@ -1,18 +1,22 @@
 {
-  "tag": "v0.1.0-test.20",
-  "filename": "SafeCore-0.1.0-test.20.apk",
-  "artifact_commit": "e7ac012e99493ea654115f84e0c5d73aed8f2c69",
-  "sha256": "9e33ec75c76412bd4fad41dac7755fc3b24cc06346925c38722b693f1a64e0cc",
+  "tag": "v0.1.0-test.21",
+  "filename": "SafeCore-0.1.0-test.21.apk",
+  "artifact_commit": "47a42a91c63c32417e18989726cc4429ec2888e4",
+  "sha256": "7a6fcf6384c1dfd0d2aec9ded90f186146b4974e027fa116dc46098dc527ec4b",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
-  "version_code": 20,
+  "version_code": 21,
   "changes": [
-    "Bitcoin and Dogecoin support across the wallet and offline recovery tool; legacy Komodo recovery extended to SHIC (PEP/SHIC only).",
-    "Automatic, read-only BTC/LTC fees based on transaction size, including inputs and outputs; fresh USD pricing, warnings above $5 and a hard block above $100 with no override.",
-    "Optional 1-coin total fee for PEP/DOGE/SHIC/WHT and improved handling of wallets with many outputs; transaction input limits and explicit confirmation remain in place.",
-    "Verified backup servers where available, automatic connection retries and authenticated public-address caching for faster Receive loading.",
-    "Optional password-encrypted local recovery copies, manual restore after reinstall, and no coins enabled by default on new wallets; existing backups and selections remain compatible.",
-    "Refreshed branding, compact screens and controls, soft button glow, improved light mode, activity pagination and explorer links, and a 2.3-second splash screen.",
-    "Clearer README and fee/recovery documentation, expanded automated coverage and independent Bitcoin Core regtest verification using disposable coins; no real BTC test or independent security audit."
+    "18-coin support: adds Bellscoin, Bitcoin Cash, Bonkcoin, Catcoin, Dash, DigiByte, Dingocoin, Flopcoin, Junkcoin, Luckycoin, Ravencoin and TrumPOW to the existing six assets.",
+    "Recovery: offline recovery and compatible JSON/key exports for every supported coin; existing paths and backups remain compatible. Komodo recovery stays PEP/SHIC only.",
+    "Legacy assets: Bonkcoin, Catcoin, Flopcoin, Junkcoin and Luckycoin remain hidden until enabled in Settings and connected to a user-supplied, tested secure Electrum server. No default servers are provided for these five.",
+    "Connections: adds the Bellscoin HTTPS adapter, chain-specific identity checks and verified defaults/fallbacks where available. Custom servers stay pinned; broadcasts are not automatically retried.",
+    "Fee safeguards: all coins now warn above $5 USD and block above $100. Notices stay hidden below the thresholds; a known fee above $100 cannot be overridden.",
+    "Missing prices: only an unavailable fresh USD price exposes a separate, unchecked one-transaction acknowledgment. It waives the dollar comparison, never network-fee checks or coin-denominated caps.",
+    "Automatic fees: new assets use read-only size-based estimates and chain-specific fee, dust and maturity rules. PEP/DOGE/SHIC/WHT retain their existing fixed-fee controls.",
+    "Balance updates: reduces unnecessary screen rebuilds and cache writes while retaining live deposit notifications, four-second fallback polling and fresh-observation checks.",
+    "Interface: alphabetical coin lists, new coin logos, verified pricing where available, supported activity explorer links, and the tagline Your Keys. Your Coins. New wallets still start with no assets selected.",
+    "Documentation and tests: updated README, chain-validation notes and third-party notices; expanded recovery, signing, fee, network-isolation and Android coverage. Wallet/packaging CI now allows 45 minutes.",
+    "Verification: merged wallet/packaging and Android security checks passed; this APK passed build, lint, signing-identity and exact bundled-source checks. Funded testing remains pending for the newest assets; this is not an independent audit."
   ]
 }
