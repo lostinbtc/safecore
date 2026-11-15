@@ -32,9 +32,10 @@ const ctx={WebSocket:Socket,WalletTransactions:T,setTimeout,clearTimeout};vm.cre
  raw=ethers.utils.hexlify(T.serialize({version:1,inputs:[{txid:'ab'.repeat(32),pos:0,script:''}],outputs:[{value:1000000n,script:T.script(coin,account.address)}],locktime:0})).slice(2);
  txid=T.parse(raw).txid;history=[{tx_hash:txid,height:499}];
  let snapshot=await N.scan(coin,[account]);assert.equal((await N.spendable(snapshot)).length,1);
- // Conversion rounds upward; floating-point protocol values must never underpay.
- assert.ok(snapshot.feeRate>=2000n&&snapshot.feeRate<=2001n);
- for(const invalid of [-1,0,null,'0.00002',.00101,.01,NaN,Infinity,'error']){
+ // Decimal-text conversion must be exact, including the old ceil(2000.000…)
+ // rounding edge. Rates finer than one base unit per kB fail closed.
+ assert.equal(snapshot.feeRate,2000n);
+ for(const invalid of [-1,0,null,'0.00002',.000020001,.00101,.01,NaN,Infinity,'error']){
   estimate=invalid;const s=await N.scan(coin,[account]);
   assert.equal(s.confirmed,1000000n);assert.equal(s.feeRate,null);
   await assert.rejects(()=>N.spendable(s),/fee estimate unavailable/);

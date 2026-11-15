@@ -149,7 +149,7 @@ class SecurityRun:
         self.test('IconLayoutTest', 2)
         self.test('SplashScreenTest', 3)
         self.test('DeviceWalletStoreTest', 3)
-        self.test('NetworkPolicyTest', 3)
+        self.test('NetworkPolicyTest', 4)
         self.test('LocalRecoveryCopyTest', 3)
         self.reset_qa()
         self.test('RecoveryCopyUiTest#testSaveEncryptedCopy')

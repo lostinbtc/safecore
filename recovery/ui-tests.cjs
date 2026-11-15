@@ -11,7 +11,7 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   await context.route(/^https?:/,route=>{network.push(route.request().url());return route.abort();});
   await page.goto(pathToFileURL(path.join(__dirname,'index.html')).href);
   assert.equal(await page.locator('#coin').inputValue(),'pep');
-  assert.deepEqual(await page.locator('#coin option').evaluateAll(options=>options.map(option=>option.value)),['pep','doge','ltc','shic','wht','btc']);
+  assert.deepEqual(await page.locator('#coin option').evaluateAll(options=>options.map(option=>option.value)),['bel','btc','bch','bonc','cat','dash','dgb','dingo','doge','flop','jkc','ltc','lky','pep','rvn','shic','trmp','wht']);
   await page.locator('#phrase').fill(phrase);await page.locator('#count').fill('3');
   await page.locator('#derive').click();await page.getByRole('heading',{name:'Pepecoin addresses',exact:true}).waitFor();
   const pep=G.derive(ethers,phrase,{coin:'pep',count:3});
@@ -76,9 +76,27 @@ const phrase='abandon abandon abandon abandon abandon abandon abandon abandon ab
   }
   await page.locator('#coin').selectOption('pep');await page.locator('#restore').setInputFiles({name:'throwaway-bitcoin.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,btc)))});
   await page.getByRole('heading',{name:'Bitcoin addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),'btc');
+  for(const [coin,name]of [['bel','Bellscoin'],['bonc','Bonkcoin'],['dingo','Dingocoin'],['bch','Bitcoin Cash'],['dash','Dash'],['dgb','DigiByte'],['jkc','Junkcoin'],['lky','Luckycoin'],['rvn','Ravencoin'],['cat','Catcoin'],['trmp','TrumPOW'],['flop','Flopcoin']]){
+  await page.locator('#coin').selectOption(coin);await page.locator('#derive').click();await page.getByRole('heading',{name:name+' addresses',exact:true}).waitFor();
+  const sample=G.derive(ethers,phrase,{coin,count:3});assert.deepEqual(await page.locator('.address').allTextContents(),sample.wallets.map(w=>w.address));
+  for(const id of ['download','download-text','download-address-text','download-csv']){
+   const pending=page.waitForEvent('download');await page.locator('#'+id).click();const file=await pending;
+   assert.ok(file.suggestedFilename().startsWith(name.toLowerCase().replace(/\s/g,'')+'-'));const raw=await fs.readFile(await file.path(),'utf8');
+   if(id==='download')assert.deepEqual(await F.importJSON(ethers,G,E,webcrypto,JSON.parse(raw)),sample);else assert.ok(raw.includes(sample.wallets[0].wif));
+  }
+  await page.locator('#coin').selectOption('pep');await page.locator('#restore').setInputFiles({name:'throwaway-'+coin+'.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(F.exportJSON(ethers,E,webcrypto,sample)))});
+  await page.getByRole('heading',{name:name+' addresses',exact:true}).waitFor();assert.equal(await page.locator('#coin').inputValue(),coin);
+  // A portable encrypted wallet has no selected generator asset. Restore the
+  // current selection entirely offline, including legacy coins without servers.
+  await page.locator('#restore').setInputFiles({name:'throwaway-encrypted-'+coin+'.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(encrypted))});
+  await page.locator('#backup-password').fill(password);await page.locator('#unlock-backup').click();
+  await page.waitForFunction(()=>!document.getElementById('backup-password-dialog').open);
+  assert.equal(await page.locator('#coin').inputValue(),coin);
+  assert.deepEqual(await page.locator('.address').allTextContents(),sample.wallets.map(w=>w.address));
+  }
   await page.locator('#clear').click();assert.equal(await page.locator('#phrase').inputValue(),'');assert.equal(await page.locator('#results').isHidden(),true);
   await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'/tmp/safecore-recovery-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);assert.deepEqual(network,[]);
-  console.log('PASS: file:// offline UI, all six assets, private exports, plain/encrypted JSON imports, clearing and mobile layout.');
+  console.log('PASS: file:// offline UI, all eighteen assets, private exports, plain/encrypted JSON imports, clearing and mobile layout.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -27,7 +27,7 @@ const selectCoins=require('./coin-selection-helper.cjs');
   // Cross-tab changes to this wallet update the picker, not a different wallet.
   await page.evaluate(first=>{
     const key='corevault.hidden-coins.v2.'+first;
-    localStorage.setItem(key,JSON.stringify(['pep','doge','ltc','shic','wht','btc']));
+    localStorage.setItem(key,JSON.stringify(['pep','doge','ltc','bel','shic','wht','dingo','btc','bch','dash','dgb','rvn','trmp']));
     window.dispatchEvent(new StorageEvent('storage',{key}));
   },first);
   await page.locator('#coin-empty').waitFor();
@@ -47,9 +47,9 @@ const selectCoins=require('./coin-selection-helper.cjs');
       if(hidden)localStorage.setItem('corevault.hidden-coins.v1',JSON.stringify(hidden));
     },hidden);
     await p.reload();await p.locator('.holdings').waitFor();
-    assert.equal(await p.locator('[data-overview-coin]').count(),hidden?4:6);
+    assert.equal(await p.locator('[data-overview-coin]').count(),hidden?11:13);
     await selectCoins(p,['doge']);await p.reload();await p.locator('[data-overview-coin=doge]').waitFor();
-    assert.equal(await p.locator('[data-overview-coin]').count(),hidden?5:6);await legacy.close();
+    assert.equal(await p.locator('[data-overview-coin]').count(),hidden?12:13);await legacy.close();
   }
   console.log('PASS: no coins on fresh install/new wallets, explicit DOGE opt-in, per-wallet persistence/switching, legacy selection preservation, cross-tab update and save-failure guard.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

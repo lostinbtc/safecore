@@ -49,19 +49,21 @@ const recipe = E.recipe(ethers, 'abandon abandon abandon abandon abandon abandon
         assert.equal(await page.evaluate(() => __scans.length), 0);
         await unlock();
       }
-      await page.waitForFunction(() => __scans.length === 6);
+      await page.waitForFunction(() => __scans.length === 13);
       let calls = await page.evaluate(() => __scans);
-      assert.deepEqual(calls.map(c => c.coin).sort(), ['btc', 'doge', 'ltc', 'pep', 'shic', 'wht']);
+      assert.deepEqual(calls.map(c => c.coin).sort(), ['bch', 'bel', 'btc', 'dash', 'dgb', 'dingo', 'doge', 'ltc', 'pep', 'rvn', 'shic', 'trmp', 'wht']);
       assert.ok(calls.every(c => c.full && c.count === 200));
       if (scenario === 'cached') assert.ok(calls.every(c => c.cached));
       await page.clock.runFor(4100);
       calls = await page.evaluate(() => __scans);
       if (scenario === 'retry') {
-        assert.deepEqual(calls.map(c => [c.coin, c.full]), [['pep', true], ['wht', true], ['shic', true], ['doge', true], ['btc', true], ['ltc', true], ['wht', true]]);
+        assert.equal(calls.length, 14);assert.ok(calls.every(c => c.full));
+        assert.equal(calls.filter(c => c.coin === 'wht').length, 2);
+        assert.equal(new Set(calls.map(c => c.coin)).size, 13);
         await page.clock.runFor(4100);
-        assert.equal(await page.evaluate(() => __scans.length), 7);
+        assert.equal(await page.evaluate(() => __scans.length), 14);
       } else {
-        assert.equal(calls.filter(c => c.full).length, 6, 'No repeated full scan on routine update');
+        assert.equal(calls.filter(c => c.full).length, 13, 'No repeated full scan on routine update');
         if (['fresh', 'cached', 'protected'].includes(scenario)) assert.ok(calls.some(c => !c.full));
       }
       await page.locator('[data-nav=wallet]').click();
@@ -80,13 +82,13 @@ const recipe = E.recipe(ethers, 'abandon abandon abandon abandon abandon abandon
         assert.ok(notice.y+notice.height<button.y,'Notices must not cover Rescan');
       }
       await page.locator('#rescan').click();
-      const expectedFull = scenario === 'retry' ? 13 : 12;
+      const expectedFull = scenario === 'retry' ? 27 : 26;
       await page.waitForFunction(n => __scans.filter(c => c.full).length === n, expectedFull);
       await page.waitForFunction(() => !document.getElementById('rescan').disabled);
       if (scenario === 'protected') {
         await page.locator('#lock').click();
         await unlock();
-        await page.waitForFunction(() => __scans.filter(c => c.full).length === 18);
+        await page.waitForFunction(() => __scans.filter(c => c.full).length === 39);
       } else if (scenario === 'fresh') {
         // Opening another saved wallet must not inherit the completed-scan flag.
         const other = E.unprotected(webcrypto, recipe);
@@ -94,7 +96,7 @@ const recipe = E.recipe(ethers, 'abandon abandon abandon abandon abandon abandon
           localStorage.setItem('whippet.dev.encrypted.v1', JSON.stringify(v));
           dispatchEvent(new StorageEvent('storage', {key: 'whippet.dev.encrypted.v1'}));
         }, other);
-        await page.waitForFunction(() => __scans.filter(c => c.full).length === 18);
+        await page.waitForFunction(() => __scans.filter(c => c.full).length === 39);
       }
       assert.deepEqual(errors, []);
       await context.close();

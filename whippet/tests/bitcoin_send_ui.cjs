@@ -65,14 +65,15 @@ const password='Public-test-password-123';
       await page.locator('#review-send').click();
       await page.locator('#broadcast-send').waitFor();
       assert.equal(await page.evaluate(()=>window.__broadcasts.length),0);
-      const notice=await page.locator('#fee-usd-notice').innerText();
+      const notice=await page.locator('#fee-usd-notice').textContent();
       if(['blocked-fee','no-price'].includes(scenario)){
         assert.equal(await page.locator('#broadcast-send').isDisabled(),true);
-        assert.match(notice,scenario==='blocked-fee'?/113\.50 USD.*blocked.*Try again later.*no override/:/fresh USD price.*blocked; try again later/);
+        assert.match(notice,scenario==='blocked-fee'?/113\.50 USD.*blocked.*Try again later.*no override/:/fresh USD price.*unavailable/);
         assert.equal(await page.evaluate(()=>window.__checks),0);
         assert.deepEqual(errors,[]);await context.close();continue;
       }
-      assert.match(notice,scenario==='high-fee'?/45\.40 USD.*High fee/:/0\.23 USD/);
+      if(scenario==='high-fee')assert.match(notice,/45\.40 USD.*High fee/);else assert.equal(await page.locator('#fee-usd-notice').isHidden(),true);
+      assert.equal(await page.locator('#missing-price-option').isHidden(),true);
       await page.screenshot({path:`whippet/test-results/${coin}-send-review-${scenario}.png`,fullPage:true});
       await page.locator('#send-ack').check();
       if(scenario==='reserved-input'){

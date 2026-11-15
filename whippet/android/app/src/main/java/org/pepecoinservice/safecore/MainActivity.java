@@ -228,9 +228,11 @@ public final class MainActivity extends Activity {
             || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
             || uri.getEncodedPath() == null)return false;
         String host=uri.getHost(),path=uri.getEncodedPath();
+        if("blockchair.com".equals(host))return path.matches("/(bitcoin-cash|dash)/transaction/[0-9a-f]{64}");
         if("pepecoinservice.org".equals(host))return path.matches("/explorer/tx/[0-9a-f]{64}/");
+        if("nintondo.io".equals(host))return path.matches("/bells/explorer/tx/[0-9a-f]{64}");
         return ("mempool.space".equals(host) || "dogechain.com".equals(host)
-            || "litecoinspace.org".equals(host) || "explorer.shibacoinshic.org".equals(host))
+            || "litecoinspace.org".equals(host) || "explorer.shibacoinshic.org".equals(host) || "explorer.dingocoin.com".equals(host) || "digiexplorer.info".equals(host) || "ravencoinexplorer.com".equals(host))
             && path.matches("/tx/[0-9a-f]{64}");
     }
     private boolean cameraPage() {
@@ -249,7 +251,18 @@ public final class MainActivity extends Activity {
         return ("api.kraken.com".equals(uri.getHost()) && "/0/public/Ticker".equals(uri.getEncodedPath())
             && "pair=PEPUSD,USDTUSD".equals(uri.getEncodedQuery()))
             || ("api.coingecko.com".equals(uri.getHost()) && "/api/v3/simple/price".equals(uri.getEncodedPath())
-            && "ids=shibacoin,litecoin,dogecoin,bitcoin&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
+            && "ids=shibacoin,litecoin,dogecoin,bitcoin,bellscoin,dingocoin,bitcoin-cash,dash,digibyte,junkcoin,luckycoin,ravencoin,catcoin,trumpow&vs_currencies=usd&include_last_updated_at=true".equals(uri.getEncodedQuery()));
+    }
+    static boolean bellsApiRequest(Uri uri, String method) {
+        if(uri==null || !"https".equals(uri.getScheme()) || !"bells-mainnet-api.nintondo.io".equals(uri.getHost())
+            || uri.getPort()!=-1 || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null)return false;
+        String path=uri.getEncodedPath();
+        if(path==null)return false;
+        if("POST".equals(method))return "/tx".equals(path);
+        if(!"GET".equals(method))return false;
+        return path.matches("/(block-height/0|blocks/tip/height|fee-estimates)")
+            || path.matches("/tx/[0-9a-f]{64}/(hex|status)")
+            || path.matches("/scripthash/[0-9a-f]{64}(/utxo|/txs|/txs/chain/[0-9a-f]{64})?");
     }
     private void denyCamera() {
         PermissionRequest request=cameraRequest;cameraRequest=null;cameraPrompt=false;cameraResultReady=false;
@@ -352,7 +365,7 @@ public final class MainActivity extends Activity {
                     WebResourceResponse response = assets.shouldInterceptRequest(u);
                     return response == null ? blocked() : response;
                 }
-                if (publicPriceRequest(u,request.getMethod())) return null;
+                if (publicPriceRequest(u,request.getMethod()) || bellsApiRequest(u,request.getMethod())) return null;
                 return blocked(); // WSS is allowed by CSP; WalletNetwork selects default/user-approved endpoints.
             }
             @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); }

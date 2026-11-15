@@ -57,7 +57,7 @@ public class SplashScreenTest extends ActivityInstrumentationTestCase2<MainActiv
             assertEquals(LinearLayout.LayoutParams.MATCH_PARENT, layout.width);
             assertEquals(Math.round(16 * activity.getResources().getDisplayMetrics().density), layout.topMargin);
             TextView tagline = activity.getWindow().getDecorView().findViewWithTag("safecore-splash-tagline");
-            assertNotNull(tagline);assertEquals("Your Keys, Your Coins.", tagline.getText().toString());
+            assertNotNull(tagline);assertEquals("Your Keys. Your Coins.", tagline.getText().toString());
             assertEquals(Gravity.CENTER, tagline.getGravity());
             assertEquals(name.getCurrentTextColor(), tagline.getCurrentTextColor());
             assertTrue(tagline.getTextSize()<name.getTextSize());

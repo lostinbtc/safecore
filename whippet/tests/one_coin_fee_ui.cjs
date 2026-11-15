@@ -33,8 +33,8 @@ for(const coin of Object.keys(E.NETWORKS)){
    await page.locator('#one-coin-fee').check();await page.locator('#send-max').click();await page.locator('#review-send').click();await page.locator('#one-coin-fee-notice').waitFor();
    assert.ok((await page.locator('#one-coin-fee-notice').innerText()).includes('1 '+coin.toUpperCase()));
    const before=await page.evaluate(()=>__broadcasts.length);
-   await page.locator('#broadcast-send').click();assert.equal(await page.evaluate(()=>__broadcasts.length),before);
-   await page.locator('#send-ack').check();await page.locator('#broadcast-send').click();
+   await require('./accept_missing_price.cjs')(page);await page.locator('#broadcast-send').click();assert.equal(await page.evaluate(()=>__broadcasts.length),before);
+   await page.locator('#send-ack').check();await require('./accept_missing_price.cjs')(page);await page.locator('#broadcast-send').click();
    if(scenario==='relay-rise'){
     await page.locator('#error').waitFor({state:'visible'});assert.match(await page.locator('#error').innerText(),/relay requirement/);assert.equal(await page.evaluate(()=>__broadcasts.length),0);
     assert.equal(await page.evaluate(()=>Object.entries(localStorage).filter(([k])=>k.startsWith('corevault.send-attempts.')).some(([,v])=>JSON.parse(v).length>0)),false);

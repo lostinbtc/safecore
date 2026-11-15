@@ -67,11 +67,11 @@ const raw=ethers.utils.hexlify(T.serialize(funding)).slice(2),txid=T.parse(raw).
         }),txid);
       }
       if(protectedMode){
-        await page.locator('#send-password').fill('Wrong-test-password-123');await page.locator('#broadcast-send').click();
+        await page.locator('#send-password').fill('Wrong-test-password-123');await require('./accept_missing_price.cjs')(page);await page.locator('#broadcast-send').click();
         await page.locator('#error').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>window.__broadcasts.length),0);
         await page.locator('#send-password').fill(password);
       }
-      await page.locator('#broadcast-send').click();
+      await require('./accept_missing_price.cjs')(page);await page.locator('#broadcast-send').click();
       if(['timeout','changed-input','reserved-input'].includes(scenario)){
         await page.locator('#error').waitFor({state:'visible'});
         assert.equal(await page.evaluate(()=>window.__broadcasts.length),scenario==='timeout'?1:0);

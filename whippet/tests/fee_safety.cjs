@@ -1,7 +1,7 @@
 // Exact boundary tests; public synthetic prices, no sockets or keys.
 const assert=require('node:assert/strict'),R=require('../www/reporting.js');
 const now=1700000000000,quote=(value=100000)=>({value,at:now,updated:now});
-for(const coin of ['btc','ltc']){
+for(const coin of Object.keys(require('../www/engine.js').NETWORKS)){
  const check=fee=>R.feeUsd(coin,fee,quote(),now);
  assert.equal(check(5000n).warning,false); // Exactly $5 is not above $5.
  assert.equal(check(5001n).warning,true);
@@ -20,8 +20,8 @@ for(const coin of ['btc','ltc']){
  }
  assert.throws(()=>R.feeUsd(coin,-1n,quote(),now),/Invalid/);
 }
-for(const coin of ['pep','doge','shic','wht'])assert.equal(R.feeUsd(coin,1000000n,null,now),null);
-console.log('PASS: BTC/LTC exact USD fee boundaries, decimal/scientific prices, stale/invalid quotes fail closed; other coins unchanged.');
+assert.throws(()=>R.feeUsd('unknown',1n,quote(),now),/Unsupported/);
+console.log('PASS: Every asset: exact USD fee boundaries, decimal/scientific prices, stale/invalid quotes require explicit review handling.');
 
 // Public synthetic BTC only: independent integer formula across input counts,
 // fractional sat/byte rates, Max and dust boundaries. No mainnet broadcasting.

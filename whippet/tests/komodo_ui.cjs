@@ -91,11 +91,11 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
     if(scenario==='disable')await p.evaluate(()=>{for(const k of Object.keys(localStorage))if(k.startsWith('corevault.komodo-recovery.'))localStorage.removeItem(k);});
     await p.locator('#send-ack').check();
     if(scenario==='protected'){
-     await p.locator('#send-password').fill('Wrong-fixture-password');await p.locator('#broadcast-send').click();
+     await p.locator('#send-password').fill('Wrong-fixture-password');await require('./accept_missing_price.cjs')(p);await p.locator('#broadcast-send').click();
      await p.waitForFunction(()=>document.getElementById('error').textContent.includes('Incorrect password'));
      assert.equal(await p.evaluate(()=>__sent.length),0);await p.locator('#send-password').fill(password);
     }
-    await p.locator('#broadcast-send').click();
+    await require('./accept_missing_price.cjs')(p);await p.locator('#broadcast-send').click();
     if(scenario==='disable'){await p.locator('#error').waitFor({state:'visible'});assert.match(await p.locator('#error').innerText(),/disabled|expired/);}
     else{
      await p.getByRole('heading',{name:'Sweep submitted',exact:true}).waitFor();const rawSent=await p.evaluate(()=>__sent[0]),decoded=T.parse(rawSent);

@@ -6,6 +6,7 @@ class Socket {
  close(){this.readyState=3;queueMicrotask(()=>this.onclose?.());}
  send(raw){const q=JSON.parse(raw);calls.push({...q,url:this.url});if(mode==='hold')return;
   let result;if(q.method==='server.version')result=['fixture','1.4'];
+  else if(q.method==='blockchain.block.header')result=require('./chain-checkpoints.cjs').doge;
   else if(q.method==='server.features')result={genesis_hash:mode==='wrong'?'0'.repeat(64):genesis};
   else if(q.method==='blockchain.headers.subscribe')result={height:mode==='height'?-1:500};
   else if(q.method==='blockchain.relayfee')result=mode==='fee'?-1:.001;

@@ -7,9 +7,9 @@ const id='a'.repeat(32),cacheId=E.PUBLIC_CACHE_PREFIX+id;
 let branches=0;
 const instrumented={...ethers,utils:{...ethers.utils,HDNode:{fromMnemonic(...args){const master=ethers.utils.HDNode.fromMnemonic(...args);return {privateKey:master.privateKey,derivePath(path){branches++;return master.derivePath(path);}};}}}};
 const expected=E.receivePool(ethers,recipe,3);
-assert.deepEqual(E.cachedReceivePool(instrumented,recipe,storage,id,3),expected);assert.equal(branches,6);
+assert.deepEqual(E.cachedReceivePool(instrumented,recipe,storage,id,3),expected);assert.equal(branches,Object.keys(E.NETWORKS).length);
 const valid=storage.getItem(cacheId),parsed=JSON.parse(valid);
-assert.equal(Object.keys(parsed.body.pools).length,6);
+assert.equal(Object.keys(parsed.body.pools).length,Object.keys(E.NETWORKS).length);
 assert.ok(parsed.body.pools.wht.every(a=>a.publicKey.length===68));
 assert.doesNotMatch(valid,/mnemonic|passphrase|privateKey|chainCode|xpub|xprv/);
 assert.ok(!valid.includes(ethers.utils.HDNode.fromMnemonic(recipe.mnemonic).privateKey));
@@ -25,9 +25,9 @@ for(const mutate of [
  c=>c.body.metadata.version=2
 ]){
  const cache=JSON.parse(valid);mutate(cache);storage.setItem(cacheId,JSON.stringify(cache));branches=0;
- assert.deepEqual(E.cachedReceivePool(instrumented,recipe,storage,id,3),expected);assert.equal(branches,6,'Tampering must regenerate trusted addresses');
+ assert.deepEqual(E.cachedReceivePool(instrumented,recipe,storage,id,3),expected);assert.equal(branches,Object.keys(E.NETWORKS).length,'Tampering must regenerate trusted addresses');
 }
-for(const raw of ['{broken',JSON.stringify({body:null,mac:'0x'+'0'.repeat(64)}),'x'.repeat(524289)]){
+for(const raw of ['{broken',JSON.stringify({body:null,mac:'0x'+'0'.repeat(64)}),'x'.repeat(1048577)]){
  storage.setItem(cacheId,raw);assert.deepEqual(E.cachedReceivePool(ethers,recipe,storage,id,3),expected);
 }
 storage.setItem(cacheId,valid);
@@ -45,4 +45,4 @@ const start=performance.now();E.cachedReceivePool(ethers,recipe,storage,id,200);
 const hit=performance.now(),loaded=E.cachedReceivePool(ethers,recipe,storage,id,200),hitMs=performance.now()-hit;
 assert.deepEqual(loaded,E.receivePool(ethers,recipe,200));
 // Timing below is informational; no flaky performance threshold gates correctness.
-console.log(`PASS: public-only authenticated cache, all six paths, tamper/seed/passphrase/scope rejection, bounded storage and safe fallback (generation ${Math.round(generated)} ms; authenticated reload ${Math.round(hitMs)} ms).`);
+console.log(`PASS: public-only authenticated cache, all supported paths, tamper/seed/passphrase/scope rejection, bounded storage and safe fallback (generation ${Math.round(generated)} ms; authenticated reload ${Math.round(hitMs)} ms).`);

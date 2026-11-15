@@ -1,14 +1,26 @@
-/* Public Electrum WSS only. Never send recovery words, passwords, or keys. */
+/* Public Electrum WSS / Bellscoin HTTPS. Never send recovery secrets. */
 (function(root){
   const CONFIG={
+    flop:{url:null,genesis:'1f1037762db00882d3353b8d9dcfd52fc93cbc2d694c62f1ecd6a209cf9d30d0'},
+    cat:{url:null,genesis:'bc3b4ec43c4ebb2fef49e6240812549e61ffa623d9418608aa90eaad26c96296'},
+    trmp:{url:'wss://electrum-server2.trumpow.meme:50004/',genesis:'e81c430d51410470bcefcd8ecd4661bde27fb2ef14df54d48fb6c2cdaa0c1fde'},
+    bch:{url:'wss://bch.imaginary.cash:50004/',fallbacks:['wss://cashnode.bch.ninja:50004/'],genesis:'000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f',checkpoint:{height:699484,hash:'0000000000000000030192242425926218184a609a63efee615b7586d7f3972b'}},
+    dash:{url:'wss://dash.electrum1.cipig.net:30061/',fallbacks:['wss://dash.electrum2.cipig.net:30061/'],genesis:'00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6'},
+    dgb:{url:'wss://dgb.electrum1.cipig.net:30059/',fallbacks:['wss://dgb.electrum2.cipig.net:30059/'],genesis:'7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496'},
+    jkc:{url:null,genesis:'a2effa738145e377e08a61d76179c21703e13e48910b30a2a87f0dfe794b64c6'},
+    lky:{url:null,genesis:'9b7bce58999062b63bfb18586813c42491fa32f4591d8d3043cb4fa9e551541b',checkpoint:{height:172330,hash:'8458c3eeda44dc11352edad04e0eb69ae898c69c0dded3b3903b37f5bf352555'}},
+    rvn:{url:'wss://rvn.electrum1.cipig.net:30051/',fallbacks:['wss://rvn.electrum2.cipig.net:30051/'],genesis:'0000006b444bc2f2ffe627be9d9e7e7a0730000870ef6eb6da46c8eae389df90'},
+    bonc:{url:null,genesis:'0bb0f2e668c363e321c208d756d3a4bde76e82e45e76d00538c3e9b05389f5ed'},
+    dingo:{url:'wss://seed1.dingocoin.com:3341/',fallbacks:['wss://seed3.dingocoin.com:3341/','wss://elecx2.kmsoftware.org:3341/'],genesis:'1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691',checkpoint:{height:1,hash:'594a42d8fe16382085dc982135df72cf8fcea12d34e6efd566e2f9e442e2136f'}},
+    bel:{url:'https://bells-mainnet-api.nintondo.io',genesis:'e5be24df57c43a82d15c2f06bda961296948f8f8eb48501bed1efb929afe0698'},
     pep:{url:'wss://electrum.pepecoinservice.org:50004/',fallbacks:['wss://electrum.pepeblocks.com:50004/'],genesis:'37981c0c48b8d48965376c8a42ece9a0838daadb93ff975cb091f57f8c2a5faa'},
     wht:{url:'wss://electrum.pepecoinservice.org:50005/whippet',genesis:'863714e1c1a15526a0081a35097c56e28dbd43ef97f76fec0ccd5a7510326292'},
     shic:{url:'wss://electrum.shibacoinshic.org:50002/',genesis:'ff271edcc83f7d71e7a4e4b0a43b386a188e1470a28671cdbdc47e900118ac7f'},
-    doge:{url:'wss://doge.electrum1.cipig.net:30060/',fallbacks:['wss://doge.electrum2.cipig.net:30060/'],genesis:'1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691'},
+    doge:{url:'wss://doge.electrum1.cipig.net:30060/',fallbacks:['wss://doge.electrum2.cipig.net:30060/'],genesis:'1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691',checkpoint:{height:104679,hash:'35eb87ae90d44b98898fec8c39577b76cb1eb08e1261cfc10706c8ce9a1d01cf'}},
     btc:{url:'wss://btc.electrum1.cipig.net:30000/',fallbacks:['wss://btc.electrum2.cipig.net:30000/'],genesis:'000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f'},
     ltc:{url:'wss://ltc.electrum1.cipig.net:30063/',fallbacks:['wss://ltc.electrum2.cipig.net:30063/'],genesis:'12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2'}
   };
-  for(const config of Object.values(CONFIG)){config.fallbacks=Object.freeze(config.fallbacks||[]);Object.freeze(config);}Object.freeze(CONFIG);
+  for(const config of Object.values(CONFIG)){config.fallbacks=Object.freeze(config.fallbacks||[]);if(config.checkpoint)Object.freeze(config.checkpoint);Object.freeze(config);}Object.freeze(CONFIG);
   let endpoints={};
   function validateEndpoint(value){
     if(typeof value!=='string'||value.length>2048)throw Error('Enter a secure WebSocket address (wss://).');
@@ -69,6 +81,14 @@
                 const messages=parseResponse(line);for(const m of Array.isArray(messages)?messages:[messages]){
                   if(m.method==='blockchain.scripthash.subscribe'&&Array.isArray(m.params)&&this.subscribed.has(m.params[0])&&validHash(m.params[0])&&validStatus(m.params[1])){this.statuses.set(m.params[0],{status:m.params[1],at:Date.now()});this.dirty.set(m.params[0],(this.dirty.get(m.params[0])||0)+1);notify(this.coin);continue;}
                   const p=this.pending.get(m.id);if(!p)continue;this.pending.delete(m.id);clearTimeout(p.timer);
+                  // Some servers serialize the numeric fee as 1.0. The exact
+                  // amount parser preserves that token as text. Normalize only
+                  // a fee RPC's original JSON NUMBER, never a quoted string or
+                  // an address/UTXO amount, and reject excess decimal precision.
+                  if(['blockchain.relayfee','blockchain.estimatefee'].includes(p.method)&&typeof m.result==='string'&&/^-?\d+(?:\.\d{1,8})?$/.test(m.result)){
+                    const original=JSON.parse(line),item=Array.isArray(original)?original.find(item=>item.id===m.id):original;
+                    if(typeof item?.result==='number'&&Number.isFinite(item.result))m.result=item.result;
+                  }
                   if(m.error)p.reject(new RPCError(typeof m.error.message==='string'?m.error.message.slice(0,250):'Electrum rejected the request.'));else p.resolve(m.result);
                 }
               }
@@ -78,6 +98,14 @@
         await this.request('server.version',['SafeCore development','1.4']);
         const f=await this.request('server.features',[]);
         if(f?.genesis_hash!==CONFIG[this.coin].genesis){this.close();throw new ConnectionError('Wrong blockchain: genesis does not match.');}
+        // Some chains share genesis or have competing continuations. A pinned Core
+        // checkpoint is required before any address queries or broadcasts.
+        const checkpoint=CONFIG[this.coin].checkpoint;
+        if(checkpoint){
+          const header=await this.request('blockchain.block.header',[checkpoint.height]);
+          let hash;try{hash=root.WalletTransactions.blockHeaderHash(header);}catch(_){throw new ConnectionError('Invalid blockchain checkpoint header.');}
+          if(hash!==checkpoint.hash)throw new ConnectionError('Wrong blockchain: checkpoint does not match the selected coin.');
+        }
       })();
       try{await this.ready;}catch(e){this.close();throw e;}
     }
@@ -86,21 +114,25 @@
       if(!this.socket||this.socket.readyState!==WebSocket.OPEN)return Promise.reject(new ConnectionError('Electrum is disconnected.'));
       if(method==='blockchain.scripthash.subscribe')this.subscribed.add(params[0]);
       const id=++this.id;
-      return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new ConnectionError('Electrum response timed out.'));},20000);this.pending.set(id,{resolve,reject,timer});try{this.socket.send(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');}catch(_){clearTimeout(timer);this.pending.delete(id);reject(new ConnectionError('Electrum request could not be sent.'));}});
+      return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new ConnectionError('Electrum response timed out.'));},20000);this.pending.set(id,{resolve,reject,timer,method});try{this.socket.send(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');}catch(_){clearTimeout(timer);this.pending.delete(id);reject(new ConnectionError('Electrum request could not be sent.'));}});
     }
     async call(method,params=[]){await this.connect();return this.request(method,params);}
   }
   // Read-only requests may retry. A broadcast is attempted once, even if its
   // response is lost: the application retains its uncertain-send protection.
   class ManagedClient {
+    transport(url){return this.coin==='bel'&&url===CONFIG.bel.url
+      ?root.WalletEsplora({coin:this.coin,url,genesis:CONFIG.bel.genesis,parseResponse,safeInteger,ConnectionError,RPCError})
+      :new Client(this.coin,url);}
     constructor(coin){
+      if(!Object.hasOwn(CONFIG,coin)||!endpoint(coin))throw Error('Set a verified custom Electrum connection for this coin in Settings.');
       this.coin=coin;this.urls=endpoints[coin]?[endpoints[coin]]:[CONFIG[coin].url,...CONFIG[coin].fallbacks];
-      this.index=0;this.active=new Client(coin,this.urls[0]);this.retired=false;this.session=0;this.retryAt=0;this.failures=new Map();this.highestTip=0;
+      this.index=0;this.active=this.transport(this.urls[0]);this.retired=false;this.session=0;this.retryAt=0;this.failures=new Map();this.highestTip=0;
     }
     get url(){return this.active.url;}
     get dirty(){return this.active.dirty;}
     get statuses(){return this.active.statuses;}
-    close(){this.session++;this.active.retired=true;this.active.close();this.active=new Client(this.coin,this.urls[this.index]);}
+    close(){this.session++;this.active.retired=true;this.active.close();this.active=this.transport(this.urls[this.index]);}
     available(){
       if(this.retired)throw Error('Connection changed. Retry with the selected server.');
       if(Date.now()<this.retryAt)throw new ConnectionError('Connection unavailable. Retrying automatically.');
@@ -110,7 +142,7 @@
           if(next<0)throw new ConnectionError('Connection unavailable. Retrying automatically.');
           this.index=next;
         }
-        this.active=new Client(this.coin,this.urls[this.index]);
+        this.active=this.transport(this.urls[this.index]);
       }
       return this.active;
     }
@@ -121,7 +153,7 @@
       raw.retired=true;raw.close();
       for(let step=1;step<this.urls.length;step++){
         const next=(this.index+step)%this.urls.length;
-        if((this.failures.get(this.urls[next])?.until||0)<=now){this.index=next;this.active=new Client(this.coin,this.urls[next]);this.retryAt=0;notify(this.coin);return;}
+        if((this.failures.get(this.urls[next])?.until||0)<=now){this.index=next;this.active=this.transport(this.urls[next]);this.retryAt=0;notify(this.coin);return;}
       }
       this.retryAt=Math.min(...this.urls.map(url=>this.failures.get(url)?.until||now));
       notify(this.coin);
@@ -163,12 +195,24 @@
     try{
       const tip=await c.call('blockchain.headers.subscribe');
       if(!Number.isSafeInteger(tip?.height)||tip.height<0)throw Error('Server returned an invalid chain height.');
+      if(coin==='lky'&&tip.height<276500)throw Error('Luckycoin server has not reached revival replay protection.');
       const relay=await c.call('blockchain.relayfee');
       if(!Number.isFinite(relay)||relay<0||relay>Number(root.WalletTransactions.policy(coin).maxRate)/1e8)throw Error('Server returned an unsupported relay fee.');
       return {url,height:tip.height};
     }finally{clearTimeout(deadline);signal?.removeEventListener('abort',abort);abort();}
   }
   const validHash=x=>typeof x==='string'&&/^[0-9a-f]{64}$/i.test(x);
+  // Convert a validated RPC number through decimal text, not float * 1e8.
+  // Otherwise e.g. 0.00001 can become 1000.0000000000001 and round up.
+  function feeUnits(value){
+    if(typeof value!=='number'||!Number.isFinite(value)||value<0)throw Error('Invalid fee rate.');
+    const [mantissa,exponent='0']=String(value).toLowerCase().split('e');
+    const scale=(mantissa.split('.')[1]||'').length-Number(exponent);
+    let units=BigInt(mantissa.replace('.',''));
+    if(scale>8){const divisor=10n**BigInt(scale-8);if(units%divisor)throw Error('Fee rate has sub-satoshi precision.');units/=divisor;}
+    else units*=10n**BigInt(8-scale);
+    return units;
+  }
   // Electrum status is null for no history, else a 64-char hex fingerprint of it.
   const validStatus=x=>x===null||validHash(x);
   // Row object -> the status it was fetched under. Keyed by row identity, so a
@@ -220,6 +264,7 @@
     checkActive();
     if(!Array.isArray(accounts)||!accounts.length||accounts.length>200||accounts.some((a,i)=>a.index!==i))throw Error('Expected an ordered address pool of up to 200 addresses.');
     const tip=await c.call('blockchain.headers.subscribe');checkActive();if(!Number.isSafeInteger(tip.height)||tip.height<0)throw Error('Invalid chain height.');
+    if(coin==='lky'&&tip.height<276500)throw Error('Luckycoin server has not reached revival replay protection.');
     const query=async account=>{
       const sh=T.scriptHash(coin,account.address);
       const [balance,history,utxos]=await Promise.all([c.call('blockchain.scripthash.get_balance',[sh]),c.call('blockchain.scripthash.get_history',[sh]),c.call('blockchain.scripthash.listunspent',[sh])]);
@@ -297,24 +342,33 @@
     // estimate must not hide balances or silently authorize a floor-fee spend.
     const rules=root.WalletTransactions.policy(coin),rate=Math.max(Number(rules.minRate)/1e8,relay);
     if(!Number.isFinite(rate)||rate>Number(rules.maxRate)/1e8)throw Error('Fee estimate exceeds development safety limit.');
-    let feeRate=BigInt(Math.ceil(rate*1e8));
-    if(coin==='btc'||coin==='ltc'){
+    let feeRate=feeUnits(rate);
+    if(!rules.flatFee){
       try{
         const estimate=await c.call('blockchain.estimatefee',[6]);
-        if(!Number.isFinite(estimate)||estimate<=0||estimate>Number(rules.maxRate)/1e8)throw Error('Fee estimate unavailable or above limit.');
-        feeRate=BigInt(Math.max(Number(rules.minRate),Math.ceil(relay*1e8),Math.ceil(estimate*1e8)));
+        if(['dingo','bonc','bch','dash','dgb','jkc','lky','rvn','cat','trmp','flop'].includes(coin)&&estimate===-1){
+          // Electrum's explicit "no estimate" response is common on DINGO.
+          // Use the freshly checked relay rate and Core minimum, never a
+          // fallback after a timeout, malformed response or oversized rate.
+          origin.feeSource=coin==='dingo'?'relay-minimum':'core-minimum';
+        }else{
+          if(!Number.isFinite(estimate)||estimate<=0||estimate>Number(rules.maxRate)/1e8)throw Error('Fee estimate unavailable or above limit.');
+          const observed=[rules.minRate,feeUnits(relay),feeUnits(estimate)];
+          feeRate=observed.reduce((a,b)=>a>b?a:b);
+          if(['dingo','bonc'].includes(coin))origin.feeSource='estimate';
+        }
       }catch(_){feeRate=null;}
       checkActive();
     }
     // A failed scan must not consume notifications for rows it never published.
     for(const [sh,revision] of revisions)if(c.dirty.get(sh)===revision)c.dirty.delete(sh);
-    const snapshot={coin,tip:tip.height,rows,complete:true,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate,at:Date.now(),probedAt:targeted?previous.probedAt||previous.at:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:!targeted&&probeDue?probeCursor+10:probeCursor};
+    const snapshot={coin,tip:tip.height,rows,complete:true,everUsed:[...used].sort((a,b)=>a-b),queried:queried.size,cached:false,confirmed:rows.reduce((n,r)=>n+r.confirmed,0n),unconfirmed:rows.reduce((n,r)=>n+r.unconfirmed,0n),feeRate,feeSource:origin.feeSource||null,at:Date.now(),probedAt:targeted?previous.probedAt||previous.at:probeDue||options.full||!reusable?Date.now():previous.probedAt||previous.at,probeCursor:!targeted&&probeDue?probeCursor+10:probeCursor};
     sources.set(snapshot,origin);return snapshot;
   }
   async function spendable(snapshot,{sweep=false,compressed=true}={}){
     if(snapshot.complete===false)throw Error('Complete wallet discovery before spending.');
     if(snapshot.cached||!isCurrent(snapshot))throw Error('Connection changed. Refresh wallet data before spending.');
-    if(['btc','ltc'].includes(snapshot.coin)&&(typeof snapshot.feeRate!=='bigint'||snapshot.feeRate<=0n))throw Error(`${snapshot.coin==='btc'?'Bitcoin':'Litecoin'} fee estimate unavailable. Refresh or choose another connection before spending.`);
+    if(!root.WalletTransactions.policy(snapshot.coin).flatFee&&(typeof snapshot.feeRate!=='bigint'||snapshot.feeRate<=0n))throw Error(`${snapshot.coin.toUpperCase()} fee estimate unavailable. Refresh or choose another connection before spending.`);
     const c=client(snapshot.coin),T=root.WalletTransactions;
     const candidates=snapshot.rows.flatMap(r=>r.utxos).filter(u=>u.height>0);
     if(sweep){if(candidates.length)T.sweepSize(candidates.length,compressed);}

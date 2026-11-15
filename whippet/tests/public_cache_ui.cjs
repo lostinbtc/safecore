@@ -10,7 +10,7 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
   Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.__copied=text;}}});
  },vault);
  await p.goto('http://localhost:8787/#receive');
- for(const coin of ['pep','doge','ltc','shic','wht','btc']){
+ for(const coin of ['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']){
   await p.locator(`[data-coin=${coin}]`).click();assert.equal(await p.locator('#address').innerText(),accounts[coin].address);
   await p.locator('#copy-address').click();assert.equal(await p.evaluate(()=>__copied),accounts[coin].address);
   assert.match(await p.locator('#receive-history-status').innerText(),/History refresh pending/);
@@ -29,5 +29,5 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
  await p.waitForFunction(()=>document.documentElement.dataset.walletState==='unlocked');
  await p.locator('[data-nav=receive]').click();await p.locator('[data-coin=pep]').click();assert.equal(await p.locator('#address').innerText(),accounts.pep.address);
  assert.deepEqual(errors,[]);
- console.log('PASS: all six Receive addresses/clipboard work offline immediately, authenticated reload, tamper rejection and locked-wallet gating; no network history claimed fresh.');
+ console.log('PASS: all thirteen normal Receive addresses/clipboard work offline immediately, authenticated reload, tamper rejection and locked-wallet gating; no network history claimed fresh.');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

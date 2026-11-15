@@ -6,7 +6,7 @@
 })(typeof globalThis==='object'?globalThis:this,function(){
   function address(raw,coin,validate){
     if(typeof raw!=='string'||raw.length>2048)throw Error('This QR code is not a supported payment address.');
-    const text=raw.trim(),scheme={pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin'}[coin];
+    const text=raw.trim(),scheme={pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin',bel:'bellscoin',dingo:'dingocoin',bonc:'bonkcoin',bch:'bitcoincash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow',flop:'flopcoin'}[coin];
     if(!scheme)throw Error('Select a supported coin first.');
     let result=text;
     if(text.includes(':')){
@@ -14,7 +14,7 @@
       if(!match||match[1].toLowerCase()!==scheme)throw Error('This QR code is not for the selected coin.');
       const query=new URLSearchParams(match[3]||'');
       for(const key of query.keys())if(key.toLowerCase().startsWith('req-'))throw Error('This QR code requires unsupported payment options.');
-      result=match[2]; // Amount/label/message never control the send form.
+      result=coin==='bch'?'bitcoincash:'+match[2]:match[2]; // Amount/label/message never control the send form.
     }
     validate(coin,result);return result;
   }
@@ -40,7 +40,7 @@
       if(video.readyState>=2&&video.videoWidth&&video.videoHeight){
         if(video.dataset.ready!=='true'){
           video.dataset.ready='true';
-          message(`Scanning ${({pep:'PEP',wht:'WHT',shic:'SHIC',ltc:'LTC',doge:'DOGE',btc:'BTC'})[coin]} QR code… Keep the whole code in view.`);
+          message(`Scanning ${({pep:'PEP',wht:'WHT',shic:'SHIC',ltc:'LTC',doge:'DOGE',btc:'BTC',bel:'BELLS',dingo:'DINGO',bonc:'BONC',bch:'BCH',dash:'DASH',dgb:'DGB',jkc:'JKC',lky:'LKY',rvn:'RVN',cat:'CAT',trmp:'TRMP',flop:'FLOP'})[coin]} QR code… Keep the whole code in view.`);
         }
         // Match the square object-fit:cover preview. Downscaling the entire
         // portrait frame made its visible QR too small and wasted side space.

@@ -11,7 +11,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
   window.fetch=async(url,options)=>{
    if(options.credentials!=='omit'||options.referrerPolicy!=='no-referrer')throw Error('Price privacy regression');
    if(url.includes('api.kraken.com'))return new Response(JSON.stringify({error:[],result:{PEPUSD:{c:['.01']},USDTZUSD:{c:['.5']}}}));
-   if(url!=='https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin&vs_currencies=usd&include_last_updated_at=true')throw Error('Unexpected quote URL');
+   if(url!=='https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin,bellscoin,dingocoin,bitcoin-cash,dash,digibyte,junkcoin,luckycoin,ravencoin,catcoin,trumpow&vs_currencies=usd&include_last_updated_at=true')throw Error('Unexpected quote URL');
    if(__offline)return new Response('{}',{status:429});
    return new Response(JSON.stringify({bitcoin:{usd:50,last_updated_at:Math.floor(Date.now()/1000)-(__stale?601:0)},shibacoin:{usd:.000003,last_updated_at:Math.floor(Date.now()/1000)}}));
   };

@@ -56,7 +56,7 @@ final class AppSplash {
         panel.addView(name, nameLayout);
         TextView tagline = new TextView(activity);
         tagline.setTag("safecore-splash-tagline");
-        tagline.setText("Your Keys, Your Coins.");
+        tagline.setText("Your Keys. Your Coins.");
         tagline.setTextColor(accent.data);
         tagline.setTextSize(14);
         tagline.setGravity(Gravity.CENTER);

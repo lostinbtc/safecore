@@ -1,0 +1,30 @@
+Bellscoin icon, copied unchanged from BellsChain/bellscoin:
+https://github.com/BellsChain/bellscoin/blob/fccdc6736fe81abc0b2b175bdacc58369c08845b/src/qt/res/icons/bitcoin.png
+SHA256: 4e48d1e48c73e3e85b9287ad0a992f74c6eea43793256d4521ac713c74ddb650
+The upstream filename is historical; the image is the Bellscoin bag icon.
+Trademark rights remain with their owners; inclusion does not imply endorsement.
+
+Upstream COPYING at the same revision:
+
+The MIT License (MIT)
+
+Copyright (c) 2009-2023 The Bitcoin Core developers
+Copyright (c) 2009-2023 Bitcoin Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

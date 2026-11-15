@@ -23,6 +23,7 @@ const bitcore = require('bitcore-lib-doge');
         const child = independent.deriveChild(account.path);
         const pub = Buffer.from(child.privateKey.toPublicKey().toBuffer());
         const hash = crypto.createHash('ripemd160').update(crypto.createHash('sha256').update(pub).digest()).digest();
+        if(coin==='bch'){assert.equal(require('bitcore-lib-cash').PublicKey.fromBuffer(pub).toAddress().toString(),account.address);continue;}
         const decoded = bitcore.encoding.Base58Check.decode(account.address);
         assert.equal(decoded[0], E.NETWORKS[coin].prefix);
         assert.equal(decoded.subarray(1).toString('hex'), hash.toString('hex'));

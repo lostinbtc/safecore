@@ -1,6 +1,6 @@
-# Offline Pepecoin, Bitcoin, Dogecoin, Litecoin, Shibacoin and Whippet recovery
+# Offline multi-coin recovery
 
-Generate or recover Pepecoin, Bitcoin, Dogecoin, Litecoin, Shibacoin or Whippet addresses and their matching private keys entirely
+Generate or recover Bellscoin, Bitcoin, Bitcoin Cash, Bonkcoin, Catcoin, Dash, DigiByte, Dingocoin, Dogecoin, Flopcoin, Junkcoin, Litecoin, Luckycoin, Pepecoin, Ravencoin, Shibacoin, TrumPOW or Whippet addresses and their matching private keys entirely
 inside your browser. The folder is self-contained: it needs no server, package
 installation, blockchain connection, or internet access.
 
@@ -8,7 +8,7 @@ installation, blockchain connection, or internet access.
 
 1. Download this repository as a ZIP and extract it.
 2. Open `recovery/index.html` in a current Chrome, Edge, or Firefox browser.
-3. Choose **Pepecoin**, **Bitcoin (BTC)**, **Dogecoin (DOGE)**, **Litecoin (LTC)**, **Shibacoin (SHIC)** or **Whippet**, then generate a new phrase, enter an existing English BIP39 phrase, or choose
+3. Choose an asset (alphabetical), then generate a new phrase, enter an existing English BIP39 phrase, or choose
    **Import wallet JSON**.
 4. Select an address count and derive the keys for that asset. The default is **200**, with a
    supported range of **1–1,000**.
@@ -29,7 +29,8 @@ replace recovery words. Large derivations show progress and can be cancelled.
 - SafeCore/Whippet unprotected backups (`corevault-unprotected-v1`).
 - SafeCore/Whippet encrypted backups (`pepecoin-whippet-encrypted-v1`). Enter
   the wallet password in the local prompt; decryption stays in the browser.
-- Original Whippet generator backups (`whippet-seed-v1`), Pepecoin bundles (`pepecoin-seed-v1`), and Shibacoin bundles (`shibacoin-seed-v1`).
+- Generator backups for every listed asset, including the original Whippet
+  (`whippet-seed-v1`) and Pepecoin (`pepecoin-seed-v1`) formats.
 
 Native backups without a saved generator address list use the address count
 and asset selected on the page. A saved generator bundle selects its own asset
@@ -52,7 +53,7 @@ clearing or refreshing the page. Neither the page nor the browser stores a
 recovery copy for you.
 
 The JSON uses SafeCore's unprotected envelope and recovery recipe, with a
-`whippetGenerator` (legacy Whippet) or `recoveryGenerator` (Pepecoin/Shibacoin) section that
+`whippetGenerator` (legacy Whippet) or `recoveryGenerator` (other assets) section that
 preserves the full verified generator bundle. Filenames identify the asset.
 The wallet can import the recipe; this tool also verifies every saved key
 against it. This format was tested through the wallet's actual import and
@@ -61,14 +62,39 @@ encrypted-export screens with all 1,000 Whippet addresses matching afterward.
 ## Recovery recipe
 
 - Standard: English BIP39 seed, optional exact BIP39 passphrase, BIP32 children.
-- Pepecoin path: `m/44'/3434'/0'/0/index`, starting at index 0.
-- Pepecoin P2PKH version: 56 (`0x38`); script version: 22 (`0x16`).
-- Whippet path: `m/0'/3'/index'`, starting at index 0.
-- Whippet P2PKH version: 73 (`0x49`); script version: 22 (`0x16`).
-- Shibacoin path: `m/44'/4474'/0'/0/index`, starting at index 0.
-- Shibacoin P2PKH version: 63 (`0x3f`); script version: 22 (`0x16`).
+- Bellscoin path: `m/44'/762'/0'/0/index`; P2PKH version 25, script version 30, WIF version 153.
+- Bellscoin bundles use `bellscoin-seed-v1`. Older Nintondo wallets used coin type 0;
+  their phrases may derive different addresses. Verify a known address before use.
+- Bitcoin path: `m/44'/0'/0'/0/index`; P2PKH version 0, script version 5, WIF version 128.
+- Bitcoin Cash path: `m/44'/145'/0'/0/index`; CashAddr P2PKH, WIF 128. Not a BTC address or token wallet.
+- Bonkcoin path: `m/0'/0'/index'`; P2PKH version 25, script version 28, WIF version 151.
+  SafeCore BIP39 recipe; `bonkcoin-seed-v1` bundles. This follows Core's actual
+  child derivation, not its inconsistent path metadata. Core's random master
+  seed is not BIP39: this does not restore a Core `wallet.dat` from words.
+  Other mnemonic wallets may use a different path. No BONC network queries occur
+  in this tool; the app requires explicit legacy opt-in and a custom endpoint.
+- Catcoin path: `m/44'/760'/0'/0/index`; P2PKH 21, P2SH 88, WIF 149. Matches Electrum-CAT’s **BIP39 legacy** option, not its native Electrum seed format.
+- Dash path: `m/44'/5'/0'/0/index`; P2PKH 76, P2SH 16, WIF 204.
+- DigiByte path: `m/44'/20'/0'/0/index`; P2PKH 30, P2SH 63, WIF 128.
+- Dingocoin path: `m/44'/3'/0'/0/index`; P2PKH version 30, script version 22,
+  WIF version 158. `dingocoin-seed-v1` bundles identify the selected coin.
+  This matches the official Dingocoin recovery tool. DOGE and DINGO deliberately
+  derive matching keys/addresses from the same phrase, but funds exist on separate
+  chains. Confirm the selected coin when exporting or importing elsewhere.
+- Dogecoin path: `m/44'/3'/0'/0/index`; P2PKH version 30, script version 22, WIF version 158.
+- Flopcoin path: `m/44'/3'/0'/0/index`; P2PKH 35, P2SH 22, WIF 158. Matches the Komodo registry's HD coin type, not a legacy Komodo seed sweep.
+- Junkcoin path: `m/44'/2013'/0'/0/index`; P2PKH 16, P2SH 5, WIF 144.
 - Litecoin path: `m/44'/2'/0'/0/index`, starting at index 0 (legacy P2PKH).
 - Litecoin P2PKH version: 48 (`0x30`); script version: 50 (`0x32`).
+- Luckycoin path: `m/44'/790'/0'/0/index`; P2PKH 47, P2SH 5, WIF 175. Revival chain only.
+- Pepecoin path: `m/44'/3434'/0'/0/index`, starting at index 0.
+- Pepecoin P2PKH version: 56 (`0x38`); script version: 22 (`0x16`).
+- Ravencoin path: `m/44'/175'/0'/0/index`; P2PKH 60, P2SH 122, WIF 128. Native RVN only.
+- Shibacoin path: `m/44'/4474'/0'/0/index`, starting at index 0.
+- Shibacoin P2PKH version: 63 (`0x3f`); script version: 22 (`0x16`).
+- TrumPOW path: `m/44'/1707'/0'/0/index`; P2PKH 65, P2SH 28, WIF 151.
+- Whippet path: `m/0'/3'/index'`, starting at index 0.
+- Whippet P2PKH version: 73 (`0x49`); script version: 22 (`0x16`).
 - WIF version: 158 (`0x9e`) for PEP/WHT/SHIC/DOGE; 176 (`0xb0`) for LTC; 128 (`0x80`) for BTC, with compressed public keys.
 
 Bitcoin uses path `m/44'/0'/0'/0/index`, P2PKH version 0 and WIF version 128.
@@ -130,7 +156,7 @@ and Playwright Chromium (`npm ci`, then `npx playwright install chromium`):
 node recovery/ui-tests.cjs
 ```
 
-The checks use a published BIP39 test vector for all six assets. They cover the 200/1,000 address
+The checks use a published BIP39 test vector for all supported assets. They cover the 200/1,000 address
 bounds, exact key pairs, wallet-compatible JSON, encrypted wallet import,
 wrong-password rejection, TXT/CSV exports and cancellation. No funded wallet
 or network connection is used.
