@@ -1,8 +1,8 @@
 {
   "tag": "v0.1.0-test.21",
   "filename": "SafeCore-0.1.0-test.21.apk",
-  "artifact_commit": "6c5f34f5b1804c20a9482bb772bd3a7bce16f824",
-  "sha256": "aca0c9dbad10d42fc6b9eff020cff7d0529b7a4ab93dbced3467c5fe335a5a8b",
+  "artifact_commit": "7f091cf79f6e7fa6a6c200bae16f4767d3a49627",
+  "sha256": "85d559b9360268def45442e5ed0f73ec3bfaa46e22b6c6829939ea9caa552357",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
   "version_code": 21,
@@ -20,8 +20,8 @@
     "Asset screen: tap a coin on Overview for a larger, raised logo and asset name, centered number-only balance and estimated value, plus direct Receive/Send controls. Live updates, privacy masking, wallet locking and saved-price ages remain active.",
     "Receive: once selected, the coin stays on its own screen without other asset buttons. A left-aligned Overview link exits the screen; the selected asset is centered. The full Previous / Address number / Next row sits below the unchanged-size QR code. Private-key and Komodo sweep actions share the borderless glow style.",
     "Compact layout: removes redundant Overview and Receive spacing to avoid unnecessary scrolling. Small screens, longer lists and extra notices remain scrollable; touch targets are preserved.",
-    "Consistent controls: Create or restore wallet, Information, recovery utilities and sweep review actions use the shared borderless glow style. Create/Restore tabs are compact; final transaction approvals and destructive controls remain visually distinct.",
-    "Activity: hides coins with no recorded transactions while retaining zero-balance history and submitted or uncertain sends. New history appears automatically, with separate loading, offline and empty-history states.",
+    "Consistent controls: Create wallet and Restore wallet submission buttons, Information, recovery utilities and sweep review actions use the shared borderless glow style. Create/Restore tabs are compact; validation is unchanged. Final transaction approvals and destructive controls remain visually distinct.",
+    "Activity: hides coins with no recorded transactions while retaining zero-balance history and submitted or uncertain sends. New history appears automatically, with separate loading, offline and empty-history states anchored at the lower right above navigation.",
     "Documentation and tests: updated README, chain-validation notes and third-party notices; expanded recovery, signing, fee, network-isolation and Android coverage. Wallet/packaging CI now allows 45 minutes.",
     "Verification: local build, lint, signing-identity, exact bundled-source and targeted browser checks passed, including all 18 asset screens. The Send-picker CI test now explicitly advances its paused clock after reload and still verifies every expected balance. Release PR checks must pass before publication. Funded testing remains pending for the newest assets; this is not an independent audit."
   ]

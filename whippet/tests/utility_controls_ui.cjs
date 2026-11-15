@@ -17,12 +17,15 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  await p.locator('#wallet-information').click();await plain('information-back');await p.locator('#information-back').click();
  await p.locator('.wallets-shortcut').click();await plain('add-wallet');await p.locator('#add-wallet').click();await plain('cancel-setup');
  for(const tab of await p.locator('[data-setup]').all())assert.deepEqual(await tab.evaluate(e=>{const s=getComputedStyle(e);return [s.backgroundColor,s.borderTopWidth,e.getBoundingClientRect().height>=44];}),['rgba(0, 0, 0, 0)','0px',true]);
- assert.equal(await p.locator('#submit-setup').evaluate(e=>e.classList.contains('primary')),true,'Actual wallet creation retains its explicit primary action');
+ await plain('submit-setup');
+ assert.equal(await p.locator('#submit-setup').getAttribute('type'),'submit','Wallet creation keeps its form submission behavior');
+ await p.locator('[data-setup=import]').click();await plain('submit-setup');
+ assert.equal(await p.locator('#submit-setup').isDisabled(),true,'Restore still requires a valid recovery phrase');
  await p.locator('#cancel-setup').click();await p.locator('[data-nav=receive]').click();await p.locator('[data-coin=pep]').click();await plain('sweep-open');
  await p.locator('#sweep-open').click();await plain('review-sweep');
  await p.locator('[data-nav=security]').click();await p.locator('#komodo-recovery-enabled').check();
  await p.locator('[data-nav=receive]').click();await p.locator('[data-coin=pep]').click();await plain('komodo-open');
  await p.locator('#komodo-open').click();await plain('review-komodo-sweep');
  assert.deepEqual(errors,[]);
- console.log('PASS: shared unboxed glow controls for Create/Restore, Information, private-key/Komodo sweep and review; compact setup tabs; creation approval stays distinct.');
+ console.log('PASS: shared unboxed glow controls for Create/Restore submission, Information, private-key/Komodo sweep and review; compact setup tabs; restore validation preserved.');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -216,6 +216,7 @@ main .receive-card { padding:0; }
 .live-tx small { display: block; color: var(--muted); margin-top: 7px; font-size: 10px; }
 .activity-asset { border: 0; margin-bottom: 2px; }
 .wallet-coin-switch.activity-coin-heading { margin-bottom: 0; }
+#activity-status { position:fixed; z-index:19; right:max(20px,calc(50% - 195px)); bottom:calc(85px + env(safe-area-inset-bottom)); max-width:calc(min(100vw,430px) - 40px); margin:0; padding:2px 0; text-align:right; font-size:11px; line-height:1.5; background:var(--bg); pointer-events:none; }
 .activity-asset > summary { cursor: pointer; list-style: none; }
 .activity-asset > summary::-webkit-details-marker { display: none; }
 .activity-asset[open] > summary .picker-chevron { transform: rotate(225deg); }

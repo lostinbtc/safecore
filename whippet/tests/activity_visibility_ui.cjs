@@ -22,6 +22,21 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  await p.clock.install();await p.clock.pauseAt(new Date(Date.now()+100));await p.goto('http://localhost:8787/#activity');
  await p.locator('#activity-status').waitFor();assert.match(await p.locator('#activity-status').innerText(),/Checking transactions/);
  assert.equal(await p.locator('[data-activity-coin]').count(),0,'Loading does not create empty coin rows');
+ const checkStatusPosition=async()=>{
+  const box=await p.locator('#activity-status').evaluate(el=>{
+   const r=el.getBoundingClientRect(),nav=document.querySelector('.bottom-navigation').getBoundingClientRect(),shell=document.querySelector('.app-shell').getBoundingClientRect(),s=getComputedStyle(el);
+   return {fixed:s.position==='fixed',rightAligned:s.textAlign==='right',rightGap:shell.right-r.right,navGap:nav.top-r.bottom,left:r.left};
+  });
+  assert.equal(box.fixed,true);assert.equal(box.rightAligned,true);
+  assert.ok(Math.abs(box.rightGap-20)<1,'Activity status stays inset from the wallet right edge');
+  assert.ok(box.navGap>=10&&box.navGap<=14,'Activity status stays just above navigation');
+  assert.ok(box.left>=0,'Status text remains inside narrow screens');
+ };
+ for(const width of [320,390,900]){
+  await p.setViewportSize({width,height:844});
+  for(const theme of ['light','dark']){await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);await checkStatusPosition();}
+ }
+ await p.setViewportSize({width:390,height:844});
  await p.evaluate(()=>{__hold=false;__release.forEach(resolve=>resolve());});
  for(let i=0;i<3;i++)await p.clock.runFor(4001);
  const coins=()=>p.locator('[data-activity-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.activityCoin));
@@ -39,6 +54,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
  await p.evaluate(()=>__fail=true);await p.clock.runFor(4001);
  assert.deepEqual(await coins(),['doge','pep','shic'],'A refresh failure does not erase recorded history');
  assert.match(await p.locator('#activity-status').innerText(),/could not be refreshed/);
+ await checkStatusPosition();
  await p.evaluate(()=>{__fail=false;__histories=[];const key='corevault.send-attempts.'+WalletLibrary.id(JSON.parse(localStorage.getItem('whippet.dev.encrypted.v1')));localStorage.removeItem(key);});
  for(let i=0;i<3;i++)await p.clock.runFor(4001);
  assert.deepEqual(await coins(),[]);assert.equal(await p.locator('#activity-status').innerText(),'No transactions yet.');

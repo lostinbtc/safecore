@@ -954,7 +954,7 @@
   const protectionIcon = protectedMode => `<span id="seed-lock" class="seed-lock ${protectedMode ? 'protected' : 'unprotected'}" role="img" aria-label="${protectedMode ? 'Password protected' : 'No password protection'}" title="${protectedMode ? 'Password protected' : 'No password protection'}">${icon(protectedMode ? 'lock' : 'unlock')}</span>`;
   // Navigation and review utilities share one style; final approvals and
   // destructive actions intentionally retain their primary/danger treatment.
-  const glowUtilities=new Set(['security-cta','add-wallet','setup-security','receive-setup','wallet-information','information-back','hide-seed','cancel-setup','review-sweep','review-komodo-sweep']);
+  const glowUtilities=new Set(['security-cta','add-wallet','setup-security','receive-setup','wallet-information','information-back','hide-seed','cancel-setup','submit-setup','review-sweep','review-komodo-sweep']);
   const button = (id, text, kind = '', glyph = '') => {
     if(glowUtilities.has(id))kind=[...new Set([...kind.split(/\s+/).filter(c=>c&&c!=='primary'),'glow-control'])].join(' ');
     return `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
