@@ -38,6 +38,10 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   await p.evaluate(()=>document.documentElement.dataset.theme='dark');
   await p.screenshot({path:'/tmp/safecore-receive-choices.png'});
   await choose('pep');assert.equal(await p.locator('#address').textContent(),accounts.pep.address);
+  assert.equal(await p.locator('[data-coin]').count(),0,'Selected Receive has no other coin touch targets');
+  assert.equal(await p.locator('#receive-selected-name').innerText(),'Pepecoin');
+  await p.locator('#receive-selected-name').click();
+  assert.equal(await p.locator('#address').textContent(),accounts.pep.address,'Selected asset name is not a switch');
   for(const theme of ['dark','light']){
    await p.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
    for(const id of ['copy-address','sweep-open']){
@@ -52,6 +56,8 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await p.locator('#copy-address svg').evaluate(el=>getComputedStyle(el).animationName),'none');
   await p.emulateMedia({reducedMotion:'no-preference'});
   await p.locator('#reuse-first').check();
+  assert.equal(await p.locator('[data-coin]').count(),0,'Address preference changes do not reopen asset picker');
+  await require('./open_receive_picker.cjs')(p);await empty();
   await choose('wht');assert.equal(await p.locator('#address').textContent(),accounts.wht.address);assert.equal(await p.locator('#reuse-first').isChecked(),false);await p.locator('#reuse-first').check();
   await p.locator('[data-nav="wallet"]').click();await p.locator('.holdings').waitFor();assert.equal(await p.locator('.holding-row').count(),13);
   await p.locator('[data-nav="receive"]').click();await empty();await choose('pep');assert.equal(await p.locator('#reuse-first').isChecked(),true);
@@ -60,8 +66,35 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await p.locator('#address').textContent(),accounts.wht.address);
   for(const coin of ['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']){
    await p.locator('[data-nav=wallet]').click();await p.locator(`[data-overview-coin=${coin}]`).click();
+   await p.locator('#asset-receive').click();
    await p.locator('#address').waitFor();assert.equal(await p.locator('#address').textContent(),accounts[coin].address,coin+' receiving address after completed discovery');
+   assert.equal(await p.locator('[data-coin]').count(),0,'Direct Receive is locked to its selected coin');
+   assert.equal(await p.locator('#receive-selected-name').innerText(),E.NETWORKS[coin].name);
+   for(const width of [320,390,430]){
+    await p.setViewportSize({width,height:844});
+    // Measure one DOM snapshot; a live poll may replace Receive between awaits.
+    const [row,label,back]=await p.evaluate(()=>['.receive-selected-coin','.receive-selected-label','#receive-overview'].map(s=>document.querySelector(s).getBoundingClientRect().toJSON()));
+    assert.ok(Math.abs(label.x+label.width/2-row.x-row.width/2)<1,'Selected asset stays centered independently of Overview');
+    assert.ok(back.x===row.x&&back.x+back.width<=label.x,'Overview is left aligned and does not overlap the asset');
+    assert.ok(back.height>=44);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   }
+   await p.setViewportSize({width:390,height:844});
+   const [qr,addressNav,address]=await p.evaluate(()=>['#qr','.address-navigation','#address'].map(s=>document.querySelector(s).getBoundingClientRect().toJSON()));
+   assert.equal(qr.width,176,'QR scanning size is unchanged');
+   assert.ok(addressNav.y>=qr.y+qr.height&&address.y>=addressNav.y+addressNav.height,'QR, full Previous/number/Next row, then address');
+   for(const height of [740,844]){
+    await p.setViewportSize({width:390,height});
+    assert.equal(await p.evaluate(()=>document.documentElement.scrollHeight>innerHeight),false,'Normal Receive fits without scrolling');
+    const [sweep,nav]=await p.evaluate(()=>['#sweep-open','.bottom-navigation'].map(s=>document.querySelector(s).getBoundingClientRect().toJSON()));
+    assert.ok(sweep.y+sweep.height<=nav.y,'Sweep control clears navigation');
+   }
+   await p.setViewportSize({width:390,height:420});
+   assert.equal(await p.evaluate(()=>document.documentElement.scrollHeight>innerHeight),true,'Short screens retain necessary scrolling');
+   await p.setViewportSize({width:390,height:844});
+   if(coin==='bel')await p.screenshot({path:'/tmp/safecore-receive-compact.png'});
    assert.equal(await p.locator('.page-head').innerText(),'Receive');
+   await p.locator('#receive-overview').click();await p.locator('.holdings').waitFor();
+   assert.equal(await p.locator('#address').count(),0,'Overview leaves the selected Receive screen');
   }
   await p.locator('[data-nav=send]').click();await p.locator('#send-coin').waitFor();assert.equal(await p.locator('.page-head').innerText(),'Send');
   await p.locator('[data-nav=receive]').click();await empty();

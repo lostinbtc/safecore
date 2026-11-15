@@ -29,6 +29,9 @@
   // Keep the total, each holding and unit price on the same USDT conversion.
   function valueInUsdt(coin,amount,pepUsd,usdtUsd,shicUsd=null,ltcUsd=null,dogeUsd=null,btcUsd=null,belUsd=null,dingoUsd=null,extraUsd={}){
     const usd=coin==='pep'?pepUsd:coin==='shic'?shicUsd:coin==='ltc'?ltcUsd:coin==='doge'?dogeUsd:coin==='btc'?btcUsd:coin==='bel'?belUsd:coin==='dingo'?dingoUsd:extraUsd[coin]??null;
+    return convertValue(amount,usd,usdtUsd);
+  }
+  function convertValue(amount,usd,usdtUsd){
     if(!Number.isFinite(usd)||usd<=0||!Number.isFinite(usdtUsd)||usdtUsd<=0)return null;
     const value=Number(amount)/1e8*usd/usdtUsd;
     if(amount>0n&&value===0)return Number.MIN_VALUE; // Display-only underflow: positive is not zero.
@@ -72,6 +75,34 @@
   const ltcQuote=(data,now=Date.now())=>marketQuote(data,'litecoin',now);
   const dogeQuote=(data,now=Date.now())=>marketQuote(data,'dogecoin',now);
   const freshShic=(quote,now=Date.now())=>!!quote&&now-quote.at<300000&&now-quote.updated<=600000&&quote.updated<=now+30000;
+  // Historical display only. Never pass saved display quotes to fee checks.
+  function displayQuote(quote,now=Date.now()){
+    if(!quote||!Number.isFinite(quote.value)||quote.value<=0
+      ||!Number.isSafeInteger(quote.at)||!Number.isSafeInteger(quote.updated)
+      ||quote.at<=0||quote.updated<=0||quote.at>now||quote.updated>now+30000)return {value:null,stale:false};
+    return {value:quote.value,stale:!freshShic(quote,now)};
+  }
+  function formatPriceAge(quote,now=Date.now()){
+    if(displayQuote(quote,now).value===null)return '';
+    const seconds=Math.max(0,Math.floor((now-Math.min(quote.at,quote.updated))/1000));
+    for(const [size,unit]of [[31536000,'year'],[2592000,'month'],[86400,'day'],[3600,'hour'],[60,'minute']]){
+      const count=Math.floor(seconds/size);
+      if(count)return `${count} ${unit}${count===1?'':'s'} ago`;
+    }
+    return 'less than a minute ago';
+  }
+  function readDisplayPrices(raw,now=Date.now()){
+    try{
+      if(typeof raw!=='string'||raw.length>16384)return {};
+      const saved=JSON.parse(raw),quotes={};
+      if(saved?.version!==1||!saved.quotes||typeof saved.quotes!=='object'||Array.isArray(saved.quotes))return {};
+      for(const coin of ['usdt','pep','shic','ltc','doge','btc','bel','dingo','bch','dash','dgb','jkc','lky','rvn','cat','trmp']){
+        const q=saved.quotes[coin];
+        if(displayQuote(q,now).value!==null)quotes[coin]={value:q.value,at:q.at,updated:q.updated};
+      }
+      return quotes;
+    }catch(_){return {};}
+  }
   const btcQuote=(data,now=Date.now())=>marketQuote(data,'bitcoin',now);
   const belQuote=(data,now=Date.now())=>marketQuote(data,'bellscoin',now);
   const dingoQuote=(data,now=Date.now())=>marketQuote(data,'dingocoin',now);
@@ -91,5 +122,5 @@
     return {cents,display:numerator>0n&&numerator*100n<denominator?'<$0.01 USD':`$${cents/100n}.${String(cents%100n).padStart(2,'0')} USD`,
       warning:numerator>5n*denominator,blocked:numerator>100n*denominator};
   }
-  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,formatWorth,formatUnitPrice,shicQuote,ltcQuote,dogeQuote,btcQuote,belQuote,dingoQuote,marketQuote,freshShic,feeUsd};
+  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,convertValue,formatWorth,formatUnitPrice,shicQuote,ltcQuote,dogeQuote,btcQuote,belQuote,dingoQuote,marketQuote,freshShic,displayQuote,formatPriceAge,readDisplayPrices,feeUsd};
 });

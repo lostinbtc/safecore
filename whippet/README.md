@@ -372,7 +372,7 @@ and 1,000 litoshis/kB, calculated proportionally by byte, with a
 minimum is 5,460 litoshis; small change handling remains explicit. LTC does not
 use the other coins' 0.01 flat fee. Sweeps retain the 25% fee cushion and absolute
 LTC fee cap. Missing or invalid estimates block sends/sweeps without hiding balances.
-Price estimates use CoinGecko's `litecoin` ID in the same five-minute
+Price estimates use CoinGecko's `litecoin` ID in the same four-minute
 public request as SHIC, with per-asset validation and expiry. No wallet data is sent.
 The offline tool supports LTC JSON/WIF/TXT/CSV without network requests.
 
@@ -437,12 +437,15 @@ Ordinary small sends default to 0.01 SHIC. The optional 1 SHIC total-fee checkbo
 supports larger input sets within the documented bounds; it starts off and does
 not change sweep fees. Legacy Komodo recovery is opt-in for PEP and SHIC only.
 
-SHIC USD estimates come from CoinGecko's `shibacoin` ID, no more than once per
-five minutes while the wallet is unlocked/foregrounded. The request contains no
+SHIC USD estimates come from CoinGecko's `shibacoin` ID, normally once per
+four minutes while the wallet is unlocked/foregrounded, with one-minute retries
+after failed requests. The request contains no
 wallet address, balance, seed or credentials. CoinGecko sees the client's IP.
 Missing, malformed, future-dated or more-than-ten-minute-old provider quotes are
-rejected; fetched quotes expire after five minutes. HTTP failures/rate limits
-leave balances and spending unaffected. USDT conversion uses the same Kraken
+rejected; fetched quotes expire for fee checks after five minutes. HTTP failures
+and rate limits leave coin balances unaffected. Saved display prices remain
+visible with a persistent last-known age once stale; stale fee quotes require
+the explicit per-review acknowledgment. USDT conversion uses the same Kraken
 USD/USDT quote as PEP; no 1:1 USD/USDT assumption is made.
 Native HTTP access remains restricted to the exact public quote requests;
 remote scripts remain blocked. SHIC support is included in test.18; earlier APKs remain unchanged.
@@ -529,11 +532,13 @@ An independent security audit has not been completed.
 ## Receiving and address discovery
 
 Receive starts with no asset selected. Choose a coin before an address, QR code,
-copy button or previous/next navigation appears. Only enabled, implemented coins
+copy button or previous/next navigation appears. Once selected, only that coin
+is shown; return to Overview before choosing another. Only enabled, implemented coins
 can receive, including coins with zero balance. This choice is independent of
 Overview and Send and resets when leaving Receive; address-pin preferences do not.
-Tapping a supported coin row on Overview explicitly chooses that coin and opens
-its Receive screen. The bottom Receive tab still starts without a selection.
+Tapping a supported coin row on Overview opens its asset screen, with a larger
+icon, centered balance and estimated value. Receive and Send on that screen
+explicitly choose that coin. The bottom Receive tab still starts without a selection.
 
 An address becomes used when history is detected, not when displayed or copied.
 Receiving advances to the next unused address after a payment is observed.
@@ -652,7 +657,18 @@ USDT account. Zero balances are excluded. Positive unpriced holdings make the
 estimate incomplete (`*`), not worth zero. Whippet currently has no price feed.
 
 Overview requests Kraken prices at most once per minute and the combined
-CoinGecko quote at most once per five minutes. Quotes expire after five minutes.
+CoinGecko quote normally once per four minutes, before its five-minute freshness
+deadline. Failed requests retry at most once per minute. Valid PEP and USDT
+quotes are retained independently, so a missing field cannot erase every price.
+After five minutes without a fresh quote (or when its provider timestamp is too
+old), the overview shows **Last known · 7 minutes ago**, advancing through hours,
+days, months and years. The displayed age uses the older of the coin price and
+USDT conversion timestamps. The wallet total uses its oldest contributing price.
+Original public values and timestamps are saved locally and survive restarts;
+failed refreshes never renew them. No wallet identifiers are saved with prices.
+This display cache is untrusted and is never loaded into live transaction-fee
+quotes. Without any saved quote, the price remains unavailable; USD is never
+silently substituted for USDT. Quotes still expire for fee checks after five minutes.
 Fee review can request a missing/expired configured USD quote sooner, with at
 least ten seconds between attempts and an eight-second request timeout. A missing
 quote never changes the actual coin balance; sending without one requires the

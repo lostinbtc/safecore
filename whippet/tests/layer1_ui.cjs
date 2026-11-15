@@ -39,7 +39,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  assert.deepEqual(await page.locator('[data-overview-coin]').evaluateAll(rows=>rows.map(r=>r.dataset.overviewCoin)),order);
  for(const coin of coins){
   assert.ok(await page.locator(`[data-overview-coin=${coin}] img`).evaluate(i=>i.complete&&i.naturalWidth>0));
-  await page.locator(`[data-overview-coin=${coin}]`).click();await page.locator('#address').waitFor();
+  await page.locator(`[data-overview-coin=${coin}]`).click();await page.locator('#asset-receive').click();await page.locator('#address').waitFor();
   assert.equal(await page.locator('#address').innerText(),recipients[coin].address);
   assert.equal(await page.locator('#komodo-open').count(),0);
   await page.locator('[data-nav=send]').click();

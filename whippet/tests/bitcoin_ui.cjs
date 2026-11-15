@@ -24,7 +24,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.clock.install();await p.clock.pauseAt(new Date(Date.now()+100));await p.goto('http://localhost:8787/');
  await p.waitForFunction(()=>document.getElementById('wallet-worth').innerText==='≈ 100.00 USDT');
  const row=p.locator('[data-overview-coin=btc]');assert.equal(await row.locator('img').evaluate(i=>i.complete&&i.naturalWidth>0),true);
- await row.click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).btc.address);
+ await row.click();await p.locator('#asset-receive').click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).btc.address);
  await p.locator('[data-nav=security]').click();await p.locator('#komodo-recovery-enabled').check();
  await p.locator('[data-nav=receive]').click();await p.locator('[data-coin=btc]').click();await p.locator('#sweep-open').waitFor();assert.equal(await p.locator('#komodo-open').count(),0);
  await p.evaluate(()=>location.hash='#komodo-sweep');await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-phrase').count(),0,'BTC direct Komodo route stays blocked');
@@ -35,8 +35,10 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.locator('#review-send').click();await p.locator('#broadcast-send').waitFor();
  assert.match(await p.locator('.send-review').innerText(),/0\.99998733/);assert.match(await p.locator('.send-review').innerText(),/0\.00001267/);
  await p.locator('[data-nav=wallet]').click();await p.evaluate(()=>__stale=true);await p.clock.runFor(305000);
- assert.equal(await row.locator('.holding-values > small').innerText(),'*');assert.equal(await row.locator('.holding-balance').innerText(),'1 BTC');
- await p.evaluate(()=>{__stale=false;__offline=true;});await p.clock.runFor(305000);assert.equal(await row.locator('.holding-values > small').innerText(),'*');
+ assert.equal(await row.locator('.holding-values > small').innerText(),'100.00 USDT');assert.equal(await row.locator('.holding-balance').innerText(),'1 BTC');
+ assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known · 5 minutes ago/);
+ await p.evaluate(()=>{__stale=false;__offline=true;});await p.clock.runFor(305000);assert.equal(await row.locator('.holding-values > small').innerText(),'100.00 USDT');
+ assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known · 10 minutes ago/);
  await p.locator('[data-nav=security]').click();await p.locator('#custom-connections > summary').click();assert.equal(await p.locator('#endpoint-btc').inputValue(),'');
  assert.doesNotMatch(await p.locator('#custom-connections').innerText(),/cipig/);assert.deepEqual(errors,[]);
  console.log('PASS: BTC old backup, logo/receive, price/USDT/staleness, SegWit destination, Max fee-inclusive review, hidden default and no broadcast.');

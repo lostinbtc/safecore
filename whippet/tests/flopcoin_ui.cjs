@@ -53,7 +53,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await endpoint.fill('wss://changed.fixture/');assert.equal(await use.isDisabled(),true);
  await endpoint.fill('wss://flop.fixture/');await test.click();await p.waitForFunction(()=>!document.querySelector('[data-use-connection=flop]').disabled);await use.click();
  await p.locator('[data-nav=wallet]').click();await p.waitForFunction(()=>document.querySelector('[data-overview-coin=flop] .holding-balance')?.textContent==='10 FLOP');
- await p.locator('[data-overview-coin=flop]').click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).flop.address,'Used address advances to the first unused address');
+ await p.locator('[data-overview-coin=flop]').click();await p.locator('#asset-receive').click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).flop.address,'Used address advances to the first unused address');
  assert.equal(await p.locator('#komodo-open').count(),0);
  await p.locator('[data-nav=send]').click();await p.locator('[data-send-coin=flop]').click();await p.locator('#send-max:not([disabled])').waitFor();
  await p.locator('#send-address').fill(E.accounts(ethers,recipe,1).flop.address);await p.locator('#send-max').click();

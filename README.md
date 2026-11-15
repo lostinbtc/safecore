@@ -22,6 +22,9 @@ behind this source.
 3. Keep a separate recovery backup. A local recovery copy does not protect
    against losing or resetting your device.
 
+Tap a coin on Overview for its larger icon, centered balance and estimated value,
+with direct Receive and Send controls. Hide balances also masks this screen.
+
 [Wallet guide](whippet/README.md) · [Offline recovery](recovery/README.md) ·
 [Security](SECURITY.md) · [Self-hosting](docs/SELF_HOSTING.md)
 
@@ -35,6 +38,10 @@ Open `http://localhost:8787`. Use a disposable wallet for testing.
 Password-free browser wallets are not encrypted; browser storage is not a backup.
 
 Balance notifications and four-second fallback polling remain active while the wallet is open. Unchanged balances do not rebuild the overview; changed balances retain the existing fresh-observation safety check.
+
+Prices refresh before expiry. After five minutes without a fresh quote, saved
+display prices show **Last known** with an age in minutes, hours, days or months.
+The age survives app restarts; these historical values never authorize fee checks.
 
 ## Sending and fees
 

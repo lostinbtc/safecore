@@ -13,6 +13,7 @@ const assert=require('node:assert/strict'),{chromium}=require('./browser-helper.
     localStorage.setItem('corevault.hidden-coins.v2.fixture','[]');
     localStorage.setItem('corevault.connections.v1',JSON.stringify({pep:'wss://fixture.example/'}));
     localStorage.setItem('corevault.hide-balances.v1','true');
+    localStorage.setItem('corevault.display-prices.v1',JSON.stringify({version:1,quotes:{btc:{value:100,at:Date.now(),updated:Date.now()}}}));
   });
   await page.goto('http://localhost:8787/#reset-tests');
   await page.locator('#reset-tests-confirm').click();await page.locator('#error').waitFor({state:'visible'});

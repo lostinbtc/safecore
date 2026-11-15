@@ -146,6 +146,9 @@
     } catch (_) { hiddenCoins = [...assetOrder]; }
   }
   const visibleCoins = () => Object.keys(COINS).filter(coin => catalogEnabled(coin) && !hiddenCoins.includes(coin));
+  const assetRoute=()=>location.hash.startsWith('#asset/');
+  const selectedAsset=()=>{const coin=location.hash.slice(7);return assetRoute()&&Object.hasOwn(COINS,coin)&&visibleCoins().includes(coin)?coin:null;};
+  const priceScreen=()=>['','#wallet'].includes(location.hash)||assetRoute();
   const icons = {
     wallet: '<rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 8h15M17 12h4v5h-4a2.5 2.5 0 0 1 0-5Z"/>',
     receive: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
@@ -166,6 +169,7 @@
   const coinImage = coin => coin==='bch'?'assets/bitcoincash.svg':`assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin',bel:'bellscoin',bonc:'bonkcoin',dingo:'dingocoin',bch:'bitcoincash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow',flop:'flopcoin'})[coin]}.png`;
   const coinMark = coin => `<img src="${coinImage(coin)}" alt="">`;
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
+  let assetSendSelection=null;
   let receiveBooks = null, addingWallet = false, revealed = false;
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
   let rescanning=false,sweepState=null;
@@ -195,42 +199,66 @@
   const reported=coin=>reports[coin]?.value;
   const EXTRA_PRICE_IDS=Object.freeze({bch:'bitcoin-cash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow'});
   const extraQuotes={};
-  let pepPrice=null,priceAttempt=0,priceBusy=false;
-  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,belPrice=null,dingoPrice=null,shicPriceAttempt=0,shicPriceBusy=false;
-  const priceFresh=()=>pepPrice&&Date.now()-pepPrice.at<300000;
+  let pepPrice=null,usdtPrice=null,priceAttempt=0,priceBusy=false;
+  let shicPrice=null,ltcPrice=null,dogePrice=null,btcPrice=null,belPrice=null,dingoPrice=null,shicPriceAttempt=0,shicPriceBusy=false,shicPriceRetry=240000;
+  const DISPLAY_PRICE_STORE='corevault.display-prices.v1';
+  let displayPrices={},displayPricesSaved='',priceEpoch=0;
+  try{displayPricesSaved=localStorage.getItem(DISPLAY_PRICE_STORE)||'';displayPrices=WalletReporting.readDisplayPrices(displayPricesSaved);}catch(_){}
+  function rememberDisplayPrices(){
+    // Public prices only, no wallet identifiers. Never hydrate live fee quotes
+    // from this untrusted display cache, even if its timestamps appear fresh.
+    for(const [coin,q]of Object.entries({pep:pepPrice,usdt:usdtPrice,shic:shicPrice,ltc:ltcPrice,doge:dogePrice,btc:btcPrice,bel:belPrice,dingo:dingoPrice,...extraQuotes})){
+      if(q&&WalletReporting.displayQuote(q).value!==null)displayPrices[coin]={value:q.value,at:q.at,updated:q.updated};
+    }
+    const saved=JSON.stringify({version:1,quotes:displayPrices});
+    if(saved!==displayPricesSaved)try{localStorage.setItem(DISPLAY_PRICE_STORE,saved);displayPricesSaved=saved;}catch(_){}
+  }
   async function refreshShicPrice(forFee=false){
-    if(shicPriceBusy||Date.now()-shicPriceAttempt<(forFee?10000:300000))return;
+    if(shicPriceBusy||Date.now()-shicPriceAttempt<(forFee?10000:shicPriceRetry))return;
     shicPriceBusy=true;shicPriceAttempt=Date.now();
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    // Refresh before the five-minute freshness deadline; retry failed requests
+    // once per minute, independently of the four-second balance polling.
+    shicPriceRetry=60000;
+    const epoch=priceEpoch,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
       const response=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=shibacoin,litecoin,dogecoin,bitcoin,bellscoin,dingocoin,bitcoin-cash,dash,digibyte,junkcoin,luckycoin,ravencoin,catcoin,trumpow&vs_currencies=usd&include_last_updated_at=true',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('SHIC price unavailable');
       const quotes=await response.json();
+      if(epoch!==priceEpoch)return;
+      let accepted=false;
+      const readQuote=id=>{const quote=WalletReporting.marketQuote(quotes,id);accepted=true;return quote;};
       // A missing field must not erase a still-fresh known quote and expose a
       // dollar-limit override. Retain it until the normal freshness deadline.
-      for(const [coin,id] of Object.entries(EXTRA_PRICE_IDS)){try{extraQuotes[coin]=WalletReporting.marketQuote(quotes,id);}catch(_){}}
-      try{shicPrice=WalletReporting.shicQuote(quotes);}catch(_){}
-      try{ltcPrice=WalletReporting.ltcQuote(quotes);}catch(_){}
-      try{dogePrice=WalletReporting.dogeQuote(quotes);}catch(_){}
-      try{btcPrice=WalletReporting.btcQuote(quotes);}catch(_){}
-      try{belPrice=WalletReporting.belQuote(quotes);}catch(_){}
-      try{dingoPrice=WalletReporting.dingoQuote(quotes);}catch(_){}
+      for(const [coin,id] of Object.entries(EXTRA_PRICE_IDS)){try{extraQuotes[coin]=readQuote(id);}catch(_){}}
+      try{shicPrice=readQuote('shibacoin');}catch(_){}
+      try{ltcPrice=readQuote('litecoin');}catch(_){}
+      try{dogePrice=readQuote('dogecoin');}catch(_){}
+      try{btcPrice=readQuote('bitcoin');}catch(_){}
+      try{belPrice=readQuote('bellscoin');}catch(_){}
+      try{dingoPrice=readQuote('dingocoin');}catch(_){}
+      if(accepted){shicPriceRetry=240000;rememberDisplayPrices();}
     }catch(_){/* Keep prior quotes; missing/stale prices require a per-review acknowledgment. */}
-    finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
+    finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&priceScreen())render();}
   }
   async function refreshPrice(forFee=false){
     if(!riskAccepted()||priceBusy||Date.now()-priceAttempt<(forFee?10000:60000)||mode!=='unlocked'||document.hidden)return;
     priceBusy=true;priceAttempt=Date.now();
     void refreshShicPrice();
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    const epoch=priceEpoch,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{
       const response=await fetch('https://api.kraken.com/0/public/Ticker?pair=PEPUSD,USDTUSD',{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok)throw Error('Price unavailable');
       const data=await response.json(),value=Number(data.result?.PEPUSD?.c?.[0]),usdt=Number(data.result?.USDTZUSD?.c?.[0]);
-      if(!Array.isArray(data.error)||data.error.length||!Number.isFinite(value)||value<=0)throw Error('Invalid price');
-      pepPrice={value,usdt:Number.isFinite(usdt)&&usdt>0?usdt:null,at:Date.now()};
+      if(epoch!==priceEpoch)return;
+      if(!Array.isArray(data.error)||data.error.length)throw Error('Invalid price');
+      const at=Date.now();
+      // PEP and USDT must age independently. A missing field must not erase or
+      // renew the other quote, nor make a stale quote acceptable for fee checks.
+      if(Number.isFinite(value)&&value>0)pepPrice={value,at,updated:at};
+      if(Number.isFinite(usdt)&&usdt>0)usdtPrice={value:usdt,at,updated:at};
+      if(Number.isFinite(value)&&value>0||Number.isFinite(usdt)&&usdt>0)rememberDisplayPrices();
     }catch(_){/* Keep the last quote; fee checks reject stale prices unless explicitly acknowledged. */}
-    finally{clearTimeout(timer);priceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
+    finally{clearTimeout(timer);priceBusy=false;if(!document.hidden&&priceScreen())render();}
   }
   let mode = 'demo', generation = 0, idleTimer = null, toastTimer = null;
   let stagedFile = null, setupType = 'create', busy = false;
@@ -243,6 +271,7 @@
   loadCoinPrefs();
   function prepareAddresses(candidate, vault) {
     activityPages = {};
+    assetSendSelection=null;
     sendCoin = null; receiveCoin = null;
     clearReports();
     clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
@@ -300,6 +329,7 @@
   }
   function lock(message, reopen = true) {
     activityPages = {};
+    assetSendSelection=null;
     cancelConnectionTests();
     exportSelection=null;
     clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
@@ -329,13 +359,14 @@
   function refreshBalanceViews(coin){
     if(balanceViewQueued)return;
     const epoch=networkEpoch,source=envelope,route=location.hash;
-    if(!['','#wallet','#activity','#send'].includes(route)&&!(coin===receiveCoin&&route==='#receive'))return;
+    if(!['','#wallet','#activity','#send'].includes(route)&&!assetRoute()&&!(coin===receiveCoin&&route==='#receive'))return;
     balanceViewQueued=true;
     queueMicrotask(()=>{
       balanceViewQueued=false;
       if(epoch!==networkEpoch||source!==envelope||route!==location.hash||mode!=='unlocked'||document.hidden)return;
       // A balance notification must not rebuild the header or trigger more scans.
       if(['','#wallet'].includes(route))overview();
+      else if(assetRoute())assetDetail();
       else if(route==='#send')updateSendPicker();
       else render();
     });
@@ -921,12 +952,18 @@
   }
   const title = (name, description, action = '') => `<div class="page-head"><div><p class="eyebrow">SAFECORE · MULTI-COIN</p><h1>${name}</h1><p class="subtle">${description}</p></div>${action}</div>`;
   const protectionIcon = protectedMode => `<span id="seed-lock" class="seed-lock ${protectedMode ? 'protected' : 'unprotected'}" role="img" aria-label="${protectedMode ? 'Password protected' : 'No password protection'}" title="${protectedMode ? 'Password protected' : 'No password protection'}">${icon(protectedMode ? 'lock' : 'unlock')}</span>`;
-  const button = (id, text, kind = '', glyph = '') => `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
+  // Navigation and review utilities share one style; final approvals and
+  // destructive actions intentionally retain their primary/danger treatment.
+  const glowUtilities=new Set(['security-cta','add-wallet','setup-security','receive-setup','wallet-information','information-back','hide-seed','cancel-setup','submit-setup','review-sweep','review-komodo-sweep']);
+  const button = (id, text, kind = '', glyph = '') => {
+    if(glowUtilities.has(id))kind=[...new Set([...kind.split(/\s+/).filter(c=>c&&c!=='primary'),'glow-control'])].join(' ');
+    return `<button id="${id}" class="${kind}"><span class="button-content">${glyph ? icon(glyph) : ''}${text}</span></button>`;
+  };
   const recoveryNotice = '<div class="notice">Your recovery phrase controls your funds. Keep a backup somewhere safe and never share it.</div>';
   function bindCoins() {
     document.querySelectorAll('[data-coin]').forEach(el => el.addEventListener('click', () => {
       receiveCoin = el.dataset.coin; render();
-      document.querySelector(`[data-coin="${receiveCoin}"]`)?.focus({preventScroll:true});
+      $('receive-selected-name')?.focus({preventScroll:true});window.scrollTo(0,0);
     }));
   }
   function activityRows(coinFilter = null) {
@@ -934,7 +971,7 @@
       const coins = (coinFilter ? [coinFilter] : assetOrder).filter(liveCoin);
       let attempts;
       try { attempts = sendAttempts(); } catch (e) { return `<p class="notice">${escape(e.message)}</p>`; }
-      return coins.map(coin => {
+      const listings=coins.map(coin => {
         const snap = snapshots[coin];
         // Reconcile saved sends against all history; paginate only the display.
         const history = snap ? [...new Map(snap.rows.flatMap(r=>r.history).map(h=>[h.tx_hash,h])).values()].sort((a,b)=>(b.height>0?b.height:Infinity)-(a.height>0?a.height:Infinity)) : [];
@@ -943,11 +980,14 @@
         activityPages[coin]=page;
         const txLink=hash=>EXPLORERS[coin]&&/^[0-9a-f]{64}$/i.test(hash)?`<a href="${EXPLORERS[coin]}${hash.toLowerCase()}${coin==='pep'?'/':''}" target="${window.SafeCorePlatform?'_self':'_blank'}" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="View ${escape(E.NETWORKS[coin].name)} transaction ${hash}"><code>${hash}</code></a>`:`<code>${escape(hash)}</code>`;
         const outstanding=attempts.filter(a=>a.coin===coin&&!seen.has(a.txid));
+        if(!history.length&&!outstanding.length)return '';
         const recorded = outstanding.map(a=>`<div class="live-tx">${txLink(a.txid)}<small>${a.status==='unknown' ? 'Submission uncertain — do not resend until checked.' : 'Submitted — awaiting appearance in server history.'}</small></div>`).join('');
         const rows=snap ? (history.slice((page-1)*10,page*10).map(h=>`<div class="live-tx">${txLink(h.tx_hash)}<small>${h.height>0 ? `${Math.max(0,snap.tip-h.height+1)} confirmations` : 'Pending'}</small></div>`).join('') || (!outstanding.length?'<p class="subtle">No transactions yet.</p>':'')) : `<p class="subtle">${networkErrors[coin] ? 'Unable to refresh. Try again shortly.' : 'Checking transactions…'}</p>`;
         const pager=pages>1?`<form class="activity-pager" data-page-coin="${coin}" aria-label="${E.NETWORKS[coin].name} history pages"><button type="button" data-page-step="-1" ${page===1?'disabled':''}>Previous</button><div class="activity-page-jump"><label>Page <input type="number" inputmode="numeric" min="1" max="${pages}" step="1" value="${page}" required aria-label="${E.NETWORKS[coin].name} history page"></label><span class="activity-page-total">of ${pages}</span><button type="submit">Go</button></div><button type="button" data-page-step="1" ${page===pages?'disabled':''}>Next</button></form>`:'';
         return `<details class="activity-asset" data-activity-coin="${coin}"><summary class="coin-picker">${coinMark(coin)}<span>${E.NETWORKS[coin].name}<small>${E.NETWORKS[coin].ticker}</small></span><span class="picker-chevron" aria-hidden="true"></span></summary><div class="activity-outstanding" ${recorded?'':'hidden'}>${recorded}</div><div class="activity-list" role="region" aria-label="${E.NETWORKS[coin].name} transaction history">${snap&&!fresh(coin)?`<p class="subtle">Last updated ${escape(new Date(snap.at).toLocaleString())}</p>`:''}${rows}</div>${pager}</details>`;
       }).join('');
+      const status=mode==='locked'?'Unlock your wallet to refresh transaction history.':connectionProblem||coins.some(coin=>networkErrors[coin])?'Some transaction history could not be refreshed. Try again shortly.':coins.some(coin=>!fresh(coin))?'Checking transactions…':!listings?'No transactions yet.':'';
+      return listings+`<p id="activity-status" class="subtle" role="status" ${status?'':'hidden'}>${escape(status)}</p>`;
     }
     return `<div class="empty">${icon('activity')}<br>Your transactions will appear here.</div>`;
   }
@@ -976,27 +1016,29 @@
       $('main').innerHTML = '<p id="coin-empty" class="subtle">No coins shown. Use Add coins above to choose assets.</p>' + (mode === 'demo' ? '<a id="security-cta" href="#setup" class="text-button">Create or restore a wallet →</a>' : '');
       return;
     }
-    const pepUsd=priceFresh()?pepPrice.value:null,usdtUsd=priceFresh()?pepPrice.usdt:null;
-    const shicUsd=WalletReporting.freshShic(shicPrice)?shicPrice.value:null;
-    const ltcUsd=WalletReporting.freshShic(ltcPrice)?ltcPrice.value:null;
-    const dogeUsd=WalletReporting.freshShic(dogePrice)?dogePrice.value:null;
-    const btcUsd=WalletReporting.freshShic(btcPrice)?btcPrice.value:null;
-    const belUsd=WalletReporting.freshShic(belPrice)?belPrice.value:null;
-    const dingoUsd=WalletReporting.freshShic(dingoPrice)?dingoPrice.value:null;
-    const extraUsd=Object.fromEntries(Object.keys(EXTRA_PRICE_IDS).map(coin=>[coin,WalletReporting.freshShic(extraQuotes[coin])?extraQuotes[coin].value:null]));
+    const now=Date.now(),conversion=WalletReporting.displayQuote(displayPrices.usdt,now);
+    const displayed=Object.fromEntries(assetOrder.map(coin=>[coin,WalletReporting.displayQuote(displayPrices[coin],now)]));
+    const pepUsd=displayed.pep.value,usdtUsd=conversion.value;
+    const shicUsd=displayed.shic.value,ltcUsd=displayed.ltc.value,dogeUsd=displayed.doge.value;
+    const btcUsd=displayed.btc.value,belUsd=displayed.bel.value,dingoUsd=displayed.dingo.value;
+    const extraUsd=Object.fromEntries(Object.keys(EXTRA_PRICE_IDS).map(coin=>[coin,displayed[coin]?.value??null]));
+    const lastKnown=coin=>usdtUsd!==null&&displayed[coin]?.value!=null&&(conversion.stale||displayed[coin].stale);
+    const oldestPrice=coin=>[displayPrices[coin],displayPrices.usdt].reduce((a,b)=>Math.min(a.at,a.updated)<=Math.min(b.at,b.updated)?a:b);
     const valuation=WalletReporting.worth(Object.fromEntries(assetOrder.filter(liveCoin).map(c=>[c,reported(c)])),pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd);
     const worth=WalletReporting.formatWorth(valuation.value);
     const hidden=balancesHidden();
-    const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div></section></div>`;
+    const stalePrices=assetOrder.filter(liveCoin).filter(coin=>{const s=reported(coin);return s&&s.confirmed+s.unconfirmed>0n&&lastKnown(coin);}).map(oldestPrice);
+    const oldest=stalePrices.sort((a,b)=>Math.min(a.at,a.updated)-Math.min(b.at,b.updated))[0];
+    const heading = `<div class="page-head home-heading"><section class="wallet-worth" aria-label="Estimated wallet value"><small>Wallet value</small><div id="wallet-worth">${hidden?hiddenBalance:(valuation.value!==null?'≈ ':'')+escape(worth)} <span>USDT${valuation.incomplete&&valuation.value!==null?'*':''}</span></div>${oldest&&!hidden?`<small id="wallet-price-status">Last known · ${WalletReporting.formatPriceAge(oldest,now)}</small>`:''}</section></div>`;
     const rescanControl=mode==='unlocked'?`<div class="overview-actions"><button id="rescan" class="overview-rescan glow-control" ${rescanning?'disabled':''}>${rescanning?'Rescanning…':'Rescan'}</button></div>`:'';
     const holdings=`<section class="holdings" aria-label="Coin balances"><h2>Your coins</h2>${visible.map(coin=>{
       const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null;
       const unitPrice=WalletReporting.valueInUsdt(coin,100000000n,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd);
-      const price=unitPrice!==null?WalletReporting.formatUnitPrice(unitPrice)+' USDT':'*';
+      const price=unitPrice!==null?WalletReporting.formatUnitPrice(unitPrice)+' USDT'+(lastKnown(coin)?` · Last known · ${WalletReporting.formatPriceAge(oldestPrice(coin),now)}`:''):'*';
       const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
       const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
-      return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${!liveCoin(coin)?n.name+' connection required':'Receive '+n.name}" ${!liveCoin(coin)?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
+      return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${!liveCoin(coin)?n.name+' connection required':'View '+n.name}" ${!liveCoin(coin)?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
     }).join('')}<p class="subtle holdings-note">* Price not available</p></section>`;
     const full=assetOrder.filter(liveCoin).filter(c=>receiveBooks?.[c]?.view().exhausted);
     patchOverview(heading + full.map(c=>`<p class="notice">${E.NETWORKS[c].ticker} wallet addresses are full (200 used). Existing addresses still receive funds. Create another wallet for new addresses.</p>`).join('') + holdings + rescanControl + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : ''));
@@ -1007,9 +1049,31 @@
     };
     document.querySelectorAll('[data-overview-coin]').forEach(el=>el.onclick=()=>{
       if(!E.NETWORKS[el.dataset.overviewCoin]||!liveCoin(el.dataset.overviewCoin))return;
-      receiveCoin=el.dataset.overviewCoin;go('receive');
+      go('asset/'+el.dataset.overviewCoin);
     });
     if ($('security-cta')) $('security-cta').onclick = () => go('setup');
+  }
+  function assetDetail(){
+    const coin=selectedAsset();
+    if(!coin){history.replaceState(null,'','#wallet');render();return;}
+    const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null,hidden=balancesHidden();
+    const now=Date.now(),q=WalletReporting.displayQuote(displayPrices[coin],now),conversion=WalletReporting.displayQuote(displayPrices.usdt,now);
+    const value=total===null?null:WalletReporting.convertValue(total,q.value,conversion.value);
+    const stale=value!==null&&(q.stale||conversion.stale);
+    const older=stale?[displayPrices[coin],displayPrices.usdt].sort((a,b)=>Math.min(a.at,a.updated)-Math.min(b.at,b.updated))[0]:null;
+    const ready=mode==='unlocked'&&liveCoin(coin)&&!connectionProblem;
+    const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':mode!=='unlocked'?'Unlock your wallet to refresh.':networkErrors[coin]?'Unable to refresh balance. Showing the last available balance.':!s?'Checking balance…':s.unconfirmed?hidden?'Pending transaction':`${T.formatDisplay(s.unconfirmed)} ${n.ticker} pending`:'';
+    patchOverview(`<div class="asset-detail" data-asset="${coin}"><a id="asset-back" href="#wallet" class="text-button">← Overview</a>
+      <div class="asset-focus"><section class="asset-summary" aria-labelledby="asset-name">${coinMark(coin)}<h1 id="asset-name">${escape(n.name)}</h1>
+      <div id="asset-balance" class="asset-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'—'}</div>
+      <div id="asset-worth" class="asset-worth">${hidden?hiddenBalance:value!==null?'≈ '+WalletReporting.formatWorth(value)+' USDT':'Price unavailable'}</div>
+      <p id="asset-price-age" class="subtle" ${stale&&!hidden?'':'hidden'}>${stale&&!hidden?'Last known · '+WalletReporting.formatPriceAge(older,now):''}</p>
+      <p id="asset-status" class="subtle" ${status?'':'hidden'}>${escape(status)}</p></section>
+      <div class="asset-actions">${button('asset-receive','Receive','glow-control', 'receive')}${button('asset-send','Send','glow-control','send')}</div>
+      ${mode==='locked'?'<a href="#unlock" class="text-button asset-unlock">Unlock wallet</a>':''}</div></div>`);
+    $('asset-receive').disabled=!ready;$('asset-send').disabled=!ready||total===null||total<=0n;
+    $('asset-receive').onclick=()=>{if(selectedAsset()!==coin||!ready)return;receiveCoin=coin;go('receive');};
+    $('asset-send').onclick=()=>{if(selectedAsset()!==coin||!ready||!fundedCoins().includes(coin))return;assetSendSelection={coin,source:envelope,epoch:networkEpoch};go('send');};
   }
   function coins() {
     $('main').innerHTML = `<div class="page-head"><h1>Coins</h1><a class="text-button" href="#wallet">Done</a></div>
@@ -1061,18 +1125,18 @@
     // Ownership comes from local authenticated derivation, not Electrum history.
     // Unknown/stale history must not hide our own address or claim it is unused.
     const account = view && mode==='unlocked' && !(view.exhausted && view.automatic) ? view.account : null;
-    $('main').innerHTML = '<div class="page-head transfer-heading"><h1>Receive</h1></div>' + selector +
-      `<section class="receive-card"><div class="address-navigation">${button('previous-address','← Previous','text-button')}<span id="address-number">Address #${(view?.index || 0) + 1}</span>${button('next-address','Next →','text-button')}</div>
-      <div id="qr" class="qr">${account ? '' : `<div class="qr-empty">${icon('lock')}<span>${waitingLive ? escape(connectionProblem || networkErrors[coin] || 'Checking receiving-address history…') : view?.exhausted ? 'Wallet addresses are full (200 used). Existing addresses still work.' : mode === 'locked' ? 'Open your wallet to see its address' : 'Create or restore a wallet first'}</span></div>`}</div>
+    const selected=`<section class="receive-selected-coin" aria-labelledby="receive-selected-name"><a id="receive-overview" href="#wallet" class="text-button">← Overview</a><div class="receive-selected-label">${coinMark(coin)}<span><strong id="receive-selected-name" tabindex="-1">${escape(COINS[coin].name)}</strong><small>${COINS[coin].ticker}</small></span></div></section>`;
+    $('main').innerHTML = '<div class="page-head transfer-heading"><h1>Receive</h1></div>' + selected +
+      `<section class="receive-card"><div id="qr" class="qr">${account ? '' : `<div class="qr-empty">${icon('lock')}<span>${waitingLive ? escape(connectionProblem || networkErrors[coin] || 'Checking receiving-address history…') : view?.exhausted ? 'Wallet addresses are full (200 used). Existing addresses still work.' : mode === 'locked' ? 'Open your wallet to see its address' : 'Create or restore a wallet first'}</span></div>`}</div>
+      <div class="address-navigation">${button('previous-address','← Previous','text-button')}<span id="address-number">Address #${(view?.index || 0) + 1}</span>${button('next-address','Next →','text-button')}</div>
       ${account ? `<code class="address" id="address">${escape(account.address)}</code>${button('copy-address','Copy address','wide glow-control','copy')}` : `<h2>No payment address yet</h2>${view?.exhausted || waitingLive ? '' : button('receive-setup',mode === 'locked' ? 'Open wallet' : 'Create or restore','primary')}`}
       </section><label class="check reuse-check"><input id="reuse-first" type="checkbox" ${view?.pinned ? 'checked' : ''} ${!book ? 'disabled' : ''}><span><strong>Keep using the first address</strong><small>Use the same receiving address until you uncheck this.</small></span></label>
       ${view?.browsing ? button('latest-address','Return to current address','text-button') : ''}
       <p class="subtle">${view?.pinned ? 'Receiving is locked to Address #1 until you uncheck this.' : 'A new address becomes available after a payment arrives. Previous addresses still work.'}</p>${view?.exhausted?'<p class="notice">Wallet addresses are full (200 used). You can keep receiving at existing addresses, or create another wallet.</p>':''}${mode==='unlocked'?button('sweep-open','Sweep private key','wide glow-control'):''}`;
-    bindCoins();
     if($('sweep-open')){
       $('sweep-open').onclick=()=>go('sweep');
       if(WalletKomodo.supports(coin)&&komodoEnabled()){
-        $('sweep-open').insertAdjacentHTML('afterend',button('komodo-open','Sweep Komodo seed','wide'));
+        $('sweep-open').insertAdjacentHTML('afterend',button('komodo-open','Sweep Komodo seed','wide glow-control'));
         $('komodo-open').onclick=()=>go('komodo-sweep');
       }
     }
@@ -1099,6 +1163,7 @@
   }
   function activity() {
     const current=[...document.querySelectorAll('[data-activity-coin]')];
+    const expanded=new Set(current.filter(el=>el.open).map(el=>el.dataset.activityCoin));
     const content=document.createElement('template');
     content.innerHTML='<div class="page-head transfer-heading"><h1>Activity</h1></div><div class="wallet-coin-switch activity-coin-heading"><h2>Choose an asset</h2></div>'+activityRows();
     const next=[...content.content.querySelectorAll('[data-activity-coin]')];
@@ -1119,7 +1184,13 @@
           pager.querySelector('.activity-page-total').textContent=nextPager.querySelector('.activity-page-total').textContent;
         }else if(pager)pager.remove();else if(nextPager)el.append(nextPager);
       });
-    }else $('main').replaceChildren(content.content);
+      const status=$('activity-status'),nextStatus=content.content.querySelector('#activity-status');
+      if(status&&nextStatus){status.textContent=nextStatus.textContent;status.hidden=nextStatus.hidden;}
+    }else {
+      $('main').replaceChildren(content.content);
+      document.querySelectorAll('[data-activity-coin]').forEach(el=>{el.open=expanded.has(el.dataset.activityCoin);});
+    }
+    document.querySelector('.activity-coin-heading').hidden=!next.length;
     document.querySelectorAll('.activity-pager').forEach(form=>{
       const coin=form.dataset.pageCoin,input=form.querySelector('input');
       const jump=value=>{
@@ -1534,10 +1605,13 @@
       if(!$('reset-backup').checked){error('Confirm your backups before resetting.');return;}
       try{
         await withWalletLock(()=>{
-          const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,...Object.values(LEGACY_ASSETS),BALANCE_PRIVACY];
+          const exact=[STORE,'corevault.wallets.v1','corevault.hidden-coins.v1','corevault.theme','corevault.icon.v1',BRAND_PREF,RISK_ACK,CONNECTION_PREFS,...Object.values(LEGACY_ASSETS),BALANCE_PRIVACY,DISPLAY_PRICE_STORE];
           const prefixes=[E.PUBLIC_CACHE_PREFIX,'corevault.balance.','corevault.receive.','corevault.send-attempts.','corevault.live.','corevault.komodo-recovery.',WALLET_COIN_PREFS];
           const keys=Object.keys(localStorage).filter(k=>exact.includes(k)||prefixes.some(p=>k.startsWith(p)));
           for(const key of keys)localStorage.removeItem(key);
+          priceEpoch++;displayPrices={};displayPricesSaved='';
+          pepPrice=usdtPrice=shicPrice=ltcPrice=dogePrice=btcPrice=belPrice=dingoPrice=null;
+          for(const coin of Object.keys(extraQuotes))delete extraQuotes[coin];
           envelope=null;mode='demo';lock();reloadConnections();loadCoinPrefs();applyTheme();
         });
         go('wallet');toast('Local test data removed. Restore a backup to recover an old wallet.');
@@ -1598,10 +1672,11 @@
     if (walletStorage.failed || (nativeStorage && mode === 'storage-error')) { deviceStorageError(); return; }
     loadCoinPrefs();
     cancelConnectionTests();
-    let route = location.hash.slice(1) || 'wallet';
+    let route = assetRoute()?'asset':location.hash.slice(1) || 'wallet';
+    if(route==='asset'&&!selectedAsset()){history.replaceState(null,'','#wallet');route='wallet';}
     if(route!=='export')exportSelection=null;
     if(route!=='setup'){restoreEntry?.destroy();restoreEntry=null;document.body.classList.remove('restore-mode','restore-typing');}
-    if (!['wallet','wallets','live','send','sweep','komodo-sweep','reveal','export','coins','receive','activity','security','information','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
+    if (!['wallet','asset','wallets','live','send','sweep','komodo-sweep','reveal','export','coins','receive','activity','security','information','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
     if(!['sweep','komodo-sweep'].includes(route)){clearSweep();clearSweepReceipt();}
     if(route!=='komodo-sweep')clearKomodo();
     if (route !== 'send') sendCoin = null;
@@ -1619,19 +1694,19 @@
     if(route==='wallets')shortcut.setAttribute('aria-current','page');else shortcut.removeAttribute('aria-current');
     $('lock').disabled = mode === 'demo' && !pending;
     $('lock').hidden = !protectedWallet(envelope);
-    $('breadcrumb').textContent = ({wallet:'Overview',coins:'Coins',receive:'Receive',activity:'Activity',security:'Settings',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
+    $('breadcrumb').textContent = ({wallet:'Overview',asset:'Asset',coins:'Coins',receive:'Receive',activity:'Activity',security:'Settings',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
     document.querySelectorAll('[data-nav]').forEach(el => {
-      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['coins','wallets','export'].includes(route) ? 'wallet' : ['information','setup','backup','unlock','remove','reveal','reset-tests','icons'].includes(route) ? 'security' : route);
+      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['asset','coins','wallets','export'].includes(route) ? 'wallet' : ['information','setup','backup','unlock','remove','reveal','reset-tests','icons'].includes(route) ? 'security' : route);
       el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current');
     });
     if (mode === 'storage-error' && !['remove','reset-tests'].includes(route)) storageError();
-    else ({wallet:overview,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,export:exportConfirm,coins,receive,activity,security,information,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
+    else ({wallet:overview,asset:assetDetail,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,export:exportConfirm,coins,receive,activity,security,information,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
     showRiskNotice();
     document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
-    if (['wallet','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {
+    if (['wallet','asset','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {
       const targets = route !== 'receive' ? Object.keys(E.NETWORKS) : [receiveCoin];
       for (const coin of targets) if (E.NETWORKS[coin] && !scans[coin] && Date.now()-(lastRefresh[coin]||0)>WalletReporting.POLL_MS) void refreshLive(coin);
-      if(route==='wallet')void refreshPrice();
+      if(route==='wallet'||route==='asset')void refreshPrice();
     }
   }
   $('lock').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
@@ -1639,8 +1714,9 @@
     // Native resume/import can replace a route before an older hash event arrives.
     // That stale event must not discard a freshly staged backup or rebuilt form.
     if(event.newURL&&new URL(event.newURL).hash!==location.hash)return;
-    sendCoin = null;
-    // Only an explicit Overview coin click may preselect a deposit asset.
+    const selection=assetSendSelection;assetSendSelection=null;
+    sendCoin=location.hash==='#send'&&selection?.source===envelope&&selection.epoch===networkEpoch&&fundedCoins().includes(selection.coin)?selection.coin:null;
+    // Only an explicit asset-detail Receive click may preselect a deposit asset.
     // Other routes clear receiveCoin on render; the bottom tab starts blank.
     if(!['#receive','#sweep','#komodo-sweep'].includes(location.hash))receiveCoin=null;
     generation++; stagedFile = null; busy = false; clearError(); render(); window.scrollTo(0,0);
@@ -1678,7 +1754,7 @@
     if(event.key===CONNECTION_PREFS||Object.values(LEGACY_ASSETS).includes(event.key)){reloadConnections();render();return;}
     if(event.key===null){lock(undefined,false);reloadConnections();}
     if(event.key===BALANCE_PRIVACY){
-      if(['','#wallet'].includes(location.hash))render();
+      if(priceScreen())render();
       else if(location.hash==='#send')updateSendPicker();
       else if($('hide-balances'))$('hide-balances').checked=balancesHidden();
     }
@@ -1689,7 +1765,7 @@
     }
     if(event.key===BRAND_PREF) {applyBrand(savedBrand());if(location.hash==='#icons')iconGallery();}
     if (event.key === 'corevault.theme'||event.key===null) applyTheme();
-    if (event.key === COIN_PREFS || event.key === coinPrefsKey()) { loadCoinPrefs(); if (['', '#wallet', '#coins', '#receive'].includes(location.hash)) render(); }
+    if (event.key === COIN_PREFS || event.key === coinPrefsKey()) { loadCoinPrefs(); if (['', '#wallet', '#coins', '#receive'].includes(location.hash)||assetRoute()) render(); }
     if (!nativeStorage && (event.key === STORE || event.key === WalletLibrary.COLLECTION || event.key === null)) { lock(undefined, false); try { const raw = walletStorage.getItem(STORE); envelope = raw ? E.validateEnvelope(JSON.parse(raw)) : null; mode = envelope ? 'locked' : 'demo'; if(!document.hidden)openUnprotected(); } catch (_) { envelope = null; mode = 'storage-error'; } render(); resetIdle(); }
   });
   for (const event of ['pointerdown','keydown']) document.addEventListener(event, resetIdle, {passive:true});
@@ -1703,12 +1779,12 @@
   });
   setInterval(() => {
     if (!document.hidden && mode === 'unlocked' && liveEnabled()) {
-      const active = ['', '#wallet', '#receive', '#activity', '#send'].includes(location.hash);
+      const active = ['', '#wallet', '#receive', '#activity', '#send'].includes(location.hash)||assetRoute();
       const routine = !active ? [] : location.hash !== '#receive' ? Object.keys(E.NETWORKS) : receiveCoin ? [receiveCoin] : [];
       const targets = new Set([...initialDiscovery, ...routine]);
       for (const coin of targets) void refreshLive(coin);
       void checkSentBalances();
-      if(['','#wallet'].includes(location.hash))void refreshPrice();
+      if(priceScreen())void refreshPrice();
     }
   },WalletReporting.POLL_MS);
 })();

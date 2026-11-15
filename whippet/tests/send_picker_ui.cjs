@@ -5,7 +5,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
  const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
  try{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
-  await require('./funded_network.cjs')(context);
+  await require('./funded_network.cjs')(context,{history:true});
   const vault=E.unprotected(webcrypto,E.recipe(ethers,'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'));
   await context.addInitScript(v=>{if(!localStorage.getItem('whippet.dev.encrypted.v1'))localStorage.setItem('whippet.dev.encrypted.v1',JSON.stringify(v));},vault);
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -83,9 +83,15 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.match(await page.locator('#send-picker').innerText(),/No assets with a balance/);
   for(const width of [320,390,430]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
   await page.reload();assert.match(await page.locator('#send-coin').innerText(),/Choose an asset/);
-  await page.evaluate(()=>{for(const coin of Object.keys(__balances))__balances[coin]=coin==='wht'?6339444087:50;});await page.clock.runFor(8001);
-  await page.waitForFunction(()=>document.querySelectorAll('[data-send-coin]').length===13);
+  await page.evaluate(()=>{for(const coin of Object.keys(__balances))__balances[coin]=coin==='wht'?6339444087:50;});
+  // Reload/discovery can still be completing when the fixture balances change.
+  // Drive fresh observations explicitly: waiting on a paused clock cannot
+  // produce another matching read. The precise four-second gate is tested in
+  // reporting_ui; here every expected asset must appear within six poll ticks.
+  for(let tick=0;tick<6&&await page.locator('[data-send-coin]').count()!==13;tick++)await page.clock.runFor(4001);
   assert.deepEqual(await page.locator('[data-send-coin]').evaluateAll(rows=>rows.map(row=>row.dataset.sendCoin)),['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht'],'Send uses the same alphabetical order as the other screens');
+  for(const coin of ['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht'])
+   assert.match(await page.locator(`[data-send-coin=${coin}]`).innerText(),new RegExp((coin==='wht'?'6,339,444,087':'50')+' '+E.NETWORKS[coin].ticker),'The settled fixture balance must be visible too');
   for(const theme of ['dark','light']){
    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
    for(const coin of ['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']){

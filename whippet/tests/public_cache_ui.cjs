@@ -14,6 +14,7 @@ const recipe=E.recipe(ethers,'abandon abandon abandon abandon abandon abandon ab
   await p.locator(`[data-coin=${coin}]`).click();assert.equal(await p.locator('#address').innerText(),accounts[coin].address);
   await p.locator('#copy-address').click();assert.equal(await p.evaluate(()=>__copied),accounts[coin].address);
   assert.match(await p.locator('#receive-history-status').innerText(),/History refresh pending/);
+  await require('./open_receive_picker.cjs')(p);
  }
  const key=E.PUBLIC_CACHE_PREFIX+vault.id;
  assert.equal(await p.evaluate(k=>JSON.parse(localStorage.getItem(k)).body.pools.pep.length,key),200);

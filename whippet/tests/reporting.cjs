@@ -46,4 +46,24 @@ for(const [coin,id] of Object.entries({bch:'bitcoin-cash',dash:'dash',dgb:'digib
  for(const usd of [0,-1,NaN,Infinity,'2'])assert.throws(()=>R.marketQuote({[id]:{usd,last_updated_at:at/1000}},id,at));
  assert.throws(()=>R.marketQuote({[id]:{usd:2,last_updated_at:at/1000-601}},id,at));
 }
-console.log('PASS: 4-second polling default, immediate first balance including zero, subsequent 4-second fresh-match gate, changed-candidate reset, no timer-only publication, cache continuity, USDT conversion, zero-balance exclusion and unpriced holdings.');
+{
+ const now=1800000000000,q={value:2,at:now,updated:now};
+ assert.deepEqual(R.displayQuote(q,now+299999),{value:2,stale:false});
+ assert.deepEqual(R.displayQuote(q,now+300000),{value:2,stale:true});
+ assert.deepEqual(R.displayQuote(q,now+899999),{value:2,stale:true});
+ assert.deepEqual(R.displayQuote(q,now+900000),{value:2,stale:true});
+ assert.throws(()=>R.feeUsd('btc',1000n,q,now+300000),e=>e.code==='USD_PRICE_UNAVAILABLE','Display grace must not extend fee-price validity');
+ assert.deepEqual(R.displayQuote({...q,updated:now-600001},now),{value:2,stale:true});
+ assert.deepEqual(R.displayQuote({...q,updated:now-900000},now),{value:2,stale:true});
+ for(const [age,label]of [[300000,'5 minutes ago'],[3600000,'1 hour ago'],[259200000,'3 days ago'],[2592000000,'1 month ago'],[63072000000,'2 years ago']]){
+  assert.deepEqual(R.displayQuote(q,now+age),{value:2,stale:true});
+  assert.equal(R.formatPriceAge(q,now+age),label);
+ }
+ assert.equal(R.formatPriceAge({...q,updated:now-3600000},now),'1 hour ago','Use the original provider timestamp, not just the fetch time');
+ const publicCache=JSON.stringify({version:1,quotes:{btc:{...q,privateField:'discard'},usdt:{...q,value:.99},unexpected:q}});
+ assert.deepEqual(R.readDisplayPrices(publicCache,now+2592000000),{btc:q,usdt:{...q,value:.99}});
+ for(const raw of [null,'{','x'.repeat(16385),'null','{"version":2,"quotes":{}}','{"version":1,"quotes":[]}'])assert.deepEqual(R.readDisplayPrices(raw,now),{});
+ for(const bad of [null,{},...[-1,0,NaN,Infinity,'2'].map(value=>({...q,value})),{...q,at:now+1},{...q,updated:now+30001},{...q,updated:null}])
+  assert.deepEqual(R.displayQuote(bad,now),{value:null,stale:false});
+}
+console.log('PASS: fresh-match balances, exact USDT conversion, persistent age-labeled display quotes, sanitized public cache and unchanged strict fee freshness.');

@@ -24,7 +24,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.clock.install();await p.clock.pauseAt(new Date(Date.now()+100));await p.goto('http://localhost:8787/');
  await p.waitForFunction(()=>document.getElementById('wallet-worth').innerText==='≈ 100.00 USDT');
  const row=p.locator('[data-overview-coin=ltc]');assert.equal(await row.locator('img').evaluate(i=>i.complete&&i.naturalWidth>0),true);
- await row.click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).ltc.address);
+ await row.click();await p.locator('#asset-receive').click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).ltc.address);
  await p.locator('[data-nav=send]').click();await p.locator('[data-send-coin=ltc]').click();await p.locator('#send-address').waitFor();
  const destination=bech32.encode('ltc',[0,...bech32.toWords(Buffer.alloc(20,7))]);await p.locator('#send-address').fill(destination);await p.locator('#send-max').click();
  assert.equal(await p.locator('#send-address').getAttribute('maxlength'),'90');assert.equal(await p.locator('#send-amount').inputValue(),'1');
@@ -32,8 +32,10 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.locator('#review-send').click();await p.locator('#broadcast-send').waitFor();
  assert.match(await p.locator('.send-review').innerText(),/0\.99999776/);assert.match(await p.locator('.send-review').innerText(),/0\.00000224/);
  await p.locator('[data-nav=wallet]').click();await p.evaluate(()=>__stale=true);await p.clock.runFor(305000);
- assert.equal(await row.locator('.holding-values > small').innerText(),'*');assert.equal(await row.locator('.holding-balance').innerText(),'1 LTC');
- await p.evaluate(()=>{__stale=false;__offline=true;});await p.clock.runFor(305000);assert.equal(await row.locator('.holding-values > small').innerText(),'*');
+ assert.equal(await row.locator('.holding-values > small').innerText(),'100.00 USDT');assert.equal(await row.locator('.holding-balance').innerText(),'1 LTC');
+ assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known · 5 minutes ago/);
+ await p.evaluate(()=>{__stale=false;__offline=true;});await p.clock.runFor(305000);assert.equal(await row.locator('.holding-values > small').innerText(),'100.00 USDT');
+ assert.match(await row.locator('.holding-name > small').first().innerText(),/Last known · 10 minutes ago/);
  await p.locator('[data-nav=security]').click();await p.locator('#custom-connections > summary').click();assert.equal(await p.locator('#endpoint-ltc').inputValue(),'');
  assert.doesNotMatch(await p.locator('#custom-connections').innerText(),/cipig/);assert.deepEqual(errors,[]);
  console.log('PASS: LTC old backup, logo/receive, price/USDT/staleness, SegWit destination, Max fee-inclusive review, hidden default and no broadcast.');

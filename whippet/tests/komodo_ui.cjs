@@ -31,9 +31,10 @@ const old='legal winner thank year wave sausage worth useful legal winner thank 
  await p.evaluate(()=>location.hash='#komodo-sweep');await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-phrase').count(),0,'Whippet direct route is blocked');
  await p.reload();if(scenario==='protected'){await p.locator('#unlock-security').click();await p.locator('#unlock-password').fill(password);await p.locator('#unlock-submit').click();await p.waitForFunction(()=>document.documentElement.dataset.walletState==='unlocked');}
  await p.locator('[data-nav=security]').click();await p.locator('#komodo-recovery-enabled').waitFor();assert.equal(await p.locator('#komodo-recovery-enabled').isChecked(),true);
- await p.locator('[data-nav=receive]').click();await p.locator('#receive-coin').click();await p.locator(`[data-coin=${asset}]`).click();
+ await p.locator('[data-nav=receive]').click();await require('./open_receive_picker.cjs')(p);await p.locator(`[data-coin=${asset}]`).click();
  if(scenario==='pinned')await p.locator('#reuse-first').check();
  assert.equal(await p.locator('#sweep-open').evaluate(el=>el.nextElementSibling.id),'komodo-open');
+ assert.deepEqual(await p.locator('#komodo-open').evaluate(el=>{const s=getComputedStyle(el);return [s.backgroundColor,s.borderTopWidth,s.fontSize,el.getBoundingClientRect().height>=44];}),['rgba(0, 0, 0, 0)','0px','14px',true],'Komodo sweep uses the same borderless glow control as private-key sweep');
  if(scenario==='send'){
   await p.screenshot({path:'/tmp/safecore-receive-komodo.png',fullPage:true});
   await p.locator('#sweep-open').click();await p.locator('#sweep-key').waitFor();assert.equal(await p.locator('#komodo-open').count(),0,'Komodo is no longer inside WIF sweep');

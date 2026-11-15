@@ -43,12 +43,12 @@ const password='Public-test-password-123';
       await page.goto('http://localhost:8787/');
       if(protectedMode){await page.locator('#lock').click();await page.locator('#unlock-password').fill(password);await page.locator('#unlock-submit').click();await page.locator('.holdings').waitFor();}
       assert.equal(await page.locator('#live-ack').count(),0);
-      await page.locator('[data-nav="receive"]').click();await page.locator('#receive-coin').click();await page.locator(`[data-coin="${coin}"]`).click();await page.locator('#address').waitFor();
+      await page.locator('[data-nav="receive"]').click();await require('./open_receive_picker.cjs')(page);await page.locator(`[data-coin="${coin}"]`).click();await page.locator('#address').waitFor();
       await page.clock.runFor(4001);
       await page.locator('[data-nav="wallet"]').click();
       await page.waitForFunction(coin=>document.querySelector(`[data-overview-coin=${coin}] .holding-balance`)?.textContent==='5 '+coin.toUpperCase(),coin);
       await page.locator('[data-nav="receive"]').click();
-      await page.locator('#receive-coin').click();await page.locator(`[data-coin="${coin}"]`).click();
+      await require('./open_receive_picker.cjs')(page);await page.locator(`[data-coin="${coin}"]`).click();
       assert.equal(await page.locator('#address-number').textContent(),'Address #2');
       assert.equal(await page.locator('#address').textContent(),E.accounts(ethers,recipe,1)[coin].address);
       await page.locator('#reuse-first').check();assert.equal(await page.locator('#address').textContent(),account.address);

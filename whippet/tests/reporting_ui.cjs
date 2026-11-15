@@ -113,8 +113,8 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   assert.doesNotMatch(await p.locator('.holdings').innerText(),/\$/);
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
   await p.evaluate(()=>{__quotes.usdt=null;});await p.clock.runFor(65000);
-  assert.equal(await p.locator('#wallet-worth').innerText(),'* USDT');
-  assert.equal(await p.locator('[data-overview-coin=pep] .holding-values > small').innerText(),'*','No USD fallback mislabeled as USDT');
+  assert.equal(await p.locator('#wallet-worth').innerText(),'≈ 0.38 USDT*');
+  assert.equal(await p.locator('[data-overview-coin=pep] .holding-values > small').innerText(),'0.38 USDT','Missing conversion field preserves the previous real USDT quote, never a fabricated 1:1 rate');
   assert.deepEqual(errors,[]);console.log('PASS: exact grouped PEP/WHT balances and send picker; narrow layouts; immediate restore balances; 4-second fresh-match publication; cumulative USDT, zero-balance exclusion and unpriced holdings.');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

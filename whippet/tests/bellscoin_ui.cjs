@@ -26,7 +26,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  assert.deepEqual(await page.locator('[data-overview-coin]').evaluateAll(rows=>rows.map(r=>r.dataset.overviewCoin)),['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']);
  assert.equal(await page.locator('[data-overview-coin=bel] img').evaluate(i=>i.complete&&i.naturalWidth>0),true);
  await page.waitForFunction(()=>document.querySelector('[data-overview-coin=bel] .holding-values > small')?.textContent==='0.10 USDT');
- await page.locator('[data-overview-coin=bel]').click();await page.locator('#address').waitFor();
+ await page.locator('[data-overview-coin=bel]').click();await page.locator('#asset-receive').click();await page.locator('#address').waitFor();
  assert.equal(await page.locator('#address').innerText(),E.accounts(ethers,recipe,1).bel.address);
  assert.equal(await page.locator('#komodo-open').count(),0);
  await page.locator('[data-nav=send]').click();await page.locator('[data-send-coin=bel]').click();await page.locator('#send-max:not([disabled])').waitFor();
