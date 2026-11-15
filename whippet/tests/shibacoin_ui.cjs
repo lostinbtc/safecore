@@ -30,7 +30,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await row.locator('.holding-balance').innerText(),'1,000,000 SHIC');
   assert.equal(await row.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0),true);
   await p.screenshot({path:'/tmp/safecore-shic-wallet.png',fullPage:true});
-  await row.click();await p.locator('#address').waitFor();
+  await row.click();await p.locator('#asset-receive').click();await p.locator('#address').waitFor();
   assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).shic.address,'Funded first address advances to the next receiving address');
   await p.locator('[data-nav=wallet]').click();
   await p.evaluate(()=>__priceMode='rate-limit');await p.clock.runFor(305000);

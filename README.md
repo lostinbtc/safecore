@@ -22,6 +22,9 @@ behind this source.
 3. Keep a separate recovery backup. A local recovery copy does not protect
    against losing or resetting your device.
 
+Tap a coin on Overview for its larger icon, centered balance and estimated value,
+with direct Receive and Send controls. Hide balances also masks this screen.
+
 [Wallet guide](whippet/README.md) · [Offline recovery](recovery/README.md) ·
 [Security](SECURITY.md) · [Self-hosting](docs/SELF_HOSTING.md)
 

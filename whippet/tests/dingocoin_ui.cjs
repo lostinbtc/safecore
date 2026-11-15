@@ -38,7 +38,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  assert.equal(await p.locator('[data-overview-coin=doge] .holding-balance').innerText(),'20 DOGE');
  assert.ok(await p.locator('[data-overview-coin=dingo] img').evaluate(i=>i.complete&&i.naturalWidth>0));
  await p.waitForFunction(()=>document.querySelector('[data-overview-coin=dingo] .holding-values > small')?.textContent==='<0.01 USDT');
- await p.locator('[data-overview-coin=dingo]').click();await p.locator('#address').waitFor();
+ await p.locator('[data-overview-coin=dingo]').click();await p.locator('#asset-receive').click();await p.locator('#address').waitFor();
  assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).dingo.address);assert.equal(await p.locator('#komodo-open').count(),0);
  const select=async coin=>{await p.locator('[data-nav=send]').click();if(await p.locator('#change-send-coin').isVisible())await p.locator('#change-send-coin').click();await p.locator(`[data-send-coin=${coin}]`).click();await p.locator('#send-max:not([disabled])').waitFor();};
  await select('doge');await p.locator('#send-address').fill(E.accounts(ethers,recipe,2).doge.address);await p.locator('#send-amount').fill('5');

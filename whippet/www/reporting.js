@@ -29,6 +29,9 @@
   // Keep the total, each holding and unit price on the same USDT conversion.
   function valueInUsdt(coin,amount,pepUsd,usdtUsd,shicUsd=null,ltcUsd=null,dogeUsd=null,btcUsd=null,belUsd=null,dingoUsd=null,extraUsd={}){
     const usd=coin==='pep'?pepUsd:coin==='shic'?shicUsd:coin==='ltc'?ltcUsd:coin==='doge'?dogeUsd:coin==='btc'?btcUsd:coin==='bel'?belUsd:coin==='dingo'?dingoUsd:extraUsd[coin]??null;
+    return convertValue(amount,usd,usdtUsd);
+  }
+  function convertValue(amount,usd,usdtUsd){
     if(!Number.isFinite(usd)||usd<=0||!Number.isFinite(usdtUsd)||usdtUsd<=0)return null;
     const value=Number(amount)/1e8*usd/usdtUsd;
     if(amount>0n&&value===0)return Number.MIN_VALUE; // Display-only underflow: positive is not zero.
@@ -119,5 +122,5 @@
     return {cents,display:numerator>0n&&numerator*100n<denominator?'<$0.01 USD':`$${cents/100n}.${String(cents%100n).padStart(2,'0')} USD`,
       warning:numerator>5n*denominator,blocked:numerator>100n*denominator};
   }
-  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,formatWorth,formatUnitPrice,shicQuote,ltcQuote,dogeQuote,btcQuote,belQuote,dingoQuote,marketQuote,freshShic,displayQuote,formatPriceAge,readDisplayPrices,feeUsd};
+  return {POLL_MS,WAIT_MS,create,worth,valueInUsdt,convertValue,formatWorth,formatUnitPrice,shicQuote,ltcQuote,dogeQuote,btcQuote,belQuote,dingoQuote,marketQuote,freshShic,displayQuote,formatPriceAge,readDisplayPrices,feeUsd};
 });

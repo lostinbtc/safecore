@@ -24,7 +24,7 @@ const E=require('../www/engine.js'),T=require('../www/transactions.js'),ethers=r
  await p.clock.install();await p.clock.pauseAt(new Date(Date.now()+100));await p.goto('http://localhost:8787/');
  await p.waitForFunction(()=>document.getElementById('wallet-worth').innerText==='≈ 0.20 USDT');
  const row=p.locator('[data-overview-coin=doge]');assert.equal(await row.locator('img').evaluate(i=>i.complete&&i.naturalWidth>0),true);
- await row.click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).doge.address);
+ await row.click();await p.locator('#asset-receive').click();await p.locator('#address').waitFor();assert.equal(await p.locator('#address').innerText(),E.accounts(ethers,recipe,1).doge.address);
  await p.locator('[data-nav=send]').click();await p.locator('[data-send-coin=doge]').click();await p.locator('#send-address').waitFor();
  const destination=E.accounts(ethers,recipe,1).doge.address;await p.locator('#send-address').fill(destination);await p.locator('#send-max').click();
  assert.equal(await p.locator('#send-address').getAttribute('maxlength'),'90');assert.equal(await p.locator('#send-amount').inputValue(),'1');

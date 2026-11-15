@@ -535,8 +535,9 @@ Receive starts with no asset selected. Choose a coin before an address, QR code,
 copy button or previous/next navigation appears. Only enabled, implemented coins
 can receive, including coins with zero balance. This choice is independent of
 Overview and Send and resets when leaving Receive; address-pin preferences do not.
-Tapping a supported coin row on Overview explicitly chooses that coin and opens
-its Receive screen. The bottom Receive tab still starts without a selection.
+Tapping a supported coin row on Overview opens its asset screen, with a larger
+icon, centered balance and estimated value. Receive and Send on that screen
+explicitly choose that coin. The bottom Receive tab still starts without a selection.
 
 An address becomes used when history is detected, not when displayed or copied.
 Receiving advances to the next unused address after a payment is observed.

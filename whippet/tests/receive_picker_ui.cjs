@@ -60,6 +60,7 @@ const E=require('../www/engine.js'),ethers=require('../www/assets/ethers.umd.min
   assert.equal(await p.locator('#address').textContent(),accounts.wht.address);
   for(const coin of ['bel','btc','bch','dash','dgb','dingo','doge','ltc','pep','rvn','shic','trmp','wht']){
    await p.locator('[data-nav=wallet]').click();await p.locator(`[data-overview-coin=${coin}]`).click();
+   await p.locator('#asset-receive').click();
    await p.locator('#address').waitFor();assert.equal(await p.locator('#address').textContent(),accounts[coin].address,coin+' receiving address after completed discovery');
    assert.equal(await p.locator('.page-head').innerText(),'Receive');
   }

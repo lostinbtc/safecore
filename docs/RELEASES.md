@@ -41,21 +41,29 @@ not an independent security audit or proof that source is safe.
 
 ### Interface and documentation
 
+- Adds an asset screen when tapping a coin on Overview: a larger icon, centered
+  balance and estimated value, with direct Receive and Send controls. The group
+  is centered between the header and navigation, with scrolling on short screens. It respects
+  Hide balances and wallet locking, and keeps balance and price updates active.
 - Lists coins alphabetically throughout the wallet and recovery tool.
+- Overview scrolls only when its content exceeds the available screen height.
 - Adds coin logos, live pricing where verified, and supported activity explorer links.
 - Updates the splash tagline to **Your Keys. Your Coins.**
 - Updates the README, chain-specific validation notes, artwork/license notices,
   and automated tests for recovery, signing, fees, connection isolation and Android.
 - Extends the wallet/packaging CI timeout to 45 minutes for the expanded suite.
+- Adds all-18-asset screen regression tests and fixes the Send-picker test's
+  paused-clock timing after reload without weakening its balance assertions.
 
 ### Compatibility and verification
 
 Existing recovery paths, backups and wallet selections remain compatible. New
 wallets still start with no assets selected; Komodo recovery remains PEP/SHIC only.
 Android versionCode 21 / versionName `0.1.0-test.21`, debugging disabled, using
-the existing development signing identity. Wallet/packaging and Android security
-checks passed for the merged implementation; the release APK passed build, lint,
-signature and bundled-source checks. Funded send/receive testing remains pending
+the existing development signing identity. The updated APK passed local build,
+lint, signature and bundled-source checks, plus targeted browser regressions.
+The release PR must pass the wallet/packaging and Android security checks before
+merging and publication. Funded send/receive testing remains pending
 for the newest assets. This is not an independent security audit.
 
 Keep separate recovery backups. Test.20 remains available; update in place and

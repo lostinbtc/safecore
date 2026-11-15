@@ -102,6 +102,23 @@ img { max-width: 100%; }
 .holding-row strong { font-size:12px; }
 .holding-row small { color:var(--muted); font-size:10px; font-weight:400; }
 .holdings-note { margin-top:12px; font-size:10px; line-height:1.6; }
+.app-shell:has(> main > .asset-detail) { padding-bottom:calc(73px + env(safe-area-inset-bottom)); }
+.app-shell:has(> main > .asset-detail) > .app-footer { display:none; }
+main:has(> .asset-detail) { padding-block:0; min-height:0; }
+.asset-detail { display:grid; grid-template-rows:minmax(64px,1fr) auto minmax(64px,1fr); min-height:calc(100dvh - 143px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+.asset-detail::after { content:''; }
+#asset-back { justify-self:start; align-self:start; margin-top:20px; }
+.asset-focus { min-width:0; }
+.asset-summary { text-align:center; padding:0 0 10px; }
+.asset-summary > img { display:block; width:88px; height:88px; object-fit:contain; margin:0 auto 16px; }
+.asset-summary h1 { font-size:21px; margin:0 0 18px; }
+.asset-balance { font-size:28px; font-weight:650; line-height:1.35; overflow-wrap:anywhere; }
+.asset-balance > span:not(.masked-balance) { font-size:13px; font-weight:400; color:var(--muted); }
+.asset-worth { margin-top:8px; font-size:16px; color:var(--muted); overflow-wrap:anywhere; }
+.asset-summary .subtle { font-size:11px; margin:10px 0 0; }
+.asset-actions { display:flex; justify-content:center; gap:36px; margin:22px 0; }
+.asset-actions > button { min-width:88px; }
+.asset-unlock { display:block; text-align:center; }
 #current-wallet-label { display: block; margin-left: 38px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); }
 .wallets-shortcut[aria-current="page"] { color: var(--accent); }
 .address-navigation { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -242,7 +259,8 @@ main .receive-card { padding: 10px 0; }
 .doge-mark { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; color: #d9bc72; font-size: 27px; font-weight: 700; }
 .coming-soon { color: #d9bc72; font-size: 14px; margin: 22px 0 10px; }
 main { padding: 26px 20px 12px; min-height: calc(100dvh - 220px); }
-main:has(> .home-heading) { padding-top: 14px; }
+.app-shell:has(> main > .home-heading) { display:flex; flex-direction:column; }
+main:has(> .home-heading) { flex:1; min-height:0; padding-top:14px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 22px; }
 .eyebrow { font-size: 9px; letter-spacing: 1.7px; font-weight: 700; color: var(--muted); margin: 0 0 9px; }
 .page-head h1 { font-size: 26px; letter-spacing: -.8px; margin: 0 0 7px; font-weight: 650; }

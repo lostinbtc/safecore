@@ -1,8 +1,8 @@
 {
   "tag": "v0.1.0-test.21",
   "filename": "SafeCore-0.1.0-test.21.apk",
-  "artifact_commit": "fdc53bdd1e7355398343561f34b430b897b5edaa",
-  "sha256": "42968aeae9fac01f69258cc783facf6c49f4b112a8f11f506233df8586412c87",
+  "artifact_commit": "c9db3f256045f25496a68c6456dc6d7b4d4a7f8b",
+  "sha256": "587b534f403583c9bbc9785ffb1e65bb2f0f115388b315637ad640b3691dce86",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
   "version_code": 21,
@@ -17,7 +17,8 @@
     "Balance updates: reduces unnecessary screen rebuilds and cache writes while retaining live deposit notifications, four-second fallback polling and fresh-observation checks.",
     "Price reliability: refreshes before expiry and preserves valid coin/USDT quotes independently during outages. After five minutes, saved display prices show a persistent Last known age in minutes, hours, days or months. Saved prices never authorize transaction-fee checks.",
     "Interface: alphabetical coin lists, new coin logos, verified pricing where available, supported activity explorer links, and the tagline Your Keys. Your Coins. New wallets still start with no assets selected.",
+    "Asset screen: tap a coin on Overview for a larger icon, balance, estimated value and direct Receive/Send controls, centered between the header and navigation. Live updates, privacy masking, wallet locking and saved-price ages remain active. Overview and asset screens scroll only when content needs the space.",
     "Documentation and tests: updated README, chain-validation notes and third-party notices; expanded recovery, signing, fee, network-isolation and Android coverage. Wallet/packaging CI now allows 45 minutes.",
-    "Verification: merged wallet/packaging and Android security checks passed; this APK passed build, lint, signing-identity and exact bundled-source checks. Funded testing remains pending for the newest assets; this is not an independent audit."
+    "Verification: local build, lint, signing-identity, exact bundled-source and targeted browser checks passed, including all 18 asset screens. The Send-picker CI test now explicitly advances its paused clock after reload and still verifies every expected balance. Release PR checks must pass before publication. Funded testing remains pending for the newest assets; this is not an independent audit."
   ]
 }

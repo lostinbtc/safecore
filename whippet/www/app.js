@@ -146,6 +146,9 @@
     } catch (_) { hiddenCoins = [...assetOrder]; }
   }
   const visibleCoins = () => Object.keys(COINS).filter(coin => catalogEnabled(coin) && !hiddenCoins.includes(coin));
+  const assetRoute=()=>location.hash.startsWith('#asset/');
+  const selectedAsset=()=>{const coin=location.hash.slice(7);return assetRoute()&&Object.hasOwn(COINS,coin)&&visibleCoins().includes(coin)?coin:null;};
+  const priceScreen=()=>['','#wallet'].includes(location.hash)||assetRoute();
   const icons = {
     wallet: '<rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 8h15M17 12h4v5h-4a2.5 2.5 0 0 1 0-5Z"/>',
     receive: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
@@ -166,6 +169,7 @@
   const coinImage = coin => coin==='bch'?'assets/bitcoincash.svg':`assets/${({pep:'pepecoin',wht:'whippet',shic:'shibacoin',ltc:'litecoin',doge:'dogecoin',btc:'bitcoin',bel:'bellscoin',bonc:'bonkcoin',dingo:'dingocoin',bch:'bitcoincash',dash:'dash',dgb:'digibyte',jkc:'junkcoin',lky:'luckycoin',rvn:'ravencoin',cat:'catcoin',trmp:'trumpow',flop:'flopcoin'})[coin]}.png`;
   const coinMark = coin => `<img src="${coinImage(coin)}" alt="">`;
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
+  let assetSendSelection=null;
   let receiveBooks = null, addingWallet = false, revealed = false;
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
   let rescanning=false,sweepState=null;
@@ -234,7 +238,7 @@
       try{dingoPrice=readQuote('dingocoin');}catch(_){}
       if(accepted){shicPriceRetry=240000;rememberDisplayPrices();}
     }catch(_){/* Keep prior quotes; missing/stale prices require a per-review acknowledgment. */}
-    finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
+    finally{clearTimeout(timer);shicPriceBusy=false;if(!document.hidden&&priceScreen())render();}
   }
   async function refreshPrice(forFee=false){
     if(!riskAccepted()||priceBusy||Date.now()-priceAttempt<(forFee?10000:60000)||mode!=='unlocked'||document.hidden)return;
@@ -254,7 +258,7 @@
       if(Number.isFinite(usdt)&&usdt>0)usdtPrice={value:usdt,at,updated:at};
       if(Number.isFinite(value)&&value>0||Number.isFinite(usdt)&&usdt>0)rememberDisplayPrices();
     }catch(_){/* Keep the last quote; fee checks reject stale prices unless explicitly acknowledged. */}
-    finally{clearTimeout(timer);priceBusy=false;if(!document.hidden&&['','#wallet'].includes(location.hash))render();}
+    finally{clearTimeout(timer);priceBusy=false;if(!document.hidden&&priceScreen())render();}
   }
   let mode = 'demo', generation = 0, idleTimer = null, toastTimer = null;
   let stagedFile = null, setupType = 'create', busy = false;
@@ -267,6 +271,7 @@
   loadCoinPrefs();
   function prepareAddresses(candidate, vault) {
     activityPages = {};
+    assetSendSelection=null;
     sendCoin = null; receiveCoin = null;
     clearReports();
     clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
@@ -324,6 +329,7 @@
   }
   function lock(message, reopen = true) {
     activityPages = {};
+    assetSendSelection=null;
     cancelConnectionTests();
     exportSelection=null;
     clearSweep();clearKomodo();clearSweepReceipt();rescanning=false;sendRefreshRun=null;
@@ -353,13 +359,14 @@
   function refreshBalanceViews(coin){
     if(balanceViewQueued)return;
     const epoch=networkEpoch,source=envelope,route=location.hash;
-    if(!['','#wallet','#activity','#send'].includes(route)&&!(coin===receiveCoin&&route==='#receive'))return;
+    if(!['','#wallet','#activity','#send'].includes(route)&&!assetRoute()&&!(coin===receiveCoin&&route==='#receive'))return;
     balanceViewQueued=true;
     queueMicrotask(()=>{
       balanceViewQueued=false;
       if(epoch!==networkEpoch||source!==envelope||route!==location.hash||mode!=='unlocked'||document.hidden)return;
       // A balance notification must not rebuild the header or trigger more scans.
       if(['','#wallet'].includes(route))overview();
+      else if(assetRoute())assetDetail();
       else if(route==='#send')updateSendPicker();
       else render();
     });
@@ -1022,7 +1029,7 @@
       const estimate=total!==null?WalletReporting.valueInUsdt(coin,total,pepUsd,usdtUsd,shicUsd,ltcUsd,dogeUsd,btcUsd,belUsd,dingoUsd,extraUsd):null;
       const value=estimate!==null?WalletReporting.formatWorth(estimate)+' USDT':'*';
       const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':s?[s.unconfirmed?hidden?'Pending':`Pending ${T.formatDisplay(s.unconfirmed)} ${n.ticker}`:'',networkErrors[coin]?'Unable to refresh':''].filter(Boolean).join(' · '):n.comingSoon?'':!envelope?'Create a wallet to get started.':mode==='locked'?'Open wallet to refresh.':networkErrors[coin]?'Unable to refresh':'Checking balance…';
-      return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${!liveCoin(coin)?n.name+' connection required':'Receive '+n.name}" ${!liveCoin(coin)?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
+      return `<button type="button" class="holding-row" data-overview-coin="${coin}" aria-label="${!liveCoin(coin)?n.name+' connection required':'View '+n.name}" ${!liveCoin(coin)?'disabled':''}>${coinMark(coin)}<span class="holding-name"><strong>${n.name}</strong><small>${n.comingSoon?'Coming soon':price}</small><small class="holding-status">${status}</small></span><span class="holding-values"><strong class="holding-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'*'} <small>${n.ticker}</small></strong><small>${hidden?hiddenBalance:n.comingSoon?'*':value}</small></span></button>`;
     }).join('')}<p class="subtle holdings-note">* Price not available</p></section>`;
     const full=assetOrder.filter(liveCoin).filter(c=>receiveBooks?.[c]?.view().exhausted);
     patchOverview(heading + full.map(c=>`<p class="notice">${E.NETWORKS[c].ticker} wallet addresses are full (200 used). Existing addresses still receive funds. Create another wallet for new addresses.</p>`).join('') + holdings + rescanControl + (mode === 'demo' ? button('security-cta','Create or restore a wallet','wide home-security','plus') : ''));
@@ -1033,9 +1040,31 @@
     };
     document.querySelectorAll('[data-overview-coin]').forEach(el=>el.onclick=()=>{
       if(!E.NETWORKS[el.dataset.overviewCoin]||!liveCoin(el.dataset.overviewCoin))return;
-      receiveCoin=el.dataset.overviewCoin;go('receive');
+      go('asset/'+el.dataset.overviewCoin);
     });
     if ($('security-cta')) $('security-cta').onclick = () => go('setup');
+  }
+  function assetDetail(){
+    const coin=selectedAsset();
+    if(!coin){history.replaceState(null,'','#wallet');render();return;}
+    const n=COINS[coin],s=reported(coin),total=s?s.confirmed+s.unconfirmed:null,hidden=balancesHidden();
+    const now=Date.now(),q=WalletReporting.displayQuote(displayPrices[coin],now),conversion=WalletReporting.displayQuote(displayPrices.usdt,now);
+    const value=total===null?null:WalletReporting.convertValue(total,q.value,conversion.value);
+    const stale=value!==null&&(q.stale||conversion.stale);
+    const older=stale?[displayPrices[coin],displayPrices.usdt].sort((a,b)=>Math.min(a.at,a.updated)-Math.min(b.at,b.updated))[0]:null;
+    const ready=mode==='unlocked'&&liveCoin(coin)&&!connectionProblem;
+    const status=!liveCoin(coin)?'Set a custom connection in Settings.':connectionProblem?'Check connection settings.':mode!=='unlocked'?'Unlock your wallet to refresh.':networkErrors[coin]?'Unable to refresh balance. Showing the last available balance.':!s?'Checking balance…':s.unconfirmed?hidden?'Pending transaction':`${T.formatDisplay(s.unconfirmed)} ${n.ticker} pending`:'';
+    patchOverview(`<div class="asset-detail" data-asset="${coin}"><a id="asset-back" href="#wallet" class="text-button">← Overview</a>
+      <div class="asset-focus"><section class="asset-summary" aria-labelledby="asset-name">${coinMark(coin)}<h1 id="asset-name">${escape(n.name)}</h1>
+      <div id="asset-balance" class="asset-balance">${hidden?hiddenBalance:total!==null?T.formatDisplay(total):'—'} <span>${n.ticker}</span></div>
+      <div id="asset-worth" class="asset-worth">${hidden?hiddenBalance:value!==null?'≈ '+WalletReporting.formatWorth(value)+' USDT':'Price unavailable'}</div>
+      <p id="asset-price-age" class="subtle" ${stale&&!hidden?'':'hidden'}>${stale&&!hidden?'Last known · '+WalletReporting.formatPriceAge(older,now):''}</p>
+      <p id="asset-status" class="subtle" ${status?'':'hidden'}>${escape(status)}</p></section>
+      <div class="asset-actions">${button('asset-receive','Receive','glow-control', 'receive')}${button('asset-send','Send','glow-control','send')}</div>
+      ${mode==='locked'?'<a href="#unlock" class="text-button asset-unlock">Unlock wallet</a>':''}</div></div>`);
+    $('asset-receive').disabled=!ready;$('asset-send').disabled=!ready||total===null||total<=0n;
+    $('asset-receive').onclick=()=>{if(selectedAsset()!==coin||!ready)return;receiveCoin=coin;go('receive');};
+    $('asset-send').onclick=()=>{if(selectedAsset()!==coin||!ready||!fundedCoins().includes(coin))return;assetSendSelection={coin,source:envelope,epoch:networkEpoch};go('send');};
   }
   function coins() {
     $('main').innerHTML = `<div class="page-head"><h1>Coins</h1><a class="text-button" href="#wallet">Done</a></div>
@@ -1627,10 +1656,11 @@
     if (walletStorage.failed || (nativeStorage && mode === 'storage-error')) { deviceStorageError(); return; }
     loadCoinPrefs();
     cancelConnectionTests();
-    let route = location.hash.slice(1) || 'wallet';
+    let route = assetRoute()?'asset':location.hash.slice(1) || 'wallet';
+    if(route==='asset'&&!selectedAsset()){history.replaceState(null,'','#wallet');route='wallet';}
     if(route!=='export')exportSelection=null;
     if(route!=='setup'){restoreEntry?.destroy();restoreEntry=null;document.body.classList.remove('restore-mode','restore-typing');}
-    if (!['wallet','wallets','live','send','sweep','komodo-sweep','reveal','export','coins','receive','activity','security','information','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
+    if (!['wallet','asset','wallets','live','send','sweep','komodo-sweep','reveal','export','coins','receive','activity','security','information','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
     if(!['sweep','komodo-sweep'].includes(route)){clearSweep();clearSweepReceipt();}
     if(route!=='komodo-sweep')clearKomodo();
     if (route !== 'send') sendCoin = null;
@@ -1648,19 +1678,19 @@
     if(route==='wallets')shortcut.setAttribute('aria-current','page');else shortcut.removeAttribute('aria-current');
     $('lock').disabled = mode === 'demo' && !pending;
     $('lock').hidden = !protectedWallet(envelope);
-    $('breadcrumb').textContent = ({wallet:'Overview',coins:'Coins',receive:'Receive',activity:'Activity',security:'Settings',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
+    $('breadcrumb').textContent = ({wallet:'Overview',asset:'Asset',coins:'Coins',receive:'Receive',activity:'Activity',security:'Settings',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
     document.querySelectorAll('[data-nav]').forEach(el => {
-      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['coins','wallets','export'].includes(route) ? 'wallet' : ['information','setup','backup','unlock','remove','reveal','reset-tests','icons'].includes(route) ? 'security' : route);
+      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['asset','coins','wallets','export'].includes(route) ? 'wallet' : ['information','setup','backup','unlock','remove','reveal','reset-tests','icons'].includes(route) ? 'security' : route);
       el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current');
     });
     if (mode === 'storage-error' && !['remove','reset-tests'].includes(route)) storageError();
-    else ({wallet:overview,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,export:exportConfirm,coins,receive,activity,security,information,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
+    else ({wallet:overview,asset:assetDetail,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,export:exportConfirm,coins,receive,activity,security,information,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
     showRiskNotice();
     document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
-    if (['wallet','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {
+    if (['wallet','asset','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {
       const targets = route !== 'receive' ? Object.keys(E.NETWORKS) : [receiveCoin];
       for (const coin of targets) if (E.NETWORKS[coin] && !scans[coin] && Date.now()-(lastRefresh[coin]||0)>WalletReporting.POLL_MS) void refreshLive(coin);
-      if(route==='wallet')void refreshPrice();
+      if(route==='wallet'||route==='asset')void refreshPrice();
     }
   }
   $('lock').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
@@ -1668,8 +1698,9 @@
     // Native resume/import can replace a route before an older hash event arrives.
     // That stale event must not discard a freshly staged backup or rebuilt form.
     if(event.newURL&&new URL(event.newURL).hash!==location.hash)return;
-    sendCoin = null;
-    // Only an explicit Overview coin click may preselect a deposit asset.
+    const selection=assetSendSelection;assetSendSelection=null;
+    sendCoin=location.hash==='#send'&&selection?.source===envelope&&selection.epoch===networkEpoch&&fundedCoins().includes(selection.coin)?selection.coin:null;
+    // Only an explicit asset-detail Receive click may preselect a deposit asset.
     // Other routes clear receiveCoin on render; the bottom tab starts blank.
     if(!['#receive','#sweep','#komodo-sweep'].includes(location.hash))receiveCoin=null;
     generation++; stagedFile = null; busy = false; clearError(); render(); window.scrollTo(0,0);
@@ -1707,7 +1738,7 @@
     if(event.key===CONNECTION_PREFS||Object.values(LEGACY_ASSETS).includes(event.key)){reloadConnections();render();return;}
     if(event.key===null){lock(undefined,false);reloadConnections();}
     if(event.key===BALANCE_PRIVACY){
-      if(['','#wallet'].includes(location.hash))render();
+      if(priceScreen())render();
       else if(location.hash==='#send')updateSendPicker();
       else if($('hide-balances'))$('hide-balances').checked=balancesHidden();
     }
@@ -1718,7 +1749,7 @@
     }
     if(event.key===BRAND_PREF) {applyBrand(savedBrand());if(location.hash==='#icons')iconGallery();}
     if (event.key === 'corevault.theme'||event.key===null) applyTheme();
-    if (event.key === COIN_PREFS || event.key === coinPrefsKey()) { loadCoinPrefs(); if (['', '#wallet', '#coins', '#receive'].includes(location.hash)) render(); }
+    if (event.key === COIN_PREFS || event.key === coinPrefsKey()) { loadCoinPrefs(); if (['', '#wallet', '#coins', '#receive'].includes(location.hash)||assetRoute()) render(); }
     if (!nativeStorage && (event.key === STORE || event.key === WalletLibrary.COLLECTION || event.key === null)) { lock(undefined, false); try { const raw = walletStorage.getItem(STORE); envelope = raw ? E.validateEnvelope(JSON.parse(raw)) : null; mode = envelope ? 'locked' : 'demo'; if(!document.hidden)openUnprotected(); } catch (_) { envelope = null; mode = 'storage-error'; } render(); resetIdle(); }
   });
   for (const event of ['pointerdown','keydown']) document.addEventListener(event, resetIdle, {passive:true});
@@ -1732,12 +1763,12 @@
   });
   setInterval(() => {
     if (!document.hidden && mode === 'unlocked' && liveEnabled()) {
-      const active = ['', '#wallet', '#receive', '#activity', '#send'].includes(location.hash);
+      const active = ['', '#wallet', '#receive', '#activity', '#send'].includes(location.hash)||assetRoute();
       const routine = !active ? [] : location.hash !== '#receive' ? Object.keys(E.NETWORKS) : receiveCoin ? [receiveCoin] : [];
       const targets = new Set([...initialDiscovery, ...routine]);
       for (const coin of targets) void refreshLive(coin);
       void checkSentBalances();
-      if(['','#wallet'].includes(location.hash))void refreshPrice();
+      if(priceScreen())void refreshPrice();
     }
   },WalletReporting.POLL_MS);
 })();
