@@ -58,6 +58,7 @@
     },
     authenticateWalletAction: purpose => request('authenticateWalletAction',purpose),
     copyAddress: address => request('copyAddress', address),
+    copyRecoveryValue: value => request('copyRecoveryValue', value),
     readWalletStore: async () => (await request('readWalletStore', '')).state,
     writeWalletStore: async (revision, records) => {
       const reply = await request('writeWalletStore', JSON.stringify({revision, records}));

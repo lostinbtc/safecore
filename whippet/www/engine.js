@@ -119,6 +119,21 @@
     const checksum = ethers.utils.arrayify(ethers.utils.sha256(ethers.utils.sha256(bytes))).slice(0, 4);
     return coin==='bch'?cashAddress(hash.slice(2)):ethers.utils.base58.encode(ethers.utils.concat([bytes, checksum]));
   }
+  // Explicit secret export only. Never pass these records into public caches.
+  function recoveryKeys(ethers, payload, coin, start = 0, count = 10) {
+    if (!Object.hasOwn(NETWORKS, coin) || !Number.isSafeInteger(start) || !Number.isSafeInteger(count) || start < 0 || count < 1 || start + count > 200) throw Error('Invalid recovery key range.');
+    const valid = validateRecipe(ethers, payload), network = NETWORKS[coin];
+    const [prefix, suffix] = network.path.split('{index}');
+    const branch = ethers.utils.HDNode.fromMnemonic(valid.mnemonic, valid.passphrase).derivePath(prefix.replace(/\/$/, ''));
+    return Array.from({length:count}, (_, offset) => {
+      const index = start + offset, node = branch.derivePath(String(index) + suffix);
+      const bytes = ethers.utils.concat([[network.wif], node.privateKey, [1]]);
+      const checksum = ethers.utils.arrayify(ethers.utils.sha256(ethers.utils.sha256(bytes))).slice(0, 4);
+      return {index, path:network.path.replace('{index}', String(index)),
+        address:publicAddress(ethers, node.publicKey, network.prefix, coin), publicKey:node.publicKey.slice(2),
+        wif:ethers.utils.base58.encode(ethers.utils.concat([bytes, checksum]))};
+    });
+  }
   function deriveReceivePool(ethers, master, count, includePublicKey = false) {
     return Object.fromEntries(Object.entries(NETWORKS).map(([coin, network]) => {
       const [prefix, suffix] = network.path.split('{index}');
@@ -232,5 +247,5 @@
     } catch (_) { throw new Error('Incorrect password or damaged backup.'); }
   }
   return Object.freeze({ NETWORKS, FORMAT, OPEN_FORMAT, ITERATIONS, normalize, createPhrase, recipe,
-    validateRecipe, accounts, receivePool, cachedReceivePool, PUBLIC_CACHE_PREFIX, cashAddress, readCashAddress, unprotected, encrypt, decrypt, validateEnvelope });
+    validateRecipe, accounts, recoveryKeys, receivePool, cachedReceivePool, PUBLIC_CACHE_PREFIX, cashAddress, readCashAddress, unprotected, encrypt, decrypt, validateEnvelope });
 });

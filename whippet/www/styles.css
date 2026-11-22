@@ -522,3 +522,13 @@ body:has(.overview-rescan) #toast, body:has(.overview-rescan) #error { bottom: c
 .restore-typing #error, .restore-typing #toast { bottom: calc(var(--restore-keyboard-height,244px) + 8px); }
 [data-theme="light"] .restore-suggestions button { color: #fff; background: var(--blue); }
 @media(max-width:359px) { .restore-grid { gap: 6px; } .form-panel .restore-word input { font-size: 12px; padding-left: 3px; padding-right: 2px; } .restore-word > span { min-width: 20px; padding: 0 3px; } }
+.recovery-key-actions,.recovery-key-pages{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#recovery-key-view select{width:100%;margin:6px 0;min-height:44px;padding:8px;color:var(--text);background:var(--bg);border:0;border-bottom:1px solid var(--line);border-radius:0}
+.recovery-key-row{padding:16px 0;border-bottom:1px solid var(--line)}
+.recovery-key-row h2{font-size:14px;margin:0 0 4px}
+.recovery-key-field{margin-top:8px;min-width:0}
+.recovery-key-field>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px}
+.recovery-key-field button{min-height:44px;padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:6px}
+.recovery-key-field svg{width:16px;height:16px}
+.recovery-key-field code{display:block;overflow-wrap:anywhere;white-space:normal;font-size:12px;line-height:1.6;user-select:text}
+.recovery-key-pages{padding:16px 0;font-size:12px}

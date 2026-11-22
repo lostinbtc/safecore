@@ -79,6 +79,13 @@ See [fee details and limits](whippet/README.md#fee-safety-and-usd-limits).
 
 ## Connections and recovery
 
+**Settings → Recovery keys** shows the current wallet’s 200 address keys per coin,
+including disabled assets. Copy an address, public key, individual private key (WIF),
+or the selected coin’s complete private-key list. Password/device checks apply;
+keys hide after two minutes, navigation, or backgrounding. Clipboard copies are
+sensitive and may be retained by other apps. Keep your recovery phrase and JSON
+backup; this list does not include separate legacy Komodo sweep keys.
+
 Bellscoin uses a public HTTPS explorer API; other coins use Electrum. Settings
 supports a custom secure Electrum connection for each coin. Defaults
 retry and use verified backups where available; custom connections stay pinned.

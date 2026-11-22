@@ -3,6 +3,8 @@
 const {spawnSync} = require('node:child_process');
 const path = require('node:path');
 process.chdir(path.resolve(__dirname, '..'));
+const recoveryKeys = spawnSync(process.execPath, ['whippet/tests/recovery_keys_ui.cjs'], {stdio:'inherit'});
+if(recoveryKeys.error || recoveryKeys.status !== 0)process.exit(recoveryKeys.status || 1);
 const utilityControls = spawnSync(process.execPath, ['whippet/tests/utility_controls_ui.cjs'], {stdio: 'inherit'});
 if (utilityControls.error || utilityControls.status !== 0) process.exit(utilityControls.status || 1);
 const activityVisibility = spawnSync(process.execPath, ['whippet/tests/activity_visibility_ui.cjs'], {stdio: 'inherit'});
