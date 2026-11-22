@@ -1246,9 +1246,7 @@
     } else $('setup-security').onclick = () => go('setup');
     $('wallet-information').onclick = () => go('information');
     if(exists){
-      const control=document.createElement('div');control.className='settings-actions';
-      control.innerHTML=button('wallet-recovery-keys','Recovery keys','glow-control');
-      $('recovery-preferences').prepend(control);
+      $('wallet-information').insertAdjacentHTML('beforebegin',button('wallet-recovery-keys','Recovery keys','glow-control'));
       $('wallet-recovery-keys').onclick=()=>go('recovery-keys');
     }
     $('hide-balances').onchange=event=>{try{localStorage.setItem(BALANCE_PRIVACY,String(event.target.checked));}catch(_){event.target.checked=balancesHidden();error('Could not save balance visibility.');}};

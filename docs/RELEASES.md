@@ -11,6 +11,8 @@ not an independent security audit or proof that source is safe.
 
 ## Test.23
 
+- Places **Recovery keys** directly above **Information** at the bottom of Settings,
+  using the same compact controls. Existing authentication requirements remain.
 - Clears displayed recovery keys immediately when leaving the screen, including
   Settings and wallet navigation. Returning requires authorization again.
 - Fixes recovery UI test timing: wallet creation and restoration have bounded

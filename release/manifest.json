@@ -1,12 +1,13 @@
 {
   "tag": "v0.1.0-test.23",
   "filename": "SafeCore-0.1.0-test.23.apk",
-  "artifact_commit": "a3a9c759765edffad202d921b8e6ce4eedadd955",
-  "sha256": "a4cb90225505c5cde776777d76091707cfe8bcfc452b491c61d527a5220f86a7",
+  "artifact_commit": "ef1e581da99fea40cdd807bcc3d8a096f9848811",
+  "sha256": "1e7505f654b5cdcdafa346578507c1b694f68211638840166bef0a0fb86fb0da",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
   "version_code": 23,
   "changes": [
+    "Settings layout: Recovery keys sits directly above Information, using the same compact controls. Password and device-authentication requirements remain unchanged.",
     "Recovery-key privacy fix: leaving the key screen clears displayed keys immediately, before the next screen renders. Returning requires authorization again.",
     "Retains Settings recovery controls for all 18 coins: 200 keys per coin, ten per page, with address/public-key/private-key copy controls and existing password, device-authentication, expiry and clipboard protections.",
     "Reliable recovery checks: bounded test waits accommodate slow first-time wallet creation and restoration. A busy-renderer regression test verifies the old timeout case without weakening failure assertions.",

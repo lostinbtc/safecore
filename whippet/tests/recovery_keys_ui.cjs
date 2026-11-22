@@ -12,7 +12,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   const ids=await page.evaluate(vaults=>{const lib=WalletLibrary.create(localStorage);vaults.forEach((v,i)=>lib.save(v,['Disposable recovery test','Protected test','Different test'][i]));const ids=vaults.map(v=>WalletLibrary.id(v));lib.activate(ids[0]);return ids;},[plain,sealed,other]);
   await page.goto('http://localhost:8787/#security');await page.reload();
   assert.equal(await page.locator('#password-protection').evaluate(el=>el.previousElementSibling.matches('.page-head')&&el.nextElementSibling.matches('.theme-control')),true,'Keep protection status and Appearance adjacent');
-  assert.equal(await page.locator('#recovery-preferences #wallet-recovery-keys').count(),1,'Recovery controls stay in their Settings section');
+  assert.equal(await page.locator('.settings-actions > #wallet-recovery-keys + #wallet-information').count(),1,'Recovery keys sits directly above Information in Settings');
   await page.evaluate(()=>{window.__copies=[];window.__authCalls=0;window.SafeCorePlatform={authenticateWalletAction:async()=>{__authCalls++;},copyRecoveryValue:async value=>{__copies.push(value);}};});
   const show=async(password)=>{
     await page.locator('#keys-ack').check();if(password)await page.locator('#seed-password').fill(password);
