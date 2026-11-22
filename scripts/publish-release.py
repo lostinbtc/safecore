@@ -12,6 +12,37 @@ import urllib.parse
 import urllib.request
 
 
+def require_source_checks(api, base, source):
+    """Only successful main-push runs for this exact source authorize release."""
+    if not re.fullmatch(r'[0-9a-f]{40}', source):
+        raise ValueError('Invalid source commit')
+    for workflow, job_name in (
+        ('tests.yml', 'wallet'),
+        ('android-security.yml', 'Native storage and authentication (Android 35)'),
+    ):
+        query = urllib.parse.urlencode(dict(head_sha=source, branch='main', event='push', per_page=100))
+        result = api(base + '/actions/workflows/' + workflow + '/runs?' + query)
+        runs = result.get('workflow_runs', [])
+        if not runs or result.get('total_count') != len(runs):
+            raise RuntimeError('Missing or incomplete post-merge checks: ' + workflow)
+        # Do not fall back to an older green run when a newer run is pending/failed.
+        run = max(runs, key=lambda item: (item['run_number'], item['run_attempt']))
+        if (run.get('head_sha') != source or run.get('head_branch') != 'main'
+                or run.get('event') != 'push' or run.get('path') != '.github/workflows/' + workflow
+                or run.get('status') != 'completed' or run.get('conclusion') != 'success'):
+            raise RuntimeError('Post-merge checks must pass for the exact source commit: ' + workflow)
+        run_id, attempt = run['id'], run['run_attempt']
+        if type(run_id) is not int or type(attempt) is not int or run_id < 1 or attempt < 1:
+            raise ValueError('Invalid workflow run identity')
+        jobs_result = api(base + f'/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')
+        jobs = jobs_result.get('jobs', [])
+        matching = [job for job in jobs if job.get('name') == job_name]
+        if (jobs_result.get('total_count') != len(jobs) or len(matching) != 1
+                or matching[0].get('head_sha') != source
+                or matching[0].get('status') != 'completed' or matching[0].get('conclusion') != 'success'):
+            raise RuntimeError('Required post-merge job did not pass: ' + workflow)
+
+
 def main():
     manifest = json.loads(Path('release/manifest.json').read_text())
     tag = manifest['tag']
@@ -76,6 +107,10 @@ def main():
         with urllib.request.urlopen(request, timeout=120) as response:
             return json.load(response)
 
+    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    if source != os.environ['GITHUB_SHA']:
+        raise ValueError('Checked-out source differs from the tag event')
+    require_source_checks(api, base, source)
     try:
         release = api(base + '/releases/tags/' + tag)
     except urllib.error.HTTPError as error:

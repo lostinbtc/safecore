@@ -39,7 +39,10 @@ def require_pass(output, expected):
         frames = re.findall(r'^\s*at org\.pepecoinservice\.safecore\.[A-Za-z0-9_.$]+'
                             r'\([A-Za-z0-9_.]+:\d+\)', output, re.M)
         detail = '; '.join(frame.strip() for frame in frames[:4])
+        categories = [label for label in ('RECOVERY_COPY_JS_TIMEOUT', 'RECOVERY_COPY_CONDITION_TIMEOUT')
+                      if label in output]
         raise RuntimeError('Instrumentation did not report the expected passing test count'
+                           + (' [' + ', '.join(categories) + ']' if categories else '')
                            + (': ' + detail if detail else ''))
 
 
@@ -152,6 +155,8 @@ class SecurityRun:
         self.test('NetworkPolicyTest', 4)
         self.test('LocalRecoveryCopyTest', 3)
         self.reset_qa()
+        self.test('RecoveryCopyUiTest#testBoundedWaitWithBusyRenderer')
+        self.reset_qa()
         self.test('RecoveryCopyUiTest#testSaveEncryptedCopy')
         document = '/sdcard/Documents/SafeCore-disposable-recovery.json'
         self.owned()
@@ -188,7 +193,7 @@ class SecurityRun:
         if 'Lock credential cleared' not in result:
             raise RuntimeError('Could not clear disposable emulator PIN')
         self.test('DeviceAuthenticationTest#testCredentialRemovedFailsClosed')
-        print('PASS: all 25 native security/icon/splash test executions', flush=True)
+        print('PASS: all native security/icon/splash test executions', flush=True)
 
     def close(self):
         # Kill only the process group we launched, never adb's shared server/devices.

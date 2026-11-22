@@ -1,19 +1,18 @@
 {
-  "tag": "v0.1.0-test.22",
-  "filename": "SafeCore-0.1.0-test.22.apk",
-  "artifact_commit": "15c7fb8eb0071b748e1c651a666e99cbba001f33",
-  "sha256": "1396c41b3ec50b3af2e8371c8a265f3f97ad9162acef29ef7cb6db4a5ed8e098",
+  "tag": "v0.1.0-test.23",
+  "filename": "SafeCore-0.1.0-test.23.apk",
+  "artifact_commit": "a3a9c759765edffad202d921b8e6ce4eedadd955",
+  "sha256": "a4cb90225505c5cde776777d76091707cfe8bcfc452b491c61d527a5220f86a7",
   "certificate_sha256": "496612811bbc85ab813300a8b18bdcc6257e08ed3e0eff9e05475a8641662f98",
   "debug_tools": false,
-  "version_code": 22,
+  "version_code": 23,
   "changes": [
-    "Recovery keys in Settings: view the current wallet’s 200 address keys for each of all 18 supported coins, including disabled legacy assets, in a ten-key-per-page list.",
-    "Copy controls: copy a receiving address, compressed public key, individual private key (WIF), or all 200 private keys for the selected coin.",
-    "Privacy protections: an explicit acknowledgment plus the existing wallet-password and enabled device-authentication checks are required before showing keys. Keys hide after two minutes, navigation, locking or backgrounding.",
-    "Local-only derivation: private-key lists are never persisted or sent to a server. Viewing keys does not enable assets or change wallet selection, fee rules, addresses or transaction signing.",
-    "Android clipboard protection: recovery copies are marked sensitive and the app attempts to clear its own copy after one minute without clearing a newer unrelated copy. Other apps or clipboard history may retain copied keys.",
-    "Recovery compatibility: existing seed paths and JSON backups remain unchanged. These lists cover SafeCore-derived keys, not separate legacy Komodo sweep keys; keep the recovery phrase and JSON backup for full recovery.",
-    "Verification: adds disposable-wallet tests for all 200 keys on all 18 coins, independent derivation, offline-tool parity, passphrases, password/authentication gates, wallet isolation, clipboard handling, expiry and compact layouts.",
-    "Android update: versionCode 22, debugging disabled, using the existing development signing identity. Test.21 remains available; update in place without uninstalling or clearing wallet data. This is an unaudited development prerelease."
+    "Recovery-key privacy fix: leaving the key screen clears displayed keys immediately, before the next screen renders. Returning requires authorization again.",
+    "Retains Settings recovery controls for all 18 coins: 200 keys per coin, ten per page, with address/public-key/private-key copy controls and existing password, device-authentication, expiry and clipboard protections.",
+    "Reliable recovery checks: bounded test waits accommodate slow first-time wallet creation and restoration. A busy-renderer regression test verifies the old timeout case without weakening failure assertions.",
+    "Safer publication: both wallet/packaging and Android security jobs must pass on the exact merged source commit. Missing, pending, skipped, failed or cancelled checks block publication; earlier PR results are not sufficient.",
+    "Clearer CI diagnostics: safe timeout categories and browser test locations identify failures without publishing wallet data.",
+    "Compatibility: no changes to addresses, seed paths, JSON backups, fee calculations or transaction signing. No wallet data, signing keys or Electrum service changes are included.",
+    "Android update: versionCode 23, debugging disabled, using the existing development signing identity. Test.22 remains available. Update in place without uninstalling or clearing wallet data; this remains an unaudited development prerelease."
   ]
 }

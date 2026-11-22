@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Fetch exact tagged source (private or public repository)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

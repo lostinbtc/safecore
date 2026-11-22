@@ -353,6 +353,9 @@
     if (message) toast(message);
   }
   function go(route) {
+    // Navigation requests must erase displayed keys in this event, not wait
+    // for the asynchronous hashchange/render event on a busy device.
+    if(route!=='recovery-keys')clearRecoveryKeys();
     if (route !== 'backup') pending = null;
     if (!['setup','backup'].includes(route)) addingWallet = false;
     if (location.hash === '#' + route) render(); else location.hash = route;
@@ -1787,6 +1790,10 @@
     }
   }
   $('lock').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
+  document.addEventListener('click', event => {
+    const link=event.target instanceof Element?event.target.closest('a[href]'):null;
+    if(recoveryKeySession&&link&&link.href!==location.href)clearRecoveryKeys();
+  },true);
   window.addEventListener('hashchange', event => {
     // Native resume/import can replace a route before an older hash event arrives.
     // That stale event must not discard a freshly staged backup or rebuilt form.
