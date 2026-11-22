@@ -9,6 +9,32 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.22
+
+- Adds **Settings → Recovery keys** for the currently selected wallet, covering
+  all 18 supported coins, including disabled legacy assets.
+- Lists 200 address keys per coin, ten at a time. Copy an address, compressed
+  public key, individual private key (WIF), or all 200 private keys for one coin.
+- Requires an explicit privacy acknowledgment and the existing wallet-password
+  and enabled device-authentication checks before showing keys.
+- Hides keys after two minutes, navigation, locking or backgrounding. Derived
+  private-key lists are not saved to storage or sent to a server.
+- Marks Android recovery clipboard copies as sensitive and attempts to clear
+  its own copy after one minute without clearing newer unrelated clipboard data.
+  Other apps and clipboard history may retain copies; keep them private.
+- Adds disposable-wallet tests for all 200 keys on all 18 coins, independent
+  derivation checks, offline-tool compatibility, wallet isolation, copy controls,
+  password/authentication gates, expiry and compact layouts.
+
+Existing addresses, derivation paths, backups, fees and transaction logic remain
+unchanged. This list covers SafeCore-derived keys, not separate legacy Komodo
+sweep keys; retain your recovery phrase and JSON backup for full recovery.
+
+Android versionCode 22 / versionName `0.1.0-test.22`, debugging disabled, with
+the existing development signing identity. Test.21 remains available. Update in
+place without uninstalling or clearing app data. This remains an unaudited
+development prerelease; required CI checks and merge precede publication.
+
 ## Test.21
 
 ### New coins and recovery

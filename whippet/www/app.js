@@ -171,6 +171,12 @@
   let envelope = null, pending = null, sendCoin = null, receiveCoin = null;
   let assetSendSelection=null;
   let receiveBooks = null, addingWallet = false, revealed = false;
+  let recoveryKeySession = null;
+  function clearRecoveryKeys() {
+    if(recoveryKeySession){clearTimeout(recoveryKeySession.timer);recoveryKeySession.recipe=null;recoveryKeySession.rows=[];revealed=false;}
+    recoveryKeySession=null;
+    $('recovery-key-list')?.replaceChildren();
+  }
   let receivePools = null, networkEpoch = 0, snapshots = {}, networkErrors = {}, scans = {}, lastRefresh = {}, sendDraft = null;
   let rescanning=false,sweepState=null;
   let komodoGate=null;
@@ -328,6 +334,7 @@
     }
   }
   function lock(message, reopen = true) {
+    clearRecoveryKeys();
     activityPages = {};
     assetSendSelection=null;
     cancelConnectionTests();
@@ -1235,6 +1242,12 @@
       if($('unlock-security'))$('unlock-security').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
     } else $('setup-security').onclick = () => go('setup');
     $('wallet-information').onclick = () => go('information');
+    if(exists){
+      const control=document.createElement('div');control.className='settings-actions';
+      control.innerHTML=button('wallet-recovery-keys','Recovery keys','glow-control');
+      $('recovery-preferences').prepend(control);
+      $('wallet-recovery-keys').onclick=()=>go('recovery-keys');
+    }
     $('hide-balances').onchange=event=>{try{localStorage.setItem(BALANCE_PRIVACY,String(event.target.checked));}catch(_){event.target.checked=balancesHidden();error('Could not save balance visibility.');}};
     $('theme-choice').onclick = event => {const choice=event.target.closest('[data-theme-choice]');if(!choice||!$('theme-choice').contains(choice))return;try{localStorage.setItem('corevault.theme',choice.dataset.themeChoice);applyTheme();}catch(_){error('Could not save your appearance preference.');}};
     const screenControl=$('screen-protection'),screenNote=$('screen-protection-note'),platform=window.SafeCorePlatform;
@@ -1397,6 +1410,69 @@
       $('rename-wallet').onsubmit = async event => { event.preventDefault(); const name = $('current-wallet-name').value; try { await changeWallet(() => library.rename(activeId,name)); render(); if ($('wallet-rename')) { $('wallet-rename').closest('.saved-wallet').open = true; $('wallet-rename').querySelector('summary').focus(); } toast('Wallet renamed.'); } catch (e) { error(e.message); } };
       $('wallet-seed').onclick = () => go('reveal');
     }
+  }
+  function recoveryKeys() {
+    clearRecoveryKeys();revealed=false;
+    if(!envelope){go('wallets');return;}
+    const needsPassword=protectedWallet(envelope);
+    let name='Current wallet';
+    try{name=library.list().find(item=>item.id===WalletLibrary.id(envelope))?.name||name;}catch(_){}
+    $('main').innerHTML=button('keys-back','← Settings','glow-control')+title('Recovery keys',escape(name))+
+      '<p id="keys-intro" class="subtle">View the 200 address keys for each coin in this wallet, including disabled assets. This does not enable coins or contact a server.</p>'+
+      '<p id="keys-warning" class="notice">Private keys can spend your coins. Copy only on a trusted device: other apps or clipboard history may retain them. Keep your recovery phrase and wallet backup for full recovery. Legacy Komodo sweep keys are not included.</p>'+
+      `<form id="keys-unlock" class="form-panel">${needsPassword?'<label for="seed-password">Wallet password</label><input id="seed-password" type="password" required autocomplete="current-password">':''}<label class="check"><input id="keys-ack" type="checkbox" required><span>I understand that private keys must stay private.</span></label>${button('keys-show','Show recovery keys','glow-control')}</form>`;
+    $('keys-back').onclick=()=>go('security');$('keys-show').type='submit';
+    $('keys-unlock').onsubmit=async event=>{
+      event.preventDefault();if(busy||!$('keys-ack').checked)return;
+      const token=generation,source=envelope,form=$('keys-unlock');
+      const password=needsPassword?$('seed-password').value:'';
+      if($('seed-password'))$('seed-password').value='';
+      busy=true;$('keys-show').disabled=true;clearError();
+      const current=()=>token===generation&&source===envelope&&location.hash==='#recovery-keys'&&form.isConnected&&!document.hidden;
+      try{
+        if(window.SafeCorePlatform?.authenticateWalletAction)await SafeCorePlatform.authenticateWalletAction('reveal');
+        if(!current())return;
+        const candidate=E.validateRecipe(ethers,await E.decrypt(crypto,source,password));
+        if(!current())return;
+        const session={recipe:candidate,source,token,coin:assetOrder[0],page:0,rows:[],expires:Date.now()+120000};
+        recoveryKeySession=session;revealed=true;
+        $('keys-intro').remove();$('keys-warning').className='subtle';
+        $('keys-warning').textContent='Private keys can spend your coins. Keep clipboard copies private.';
+        session.timer=setTimeout(()=>{if(recoveryKeySession===session){clearRecoveryKeys();revealed=false;render();toast('Recovery keys hidden.');}},120000);
+        form.outerHTML='<section id="recovery-key-view"><label for="keys-coin">Coin</label><select id="keys-coin">'+assetOrder.map(coin=>`<option value="${coin}">${escape(COINS[coin].name)} (${COINS[coin].ticker})</option>`).join('')+'</select><p class="subtle">Keys hide after two minutes or when you leave this screen.</p><div class="recovery-key-actions">'+button('keys-hide','Hide keys','glow-control')+button('keys-copy-all','Copy all 200 private keys','glow-control')+'</div><div id="recovery-key-list"></div><div class="recovery-key-pages">'+button('keys-prev','Previous','glow-control')+'<span id="keys-page" aria-live="polite"></span>'+button('keys-next','Next','glow-control')+'</div></section>';
+        const valid=()=>recoveryKeySession===session&&session.recipe&&session.source===envelope&&session.token===generation&&location.hash==='#recovery-keys'&&!document.hidden&&Date.now()<session.expires;
+        const copy=async text=>{
+          if(!valid())return;
+          try{
+            if(window.SafeCorePlatform){
+              if(!SafeCorePlatform.copyRecoveryValue)throw Error('Update the app before copying recovery keys.');
+              await SafeCorePlatform.copyRecoveryValue(text);
+            }else await navigator.clipboard.writeText(text);
+            if(valid())toast('Copied. Clear your clipboard after use.');
+          }catch(_){if(valid())error('Clipboard unavailable. Copy the selected value manually on a trusted device.');}
+        };
+        const draw=()=>{
+          if(!valid())return;
+          session.rows=E.recoveryKeys(ethers,session.recipe,session.coin,session.page*10,10);
+          $('recovery-key-list').innerHTML=session.rows.map((row,i)=>`<article class="recovery-key-row"><h2>Address ${row.index+1}</h2><small class="subtle">${escape(row.path)}</small>${[['address','Address'],['publicKey','Public key'],['wif','Private key (WIF)']].map(([field,label])=>`<div class="recovery-key-field"><div><span>${label}</span><button type="button" class="glow-control" data-key-row="${i}" data-key-field="${field}" aria-label="Copy ${label.toLowerCase()} ${row.index+1}">${icon('copy')} Copy</button></div><code>${escape(row[field])}</code></div>`).join('')}</article>`).join('');
+          $('keys-page').textContent=`${session.page*10+1}–${session.page*10+10} of 200`;
+          $('keys-prev').disabled=session.page===0;$('keys-next').disabled=session.page===19;
+          $('recovery-key-list').onclick=event=>{const b=event.target.closest('[data-key-field]');if(b&&valid())void copy(session.rows[Number(b.dataset.keyRow)][b.dataset.keyField]);};
+        };
+        $('keys-coin').onchange=()=>{if(valid()){session.coin=$('keys-coin').value;session.page=0;draw();}};
+        $('keys-prev').onclick=()=>{if(valid()&&session.page>0){session.page--;draw();}};
+        $('keys-next').onclick=()=>{if(valid()&&session.page<19){session.page++;draw();}};
+        $('keys-hide').onclick=()=>{clearRecoveryKeys();revealed=false;render();};
+        $('keys-copy-all').onclick=()=>{if(valid())void copy(E.recoveryKeys(ethers,session.recipe,session.coin,0,200).map(row=>row.wif).join('\n'));};
+        draw();resetIdle();
+      }catch(_){
+        if(token===generation&&source===envelope&&location.hash==='#recovery-keys'&&!document.hidden){
+          if(recoveryKeySession){clearRecoveryKeys();render();}
+          error('Could not reveal keys. Check your wallet password and device authentication.');
+        }
+      }
+      finally{if(token===generation){busy=false;if($('keys-show'))$('keys-show').disabled=false;}}
+    };
   }
   function reveal() {
     if (!envelope) { go('wallets'); return; }
@@ -1669,6 +1745,7 @@
     $('remove-raw').onclick = () => {deleteTarget=null;go('remove');};
   }
   function render() {
+    clearRecoveryKeys();
     if (walletStorage.failed || (nativeStorage && mode === 'storage-error')) { deviceStorageError(); return; }
     loadCoinPrefs();
     cancelConnectionTests();
@@ -1676,7 +1753,7 @@
     if(route==='asset'&&!selectedAsset()){history.replaceState(null,'','#wallet');route='wallet';}
     if(route!=='export')exportSelection=null;
     if(route!=='setup'){restoreEntry?.destroy();restoreEntry=null;document.body.classList.remove('restore-mode','restore-typing');}
-    if (!['wallet','asset','wallets','live','send','sweep','komodo-sweep','reveal','export','coins','receive','activity','security','information','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
+    if (!['wallet','asset','wallets','live','send','sweep','komodo-sweep','reveal','recovery-keys','export','coins','receive','activity','security','information','setup','backup','unlock','remove','reset-tests','icons'].includes(route)) route = 'wallet';
     if(!['sweep','komodo-sweep'].includes(route)){clearSweep();clearSweepReceipt();}
     if(route!=='komodo-sweep')clearKomodo();
     if (route !== 'send') sendCoin = null;
@@ -1696,11 +1773,11 @@
     $('lock').hidden = !protectedWallet(envelope);
     $('breadcrumb').textContent = ({wallet:'Overview',asset:'Asset',coins:'Coins',receive:'Receive',activity:'Activity',security:'Settings',setup:'Setup',backup:'Recovery',unlock:'Unlock',remove:'Remove'})[route];
     document.querySelectorAll('[data-nav]').forEach(el => {
-      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['asset','coins','wallets','export'].includes(route) ? 'wallet' : ['information','setup','backup','unlock','remove','reveal','reset-tests','icons'].includes(route) ? 'security' : route);
+      const active = el.dataset.nav === (['sweep','komodo-sweep'].includes(route)?'receive':['asset','coins','wallets','export'].includes(route) ? 'wallet' : ['information','setup','backup','unlock','remove','reveal','recovery-keys','reset-tests','icons'].includes(route) ? 'security' : route);
       el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current');
     });
     if (mode === 'storage-error' && !['remove','reset-tests'].includes(route)) storageError();
-    else ({wallet:overview,asset:assetDetail,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,export:exportConfirm,coins,receive,activity,security,information,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
+    else ({wallet:overview,asset:assetDetail,wallets,live:()=>go('wallet'),send,sweep,'komodo-sweep':komodo,reveal,'recovery-keys':recoveryKeys,export:exportConfirm,coins,receive,activity,security,information,setup,backup,unlock,remove,'reset-tests':resetTests,icons:iconGallery})[route]();
     showRiskNotice();
     document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
     if (['wallet','asset','receive','activity','send'].includes(route) && liveEnabled() && mode === 'unlocked') {

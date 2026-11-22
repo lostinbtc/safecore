@@ -435,7 +435,7 @@ public final class MainActivity extends Activity {
                         authenticationStatus(reply,id);
                     } else if(action.equals("authenticateWalletAction")) {
                         String route=Uri.parse(view.getUrl()).getFragment();
-                        if(!(value.equals("reveal")&&"reveal".equals(route)) && !(value.equals("send")&&("send".equals(route)||"sweep".equals(route)||"komodo-sweep".equals(route))))throw new IllegalArgumentException();
+                        if(!(value.equals("reveal")&&("reveal".equals(route)||"recovery-keys".equals(route))) && !(value.equals("send")&&("send".equals(route)||"sweep".equals(route)||"komodo-sweep".equals(route))))throw new IllegalArgumentException();
                         if(!deviceAuthEnabled)respond(reply,id,true,"");else walletRequest(action,value,view,reply,id);
                     } else if(action.equals("setDeviceAuthentication")) {
                         if(!authenticationChangeAllowed(view,value) || authenticationDialog!=null || walletIOPending || authPrompt)throw new IllegalArgumentException();
@@ -455,6 +455,27 @@ public final class MainActivity extends Activity {
                             }).setNegativeButton("Cancel",(d,w)->authenticationCancelled(reply,requestId))
                             .setOnCancelListener(d->authenticationCancelled(reply,requestId)).create();
                         authenticationDialog.setOnDismissListener(d->authenticationDialog=null);authenticationDialog.show();
+                    } else if (action.equals("copyRecoveryValue")) {
+                        if(!"recovery-keys".equals(Uri.parse(view.getUrl()).getFragment()) || value.length()>14000
+                            || !value.matches("[a-zA-Z0-9:]+(?:\n[a-zA-Z0-9:]+){0,199}"))throw new IllegalArgumentException();
+                        ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                        String label="SafeCore recovery "+java.util.UUID.randomUUID();
+                        ClipData clip=ClipData.newPlainText(label,value);
+                        android.os.PersistableBundle extras=new android.os.PersistableBundle();
+                        extras.putBoolean("android.content.extra.IS_SENSITIVE",true);
+                        clip.getDescription().setExtras(extras);
+                        clipboard.setPrimaryClip(clip);
+                        // Clear only this copy, never a newer unrelated clipboard value.
+                        web.postDelayed(()->{
+                            try {
+                                android.content.ClipDescription current=clipboard.getPrimaryClipDescription();
+                                if(current!=null&&label.contentEquals(current.getLabel())) {
+                                    if(android.os.Build.VERSION.SDK_INT>=28)clipboard.clearPrimaryClip();
+                                    else clipboard.setPrimaryClip(ClipData.newPlainText("", ""));
+                                }
+                            }catch(Exception ignored){}
+                        },60000);
+                        respond(reply,id,true,"");
                     } else if (action.equals("copyAddress")) {
                         if (!value.matches("[1-9A-HJ-NP-Za-km-z]{26,50}")) throw new IllegalArgumentException();
                         ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("SafeCore receiving address", value));
