@@ -12,7 +12,7 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   const ids=await page.evaluate(vaults=>{const lib=WalletLibrary.create(localStorage);vaults.forEach((v,i)=>lib.save(v,['Disposable recovery test','Protected test','Different test'][i]));const ids=vaults.map(v=>WalletLibrary.id(v));lib.activate(ids[0]);return ids;},[plain,sealed,other]);
   await page.goto('http://localhost:8787/#security');await page.reload();
   assert.equal(await page.locator('#password-protection').evaluate(el=>el.previousElementSibling.matches('.page-head')&&el.nextElementSibling.matches('.theme-control')),true,'Keep protection status and Appearance adjacent');
-  assert.equal(await page.locator('#recovery-preferences #wallet-recovery-keys').count(),1,'Recovery controls stay in their Settings section');
+  assert.equal(await page.locator('.settings-actions > #wallet-recovery-keys + #wallet-information').count(),1,'Recovery keys sits directly above Information in Settings');
   await page.evaluate(()=>{window.__copies=[];window.__authCalls=0;window.SafeCorePlatform={authenticateWalletAction:async()=>{__authCalls++;},copyRecoveryValue:async value=>{__copies.push(value);}};});
   const show=async(password)=>{
     await page.locator('#keys-ack').check();if(password)await page.locator('#seed-password').fill(password);
@@ -49,10 +49,21 @@ const {chromium}=require('./browser-helper.cjs'),E=require('../www/engine.js'),e
   await page.evaluate(()=>{SafeCorePlatform.copyRecoveryValue=async()=>{throw Error('denied');};});
   await page.locator('[data-key-row="0"][data-key-field="wif"]').click();assert.match(await page.locator('#error').innerText(),/Clipboard unavailable/);
   await page.locator('#keys-hide').click();assert.equal(await page.locator('.recovery-key-row').count(),0);
-  await show();await page.locator('#keys-back').click();assert.equal(await page.locator('.recovery-key-row').count(),0);
+  await show();
+  // Inspect in the click's own JavaScript task: no chance for hashchange to
+  // hide a privacy regression or for host scheduling to decide the outcome.
+  assert.equal(await page.evaluate(()=>{document.getElementById('keys-back').click();return document.querySelectorAll('.recovery-key-row').length;}),0,'Back clears keys synchronously');
+  await page.locator('#wallet-recovery-keys').waitFor();
   await page.locator('#wallet-recovery-keys').click();assert.equal(await page.locator('.recovery-key-row').count(),0);
+  for(const selector of ['[data-nav="security"]','.wallets-shortcut']){
+    await show();
+    assert.equal(await page.evaluate(selector=>{document.querySelector(selector).click();return document.querySelectorAll('.recovery-key-row').length;},selector),0,'Navigation links clear keys synchronously');
+    await page.waitForFunction(()=>!document.getElementById('keys-show'));
+    await page.evaluate(()=>location.hash='#recovery-keys');await page.locator('#keys-show').waitFor();
+    assert.equal(await page.locator('.recovery-key-row').count(),0,'Returning requires authentication again');
+  }
   await show();await page.evaluate(()=>window.dispatchEvent(new Event('safecore-pause')));assert.equal(await page.locator('.recovery-key-row').count(),0);
-  await page.clock.install();await show();await page.clock.runFor(120100);assert.equal(await page.locator('.recovery-key-row').count(),0,'Hard expiry even without navigation');
+  await page.clock.install();await show();await page.clock.fastForward(120100);assert.equal(await page.locator('.recovery-key-row').count(),0,'Hard expiry even without navigation');
   // Fresh page for password and interrupted authentication checks.
   await page.evaluate(id=>WalletLibrary.create(localStorage).activate(id),ids[1]);await page.reload();
   await page.evaluate(()=>{window.SafeCorePlatform={authenticateWalletAction:async()=>{}};});

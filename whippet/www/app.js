@@ -353,6 +353,9 @@
     if (message) toast(message);
   }
   function go(route) {
+    // Navigation requests must erase displayed keys in this event, not wait
+    // for the asynchronous hashchange/render event on a busy device.
+    if(route!=='recovery-keys')clearRecoveryKeys();
     if (route !== 'backup') pending = null;
     if (!['setup','backup'].includes(route)) addingWallet = false;
     if (location.hash === '#' + route) render(); else location.hash = route;
@@ -1243,9 +1246,7 @@
     } else $('setup-security').onclick = () => go('setup');
     $('wallet-information').onclick = () => go('information');
     if(exists){
-      const control=document.createElement('div');control.className='settings-actions';
-      control.innerHTML=button('wallet-recovery-keys','Recovery keys','glow-control');
-      $('recovery-preferences').prepend(control);
+      $('wallet-information').insertAdjacentHTML('beforebegin',button('wallet-recovery-keys','Recovery keys','glow-control'));
       $('wallet-recovery-keys').onclick=()=>go('recovery-keys');
     }
     $('hide-balances').onchange=event=>{try{localStorage.setItem(BALANCE_PRIVACY,String(event.target.checked));}catch(_){event.target.checked=balancesHidden();error('Could not save balance visibility.');}};
@@ -1787,6 +1788,10 @@
     }
   }
   $('lock').onclick = () => mode === 'locked' ? go('unlock') : lock('Wallet locked.');
+  document.addEventListener('click', event => {
+    const link=event.target instanceof Element?event.target.closest('a[href]'):null;
+    if(recoveryKeySession&&link&&link.href!==location.href)clearRecoveryKeys();
+  },true);
   window.addEventListener('hashchange', event => {
     // Native resume/import can replace a route before an older hash event arrives.
     // That stale event must not discard a freshly staged backup or rebuilt form.

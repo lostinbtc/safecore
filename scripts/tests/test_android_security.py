@@ -40,6 +40,13 @@ class AndroidSecurityRunnerTests(unittest.TestCase):
         self.assertIn('DeviceWalletStoreTest.java:42', str(caught.exception))
         self.assertNotIn('PRIVATE-FIXTURE', str(caught.exception))
 
+    def test_recovery_timeouts_report_only_allowlisted_categories(self):
+        for label in ('RECOVERY_COPY_JS_TIMEOUT', 'RECOVERY_COPY_CONDITION_TIMEOUT'):
+            with self.assertRaises(RuntimeError) as caught:
+                require_pass('junit.framework.AssertionFailedError: ' + label + ' PRIVATE-FIXTURE', 1)
+            self.assertIn(label, str(caught.exception))
+            self.assertNotIn('PRIVATE-FIXTURE', str(caught.exception))
+
 
 if __name__ == '__main__':
     unittest.main()

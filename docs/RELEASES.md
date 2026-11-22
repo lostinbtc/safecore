@@ -9,6 +9,29 @@ with the release checksum and inspect its signing-certificate fingerprint with
 Android's `apksigner verify --print-certs`. Hashes detect changed bytes; they are
 not an independent security audit or proof that source is safe.
 
+## Test.23
+
+- Places **Recovery keys** directly above **Information** at the bottom of Settings,
+  using the same compact controls. Existing authentication requirements remain.
+- Clears displayed recovery keys immediately when leaving the screen, including
+  Settings and wallet navigation. Returning requires authorization again.
+- Fixes recovery UI test timing: wallet creation and restoration have bounded
+  waits that tolerate slower devices. Adds a deliberately busy-renderer test
+  and verifies that timeouts still fail rather than silently passing.
+- Adds safe failure categories to CI diagnostics without logging wallet data.
+- Blocks APK publication until both wallet/packaging and native Android security
+  jobs pass on the exact tagged source commit after merging to `main`. PR-only,
+  missing, skipped, failed, cancelled or pending checks do not authorize release.
+
+Retains test.22's protected recovery-key lists for all 18 coins. Existing addresses,
+backups, derivation, fees and transaction signing are unchanged. Local verification
+includes the full disposable Android security suite and targeted browser tests;
+GitHub checks must pass before publication. This is not an independent audit.
+
+Android versionCode 23 / versionName `0.1.0-test.23`, debugging disabled, using
+the existing development signing identity. Update in place; never uninstall or
+clear wallet data to bypass an installation error. Test.22 remains available.
+
 ## Test.22
 
 - Adds **Settings → Recovery keys** for the currently selected wallet, covering
@@ -295,7 +318,12 @@ Your own build generally has a different signing key. Back up first.
    `release/manifest.json`. That transport branch contains only the deliberately
    distributable APK. It is not wallet storage and is not used to run code.
 4. Submit source plus manifest through a pull request targeting protected `main`.
-   After required checks pass and the PR is merged, tag the merged source commit.
+   After PR checks pass and the PR is merged, wait for both `tests.yml` and
+   `android-security.yml` **push-to-main** checks to pass on that exact merged
+   commit, then tag it. The publisher verifies the latest run and required job
+   in each workflow; earlier PR results are insufficient. Missing/pending checks
+   fail closed. If a tag was created too early, rerun its publication workflow
+   only after both post-merge checks pass; do not move the tag.
    The release workflow fetches the pinned artifact commit, verifies hash and exact bundled
    source, independently verifies the signed APK against `release/signing-policy.json`,
    and attaches APK/checksum to a GitHub prerelease using its short-lived

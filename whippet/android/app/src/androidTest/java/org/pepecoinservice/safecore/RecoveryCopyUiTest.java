@@ -23,8 +23,24 @@ public class RecoveryCopyUiTest extends ActivityInstrumentationTestCase2<MainAct
     private MainActivity activity;private WebView web;
     private static final String NAME="SafeCore-disposable-recovery.json";
     private WebView find(View view){if(view instanceof WebView)return (WebView)view;if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++){WebView found=find(((ViewGroup)view).getChildAt(i));if(found!=null)return found;}return null;}
-    private String js(String code)throws Exception{CountDownLatch done=new CountDownLatch(1);String[] result={null};getInstrumentation().runOnMainSync(()->web.evaluateJavascript(code,value->{result[0]=value;done.countDown();}));assertTrue(done.await(15,TimeUnit.SECONDS));return result[0];}
-    private void until(String code)throws Exception{for(int i=0;i<150;i++){if("true".equals(js("Boolean("+code+")")))return;Thread.sleep(200);}fail("Disposable recovery-copy condition not reached");}
+    private String js(String code)throws Exception{return js(code,15000);}
+    private String js(String code,long timeoutMs)throws Exception{
+        CountDownLatch done=new CountDownLatch(1);String[] result={null};
+        getInstrumentation().runOnMainSync(()->web.evaluateJavascript(code,value->{result[0]=value;done.countDown();}));
+        assertTrue("RECOVERY_COPY_JS_TIMEOUT",done.await(timeoutMs,TimeUnit.MILLISECONDS));return result[0];
+    }
+    private void until(String code)throws Exception{until(code,30000);}
+    private void until(String code,long timeoutMs)throws Exception{
+        // One overall deadline, including callbacks queued behind first-time
+        // derivation of 18 x 200 addresses. Do not reset a timeout per poll.
+        long deadline=SystemClock.elapsedRealtime()+timeoutMs;
+        while(SystemClock.elapsedRealtime()<deadline){
+            long remaining=deadline-SystemClock.elapsedRealtime();
+            if("true".equals(js("Boolean("+code+")",Math.max(1,remaining))))return;
+            Thread.sleep(Math.min(200,Math.max(1,deadline-SystemClock.elapsedRealtime())));
+        }
+        fail("RECOVERY_COPY_CONDITION_TIMEOUT");
+    }
     @Override protected void setUp()throws Exception{
         super.setUp();assertTrue(Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish"));
         android.accessibilityservice.AccessibilityServiceInfo service=getInstrumentation().getUiAutomation().getServiceInfo();
@@ -49,10 +65,26 @@ public class RecoveryCopyUiTest extends ActivityInstrumentationTestCase2<MainAct
         float x=offset[0]+(float)point.getDouble(0)*scale[0],y=offset[1]+(float)point.getDouble(1)*scale[0];long now=SystemClock.uptimeMillis();
         for(int action:new int[]{MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP}){MotionEvent event=MotionEvent.obtain(now,SystemClock.uptimeMillis(),action,x,y,0);getInstrumentation().getUiAutomation().injectInputEvent(event,true);event.recycle();}
     }
+    public void testBoundedWaitWithBusyRenderer()throws Exception{
+        long start=SystemClock.elapsedRealtime();
+        try{until("false",1000);fail("False condition must fail");}
+        catch(junit.framework.AssertionFailedError expected){
+            // At the deadline the condition may still be false, or the final
+            // callback may still be queued. Both must fail, never report success.
+            assertTrue("Only an explicit bounded timeout is expected",
+                "RECOVERY_COPY_CONDITION_TIMEOUT".equals(expected.getMessage())||"RECOVERY_COPY_JS_TIMEOUT".equals(expected.getMessage()));
+        }
+        assertTrue("Condition deadline must stay bounded",SystemClock.elapsedRealtime()-start<5000);
+        // Deterministically model a renderer busy longer than the old 15-second
+        // callback limit. Test-only; no wallet data and no production delays.
+        getInstrumentation().runOnMainSync(()->web.evaluateJavascript(
+            "(()=>{window.__busyRecoveryTest=false;const end=performance.now()+16000;while(performance.now()<end){};window.__busyRecoveryTest=true})()",null));
+        until("window.__busyRecoveryTest===true",30000);
+    }
     public void testSaveEncryptedCopy()throws Exception{
         assertFalse(new DeviceWalletStore(activity).authenticationRequired());
         js("location.hash='setup'");until("document.getElementById('ack')");
-        js("document.getElementById('use-passphrase').click();document.getElementById('passphrase').value='Public-fixture-passphrase';document.getElementById('ack').checked=true;document.getElementById('submit-setup').click()");until("document.getElementById('recovery-copy-yes')");
+        js("document.getElementById('use-passphrase').click();document.getElementById('passphrase').value='Public-fixture-passphrase';document.getElementById('ack').checked=true;document.getElementById('submit-setup').click()");until("document.getElementById('recovery-copy-yes')",60000);
         JSONObject original=new JSONObject(new DeviceWalletStore(activity).read().getJSONObject("records").getString("whippet.dev.encrypted.v1")).getJSONObject("recipe");
         js("document.getElementById('recovery-copy-yes').click();document.getElementById('recovery-copy-password').value='Disposable-recovery-password-123';document.getElementById('recovery-copy-confirm').value='Disposable-recovery-password-123';document.getElementById('save-recovery-copy').click()");
         AccessibilityNodeInfo field=control("android:id/title");Bundle args=new Bundle();args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,NAME);assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args));
@@ -76,7 +108,7 @@ public class RecoveryCopyUiTest extends ActivityInstrumentationTestCase2<MainAct
         clickText("sdk_gphone64_x86_64");clickText("Documents");
         clickText(NAME);
         until("document.getElementById('file-status')?.textContent.includes('Encrypted')");
-        js("document.getElementById('password').value='Disposable-recovery-password-123';document.getElementById('confirm').value='Disposable-recovery-password-123';document.getElementById('submit-setup').click()");until("document.documentElement.dataset.walletState==='unlocked'");
+        js("document.getElementById('password').value='Disposable-recovery-password-123';document.getElementById('confirm').value='Disposable-recovery-password-123';document.getElementById('submit-setup').click()");until("document.documentElement.dataset.walletState==='unlocked'",60000);
         assertFalse(new DeviceWalletStore(activity).read().getJSONObject("records").isNull("whippet.dev.encrypted.v1"));
     }
 }
